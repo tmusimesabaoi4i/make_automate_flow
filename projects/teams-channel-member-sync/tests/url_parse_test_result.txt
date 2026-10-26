@@ -1,0 +1,37 @@
+==============================================================================
+URL解析・正規化テスト（definition.json の式をそのまま評価）
+==============================================================================
+PASS T01 通常のTeamsチャネルURL
+PASS T02 URLエンコードされたチャネルID（%3A / %40）を復号できる
+PASS T03 クエリパラメーターの順序が異なる（groupId が先頭）
+PASS T04 余分なクエリパラメーターがあっても解析できる
+PASS T05 groupId が無いURL → ERR_GROUPID_NOT_FOUND
+PASS T06 tenantId が無いURL → 任意項目なので正常（テナントIDは空）
+PASS T07 チャネルIDが取得できないURL（/l/team/ が無い） → ERR_CHANNELID_NOT_FOUND
+PASS T08 Teams以外のURL → ERR_NOT_TEAMS_URL
+PASS T09 末尾スラッシュ・フラグメント付きでも解析できる
+PASS T10 非エンコードのチャネルID（':' '@' が生）でも解析できる
+PASS T11 新Teamsドメイン（teams.cloud.microsoft）でも解析できる
+PASS T12 groupId がGUIDでない → ERR_GROUPID_INVALID
+PASS T13 チャットのURL（チャネルIDの形式でない） → ERR_CHANNELID_INVALID
+PASS T14 tenantId の形式が不正 → 誤った値を使わず空にする
+PASS T15 TeamsチャネルURLが空 → ERR_CHANNEL_URL_EMPTY
+PASS S01 通常のSharePointサイトURL
+PASS S02 /_layouts/15/viewlsts.aspx を含むURL → サイトルートへ正規化
+PASS S03 クエリパラメーターを含むURL → クエリを落とす
+PASS S04 SharePoint以外のURL → ERR_NOT_SHAREPOINT_URL
+PASS S05 リストの一覧画面URL（/Lists/<名前>/AllItems.aspx）→ サイトルートへ正規化
+PASS S06 末尾スラッシュを落とす
+PASS S07 /teams/ 形式のサイトURL
+PASS S08 大文字混じりの /_Layouts/ でも切り落とせる（判定は小文字化して行う）
+PASS S09 サイト名の後ろに余分なパスがあっても1セグメントで打ち切る
+PASS S10 ルートサイト（/sites/ も /teams/ も無い）
+PASS S11 SharePointサイトURLが空 → ERR_SITE_URL_EMPTY
+PASS A01 管理サイトが未設定でも失敗しない（同期先サイトへ倒す）
+PASS A02 管理サイトURLがSharePointでない → ERR_ADMIN_SITE_NOT_SHAREPOINT
+PASS A03 管理サイトURLも管理画面URLからサイトルートへ正規化される
+PASS A04 トリガー入力の管理サイトが Compose より優先される
+PASS A05 トリガー入力の管理サイトも一覧画面URLから正規化される
+PASS A06 管理サイトが未設定で同期先が一覧画面URLでも、正規化後のサイトへ倒す
+------------------------------------------------------------------------------
+合格 32 / 不合格 0（全 32 件）

@@ -1,0 +1,17 @@
+=== ZIP再展開検査 ===
+対象ZIP : release/Flow2_GetAllTeamsChannelPostRepliesFromUrl_20260724190952.zip
+エントリ数: 5
+    Microsoft.Flow/flows/2c96a4e7-8b53-4d10-9f27-e6a41b085c39/apisMap.json
+    Microsoft.Flow/flows/2c96a4e7-8b53-4d10-9f27-e6a41b085c39/connectionsMap.json
+    Microsoft.Flow/flows/2c96a4e7-8b53-4d10-9f27-e6a41b085c39/definition.json
+    Microsoft.Flow/flows/manifest.json
+    manifest.json
+
+  OK: パッケージGUID 3点一致: 2c96a4e7-8b53-4d10-9f27-e6a41b085c39
+  OK: 接続参照キー一致: ['shared_teams']
+  OK: displayName: Flow2 Teams投稿URLから全返信を取得
+  OK: 展開結果は source/package とバイト単位で一致
+
+=== ERRORS ===
+(0 errors)
+展開先: validation/extracted （検証用コピー。正典は source/package）

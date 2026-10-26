@@ -1,0 +1,30 @@
+=== SyncSharedMailboxToSharePointList 静的検証 ===
+package folder GUID : 9e5b28d1-7c34-4af0-b962-13d8e7a05c6f
+flow displayName    : 共有メールボックスのメールをSharePointリストへ同期
+operationIds        : ['GetEmailsV3', 'HtmlToText', 'HttpRequest']
+connectionReferences: ['shared_conversionservice', 'shared_office365', 'shared_sharepointonline']
+アクション総数      : 308
+最大ネスト深さ      : 7 （上限8）
+SharePoint REST     : 34 （GET 12 / POST 22）
+Outlook             : 1
+Content Conversion  : 1
+初期化変数          : 42
+SetVariable         : 76 （うち自己参照 0 ）
+AppendToArray       : 26
+Increment           : 10
+Foreach             : 1
+使用関数            : ['and', 'body', 'coalesce', 'concat', 'contains', 'createArray', 'decodeBase64', 'decodeUriComponent', 'empty', 'endsWith', 'equals', 'first', 'greater', 'greaterOrEquals', 'if', 'int', 'item', 'items', 'join', 'json', 'last', 'length', 'lessOrEquals', 'not', 'outputs', 'replace', 'reverse', 'sort', 'split', 'startsWith', 'string', 'sub', 'substring', 'take', 'toLower', 'triggerBody', 'triggerOutputs', 'trim', 'union', 'uriComponent', 'utcNow', 'variables']
+トップレベル実行順  : Scope_Validate_Input -> Scope_Check_List -> Scope_Create_List -> Scope_Init_List_Schema -> Scope_Configure_View -> Scope_Verify_Schema -> Scope_Get_Emails -> Scope_Sync_Items -> Scope_Create_Result -> Scope_Handle_Error -> Scope_Finalize
+
+--- 安全検査サマリ ---
+GetByTitle( の出現            : 0 （0であること）
+破壊的REST（delete/recycle）  : 0 （0であること）
+メール変更操作の出現          : 0 （0であること）
+ガード必須アクション          : 18 件すべて varCreatedInThisRun 配下
+$filter のエスケープ          : 2 件すべて '' 2重化＋uriComponent()
+dataset の式指定              : 34 件すべて @variables('varSiteUrl')
+
+=== ERRORS ===
+(0 errors)
+=== WARNINGS ===
+(0 warnings)

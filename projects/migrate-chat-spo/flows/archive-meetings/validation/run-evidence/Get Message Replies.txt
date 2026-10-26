@@ -1,0 +1,886 @@
+{
+    "statusCode": 200,
+    "headers": {
+        "Transfer-Encoding": "chunked",
+        "Vary": "Accept-Encoding",
+        "Strict-Transport-Security": "max-age=31536000",
+        "request-id": "00d2e744-8224-4f22-ba82-ff5f865f1edc",
+        "client-request-id": "00d2e744-8224-4f22-ba82-ff5f865f1edc",
+        "x-ms-ags-diagnostic": "{\"ServerInfo\":{\"DataCenter\":\"Japan East\",\"Slice\":\"E\",\"Ring\":\"5\",\"ScaleUnit\":\"005\",\"RoleInstance\":\"TY2PEPF0000C3AC\"}}",
+        "OData-Version": "4.0",
+        "X-Ms-Workflow-Resourcegroup-Name": "B6D9414869A6487A8A6988236D09260A-DEFAULTB6D9414869A6487A8A6988236D09260A-ENV",
+        "x-ms-workflow-subscription-id": "8d2b76b4-59d0-4174-9121-88362f9aeb36",
+        "x-ms-environment-id": "default-b6d94148-69a6-487a-8a69-88236d09260a",
+        "x-ms-tenant-id": "b6d94148-69a6-487a-8a69-88236d09260a",
+        "x-ms-subscription-id": "8d2b76b4-59d0-4174-9121-88362f9aeb36",
+        "x-ms-dlp-re": "-|-|-",
+        "x-ms-dlp-gu": "-|-",
+        "x-ms-dlp-ef": "-|-/-|-|-|-|-",
+        "x-ms-mip-sl": "-|-|-|-",
+        "x-ms-au-creator-id": "641b02f0-caf2-4b76-826c-c757d0cd98f4",
+        "Timing-Allow-Origin": "*",
+        "x-ms-apihub-cached-response": "true",
+        "x-ms-apihub-obo": "false",
+        "Date": "Fri, 17 Jul 2026 01:20:02 GMT",
+        "Content-Type": "application/json",
+        "Content-Length": "23466"
+    },
+    "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams('a7ac0c68-87ba-4613-8960-13660f0f5f56')/channels('19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2')/messages('1775618678577')/replies",
+        "@odata.count": 9,
+        "value": [
+            {
+                "id": "1775623089814",
+                "replyToId": "1775618678577",
+                "etag": "1775623091811",
+                "messageType": "unknownFutureValue",
+                "createdDateTime": "2026-04-08T04:38:09.814Z",
+                "lastModifiedDateTime": "2026-04-08T04:38:11.811Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775623089814?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775623089814&parentMessageId=1775618678577",
+                "from": null,
+                "policyViolation": null,
+                "body": {
+                    "contentType": "html",
+                    "content": "<systemEventMessage/>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "eventDetail": {
+                    "@odata.type": "#microsoft.graph.callRecordingEventMessageDetail",
+                    "callId": "23750600-6cc9-4d5e-a446-328b80efff55",
+                    "callRecordingDisplayName": "【5JW】課内会議 1305～-20260408_130534-会議の録音.mp4",
+                    "callRecordingUrl": "https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared%20Documents/03_%E8%AA%B2%E5%86%85%E4%BC%9A%E8%AD%B0/Recordings/%E3%80%905JW%E3%80%91%E8%AA%B2%E5%86%85%E4%BC%9A%E8%AD%B0%201305%EF%BD%9E-20260408_130534-%E4%BC%9A%E8%AD%B0%E3%81%AE%E9%8C%B2%E9%9F%B3.mp4?web=1",
+                    "callRecordingDuration": "PT28M49.56S",
+                    "callRecordingStatus": "success",
+                    "meetingOrganizer": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    },
+                    "initiator": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    }
+                }
+            },
+            {
+                "id": "1775622904368",
+                "replyToId": "1775618678577",
+                "etag": "1775622904368",
+                "messageType": "unknownFutureValue",
+                "createdDateTime": "2026-04-08T04:35:04.368Z",
+                "lastModifiedDateTime": "2026-04-08T04:35:04.368Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775622904368?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775622904368&parentMessageId=1775618678577",
+                "from": null,
+                "policyViolation": null,
+                "body": {
+                    "contentType": "html",
+                    "content": "<systemEventMessage/>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "eventDetail": {
+                    "@odata.type": "#microsoft.graph.callEndedEventMessageDetail",
+                    "callId": "23750600-6cc9-4d5e-a446-328b80efff55",
+                    "callDuration": "PT34M38S",
+                    "callEventType": "meeting",
+                    "callParticipants": [
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "64f04b4a-104b-4b3c-854e-ad2b0b9ff2a5",
+                                    "displayName": "石原 由晴",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "985cfcdc-4170-4622-a7d5-49ca92509ff4",
+                                    "displayName": "横田 有光",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "5223ffff-5384-4148-af2b-0242064fba6e",
+                                    "displayName": "倉本 敦史",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "aa4f8215-013a-4008-99fb-86bf8ae25802",
+                                    "displayName": "大塚 俊範",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "2ad99920-51f4-42f8-843a-67e97627bfbc",
+                                    "displayName": "小林 正明",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "ac46258d-e4b2-4a81-a19a-8fd855064d71",
+                                    "displayName": "吉村 真治▲郎▼",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "e7e1479c-01a7-4b11-a30c-4ca8dfe2f848",
+                                    "displayName": "吉村 伊佐雄",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "bdfe5b85-a477-4ec0-aa36-f2cbc26fd951",
+                                    "displayName": "石井 則之",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "1809eab1-4cc1-453b-a83d-9af0f460dd01",
+                                    "displayName": "野村 潔",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "29826ca3-21f8-4e52-93ce-439a9e285b9b",
+                                    "displayName": "中村 ノア",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "3d233668-8a34-4665-8089-9975dfb24e34",
+                                    "displayName": "濱島 正一",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "791a7623-c9f7-46be-b9a1-f5e82fd412a3",
+                                    "displayName": "永井 啓司",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "490990de-7687-4d97-b9db-561b5fcb3013",
+                                    "displayName": "玉田 恭子",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                                    "displayName": "西出 隆二",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "2b2be696-74d7-4a77-8c6a-40d4339084f0",
+                                    "displayName": "田部井 和彦",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "5855e2b2-a197-4ec0-b3d7-a6cbd14304bc",
+                                    "displayName": "永田 義仁",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "device": null,
+                                "user": null,
+                                "application": {
+                                    "@odata.type": "#microsoft.graph.teamworkApplicationIdentity",
+                                    "id": "bdd75849-e0a6-4cce-8fc1-d7c0d4da43e5",
+                                    "displayName": "",
+                                    "applicationIdentityType": "bot"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "0cb96375-bc8f-45c9-b305-0301f7b39ce7",
+                                    "displayName": "和平 悠希",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "715f4bde-1cbf-4383-be7c-3516ef144340",
+                                    "displayName": "青木 健",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "fbf0efeb-658b-4edb-b0b3-068108903928",
+                                    "displayName": "吉江 一明",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "980df8b1-1fc0-4163-af37-b99bf19024a9",
+                                    "displayName": "森 貴哉",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "f25947ec-1f2c-4717-8b0a-d661df6b8811",
+                                    "displayName": "桑江 晃",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "424a01e7-0416-4044-a0e8-f5d752c42757",
+                                    "displayName": "石田 信行",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "ea6f93e9-fd2b-499b-a378-3dda7f23f4f3",
+                                    "displayName": "衣鳩 文彦",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        },
+                        {
+                            "participant": {
+                                "application": null,
+                                "device": null,
+                                "user": {
+                                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                                    "id": "a6a036bd-7788-4224-946e-334cd5769781",
+                                    "displayName": "久松 和之",
+                                    "userIdentityType": "aadUser",
+                                    "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                                }
+                            }
+                        }
+                    ],
+                    "initiator": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    }
+                }
+            },
+            {
+                "id": "1775622862843",
+                "replyToId": "1775618678577",
+                "etag": "1775622862843",
+                "messageType": "unknownFutureValue",
+                "createdDateTime": "2026-04-08T04:34:22.843Z",
+                "lastModifiedDateTime": "2026-04-08T04:34:22.843Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775622862843?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775622862843&parentMessageId=1775618678577",
+                "from": null,
+                "policyViolation": null,
+                "body": {
+                    "contentType": "html",
+                    "content": "<systemEventMessage/>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "eventDetail": {
+                    "@odata.type": "#microsoft.graph.callRecordingEventMessageDetail",
+                    "callId": "23750600-6cc9-4d5e-a446-328b80efff55",
+                    "callRecordingDisplayName": "【5JW】課内会議 1305～-20260408_040535UTC-Meeting Recording.mp4",
+                    "callRecordingUrl": "",
+                    "callRecordingDuration": "PT0S",
+                    "callRecordingStatus": "chunkFinished",
+                    "meetingOrganizer": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    },
+                    "initiator": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    }
+                }
+            },
+            {
+                "id": "1775622862723",
+                "replyToId": "1775618678577",
+                "etag": "1775622862723",
+                "messageType": "unknownFutureValue",
+                "createdDateTime": "2026-04-08T04:34:22.723Z",
+                "lastModifiedDateTime": "2026-04-08T04:34:22.723Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775622862723?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775622862723&parentMessageId=1775618678577",
+                "from": null,
+                "policyViolation": null,
+                "body": {
+                    "contentType": "html",
+                    "content": "<systemEventMessage/>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "eventDetail": {
+                    "@odata.type": "#microsoft.graph.callRecordingEventMessageDetail",
+                    "callId": "23750600-6cc9-4d5e-a446-328b80efff55",
+                    "callRecordingDisplayName": "【5JW】課内会議 1305～-20260408_040535UTC-Meeting Recording.mp4",
+                    "callRecordingUrl": "",
+                    "callRecordingDuration": "PT28M47.3744564S",
+                    "callRecordingStatus": "chunkFinished",
+                    "meetingOrganizer": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    },
+                    "initiator": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    }
+                }
+            },
+            {
+                "id": "1775621135813",
+                "replyToId": "1775618678577",
+                "etag": "1775621135813",
+                "messageType": "unknownFutureValue",
+                "createdDateTime": "2026-04-08T04:05:35.813Z",
+                "lastModifiedDateTime": "2026-04-08T04:05:35.813Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775621135813?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775621135813&parentMessageId=1775618678577",
+                "from": null,
+                "policyViolation": null,
+                "body": {
+                    "contentType": "html",
+                    "content": "<systemEventMessage/>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "eventDetail": {
+                    "@odata.type": "#microsoft.graph.callTranscriptEventMessageDetail",
+                    "callId": "23750600-6cc9-4d5e-a446-328b80efff55",
+                    "callTranscriptICalUid": "040000008200e00074c5b7101a82e00800000000f0870b3c07c7dc01000000000000000010000000792cce6751f0c344b48a8fcd93c37558",
+                    "meetingOrganizer": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    }
+                }
+            },
+            {
+                "id": "1775621135298",
+                "replyToId": "1775618678577",
+                "etag": "1775621135298",
+                "messageType": "unknownFutureValue",
+                "createdDateTime": "2026-04-08T04:05:35.298Z",
+                "lastModifiedDateTime": "2026-04-08T04:05:35.298Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775621135298?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775621135298&parentMessageId=1775618678577",
+                "from": null,
+                "policyViolation": null,
+                "body": {
+                    "contentType": "html",
+                    "content": "<systemEventMessage/>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "eventDetail": {
+                    "@odata.type": "#microsoft.graph.callRecordingEventMessageDetail",
+                    "callId": "23750600-6cc9-4d5e-a446-328b80efff55",
+                    "callRecordingDisplayName": "【5JW】課内会議 1305～-20260408_040535UTC-Meeting Recording.mp4",
+                    "callRecordingUrl": null,
+                    "callRecordingDuration": "PT0S",
+                    "callRecordingStatus": "initial",
+                    "meetingOrganizer": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    },
+                    "initiator": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    }
+                }
+            },
+            {
+                "id": "1775621135132",
+                "replyToId": "1775618678577",
+                "etag": "1775621135132",
+                "messageType": "unknownFutureValue",
+                "createdDateTime": "2026-04-08T04:05:35.132Z",
+                "lastModifiedDateTime": "2026-04-08T04:05:35.132Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775621135132?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775621135132&parentMessageId=1775618678577",
+                "from": null,
+                "policyViolation": null,
+                "body": {
+                    "contentType": "html",
+                    "content": "<systemEventMessage/>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "eventDetail": {
+                    "@odata.type": "#microsoft.graph.callRecordingEventMessageDetail",
+                    "callId": "23750600-6cc9-4d5e-a446-328b80efff55",
+                    "callRecordingDisplayName": "【5JW】課内会議 1305～-20260408_040535UTC-Meeting Recording.mp4",
+                    "callRecordingUrl": null,
+                    "callRecordingDuration": "PT0S",
+                    "callRecordingStatus": "initial",
+                    "meetingOrganizer": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    },
+                    "initiator": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    }
+                }
+            },
+            {
+                "id": "1775620833491",
+                "replyToId": "1775618678577",
+                "etag": "1775620833491",
+                "messageType": "unknownFutureValue",
+                "createdDateTime": "2026-04-08T04:00:33.491Z",
+                "lastModifiedDateTime": "2026-04-08T04:00:33.491Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775620833491?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775620833491&parentMessageId=1775618678577",
+                "from": null,
+                "policyViolation": null,
+                "body": {
+                    "contentType": "html",
+                    "content": "<systemEventMessage/>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "eventDetail": {
+                    "@odata.type": "#microsoft.graph.callStartedEventMessageDetail",
+                    "callId": "23750600-6cc9-4d5e-a446-328b80efff55",
+                    "callEventType": "meeting",
+                    "initiator": {
+                        "application": null,
+                        "device": null,
+                        "user": {
+                            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                            "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                            "displayName": null,
+                            "userIdentityType": "aadUser",
+                            "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                        }
+                    }
+                }
+            },
+            {
+                "id": "1775619082623",
+                "replyToId": "1775618678577",
+                "etag": "1775619084340",
+                "messageType": "message",
+                "createdDateTime": "2026-04-08T03:31:22.623Z",
+                "lastModifiedDateTime": "2026-04-08T03:31:24.34Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": "",
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/1775619082623?groupId=a7ac0c68-87ba-4613-8960-13660f0f5f56&tenantId=b6d94148-69a6-487a-8a69-88236d09260a&createdTime=1775619082623&parentMessageId=1775618678577",
+                "policyViolation": null,
+                "eventDetail": null,
+                "from": {
+                    "application": null,
+                    "device": null,
+                    "user": {
+                        "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                        "id": "87e63ef3-e50f-4b0e-8c91-7ad225ecd8ed",
+                        "displayName": "西出 隆二",
+                        "userIdentityType": "aadUser",
+                        "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+                    }
+                },
+                "body": {
+                    "contentType": "html",
+                    "content": "<p>課内会議の資料を共有いたします。</p><attachment id=\"d974d97d-f70a-4f2d-9f14-02a373c4c297\"></attachment><attachment id=\"012e1b00-da79-4e72-88c8-3cdb7805aedd\"></attachment><attachment id=\"8892fa84-76c4-4d68-abc0-962a98b6d846\"></attachment><attachment id=\"947921f8-1647-4e2a-a739-5c299089d6e9\"></attachment><attachment id=\"6efa8399-2f2e-4a9b-a8b0-a42263177580\"></attachment><attachment id=\"474a8000-a95a-43cf-b847-ef2de6b070e9\"></attachment>"
+                },
+                "channelIdentity": {
+                    "teamId": "a7ac0c68-87ba-4613-8960-13660f0f5f56",
+                    "channelId": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+                },
+                "attachments": [
+                    {
+                        "id": "d974d97d-f70a-4f2d-9f14-02a373c4c297",
+                        "contentType": "reference",
+                        "contentUrl": "https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/01_【本紙】「特許・実用新案審査基準」の改訂案に対する意見募集について.pdf",
+                        "content": null,
+                        "name": "01_【本紙】「特許・実用新案審査基準」の改訂案に対する意見募集について.pdf",
+                        "thumbnailUrl": null,
+                        "teamsAppId": null
+                    },
+                    {
+                        "id": "012e1b00-da79-4e72-88c8-3cdb7805aedd",
+                        "contentType": "reference",
+                        "contentUrl": "https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/02_【資料１】審査基準改訂案　新旧対照表.pdf",
+                        "content": null,
+                        "name": "02_【資料１】審査基準改訂案　新旧対照表.pdf",
+                        "thumbnailUrl": null,
+                        "teamsAppId": null
+                    },
+                    {
+                        "id": "8892fa84-76c4-4d68-abc0-962a98b6d846",
+                        "contentType": "reference",
+                        "contentUrl": "https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/調査室インターンシップ報告（5J細江）.pdf",
+                        "content": null,
+                        "name": "調査室インターンシップ報告（5J細江）.pdf",
+                        "thumbnailUrl": null,
+                        "teamsAppId": null
+                    },
+                    {
+                        "id": "947921f8-1647-4e2a-a739-5c299089d6e9",
+                        "contentType": "reference",
+                        "contentUrl": "https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/国際標準化会合（３ＧＰＰ）参加報告.pdf",
+                        "content": null,
+                        "name": "国際標準化会合（３ＧＰＰ）参加報告.pdf",
+                        "thumbnailUrl": null,
+                        "teamsAppId": null
+                    },
+                    {
+                        "id": "6efa8399-2f2e-4a9b-a8b0-a42263177580",
+                        "contentType": "reference",
+                        "contentUrl": "https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/【資料1-1】特許庁組織関係規程の改正について.pdf",
+                        "content": null,
+                        "name": "【資料1-1】特許庁組織関係規程の改正について.pdf",
+                        "thumbnailUrl": null,
+                        "teamsAppId": null
+                    },
+                    {
+                        "id": "474a8000-a95a-43cf-b847-ef2de6b070e9",
+                        "contentType": "reference",
+                        "contentUrl": "https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/基準室長のストーリーライン.pdf",
+                        "content": null,
+                        "name": "基準室長のストーリーライン.pdf",
+                        "thumbnailUrl": null,
+                        "teamsAppId": null
+                    }
+                ],
+                "mentions": [],
+                "reactions": []
+            }
+        ]
+    }
+}

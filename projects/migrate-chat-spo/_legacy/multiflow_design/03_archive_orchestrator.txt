@@ -1,0 +1,1754 @@
+========================================================================
+03_archive_orchestrator.txt
+PA_Meeting_Archive_Orchestrator ― Teams課内会議アーカイブ オーケストレータ
+（中核・子フロー。本プロジェクトで最も分量の多い中心フロー）
+本ファイルは CANONICAL_REFERENCE.md（正典）と 00_overview.txt に基づく詳細設計です。
+名称・型・式は正典からコピーしており、勝手な変更はしていません。
+========================================================================
+
+■ このファイルについて（他ファイルとの関係）
+------------------------------------------------------------------------
+本ファイルは [3] PA_Meeting_Archive_Orchestrator 本体の設計書です。
+以下のセクションは分量が大きいため別ファイルに分割しています（
+00_overview.txt「※ 04/06/07 のTXTは独立したフローではなく...」の
+方針どおり、いずれも本フロー[3]の内部セクションです。専用の「新しい
+フロー」画面は作成しません）。
+  - Scope_Collect（親投稿の全件ページング）＋Apply_To_Each_Meeting内の
+    返信全件ページング         → 04_collect_channel_messages.txt
+  - Word用HTML生成セクション（Get_Sorted_Meetingsの直後〜Append_
+    DocumentHtml_Footer）      → 06_build_word_html_child_flow.txt（作成済み）
+  - Word互換.doc作成セクション（Compose_ArchiveFileName〜Set_ArchiveUrl）
+                               → 07_create_word_archive_file.txt（別途作成）
+本ファイルでは、上記3セクションは「配置場所とアクション名の列挙・
+実行条件」のみを記載し、詳細な逐次操作手順は記載しません（該当ファイル
+を参照してください）。それ以外（初期化・収集ループの外枠・期間フィル
+ター・会議単位の抽出整形・添付保存・並び替え・通知・Scope構成・
+Respond）はすべて本ファイルで逐次操作粒度により詳細化します。
+
+06_build_word_html_child_flow.txtは、本セクションで組み立てる
+varMeetingAttachments（Append_Meeting_Attachmentの結果配列）の要素を
+{OriginalName, SavedName, SavedFileUrl, Status}（先頭大文字）という
+フィールド名で参照する前提で書かれています。本ファイルのAppend_Meeting_
+Attachmentは、この06側の前提と一致するフィールド名で実装します
+（後述■8「添付保存」参照）。
+
+08_error_log_and_ledger.txtは、本フローがPA_Write_Run_Logを呼び出す際
+variables('varRunId')が既に存在する前提で書かれています。本ファイルの
+初期化セクションでは、この08側の前提に合わせてvarRunId（トリガー入力の
+RunIdをそのまま保持する変数）を先頭で初期化します（正典§13で
+varRunIdがオーケストレータの内部変数として明記されていることとも一致
+します）。
+
+■ 1. このフローについて
+------------------------------------------------------------------------
+表示名        : PA_Meeting_Archive_Orchestrator
+推奨名（英語） : PA_Meeting_Archive_Orchestrator（表示名がそのまま英語名）
+ファイル名（本TXT）: 03_archive_orchestrator.txt
+  （関連詳細シート: 04_collect_channel_messages.txt,
+    06_build_word_html_child_flow.txt, 07_create_word_archive_file.txt）
+フロー種別    : 子（呼出可能）フロー。トリガーは「フローを手動で
+  トリガーする」（子フロー入力用）。画面から利用者が直接実行することは
+  想定しない（Run a Child Flowから起動される）。
+作成場所      : [1]PA_Manual_Meeting_Archive_Start、[2]PA_Scheduled_
+  Meeting_Archive_Start、[4]PA_Save_Meeting_Attachment、[5]PA_Write_Run_Log
+  と同一のPower Platformソリューション内。00_overview.txtの作成順序
+  では、本フローは[5]→[4]の後、[1]より前に作成する（[4][5]を先に
+  呼び出せる状態にしておく必要があるため）。
+役割          : 実行範囲の確定、Teams親投稿の全件取得、期間・会議判定、
+  返信の全件取得、本文のプレーンテキスト化、添付ファイル候補の抽出、
+  添付ファイルの保存（子フロー[4]呼出）、会議の並び替え（一時リスト
+  経由）、Word用HTML生成、Word互換.docファイルのSharePoint保存、
+  実行結果のTeams通知、実行ログの記録までを1フローに統合する中核処理。
+呼出元        : PA_Manual_Meeting_Archive_Start（1）、PA_Scheduled_
+  Meeting_Archive_Start（2）。いずれも「Run a Child Flow」で本フローを
+  1回呼び出す。
+呼出先        : PA_Save_Meeting_Attachment（[4]。添付1件ごとにRun a
+  Child Flowで呼出。詳細は05番のTXT、別ファイルで作成予定）、
+  PA_Write_Run_Log（[5]。08_error_log_and_ledger.txt。Scope_Catch／
+  Scope_Finallyから呼出）。
+
+■ 2. 使用するコネクタ・接続・権限
+------------------------------------------------------------------------
+使用するコネクタ:
+  - Microsoft Teams（Send a Microsoft Graph HTTP request／チャットまたは
+    チャネルでメッセージを投稿する）
+  - SharePoint（項目の作成／複数の項目の取得。ファイルの作成・ファイル
+    のプロパティの取得は07セクションで使用）
+  - Content Conversion（Html to text）
+  - Power Apps（Respond to a PowerApp or flow。子フロー戻り値専用）
+  - 組み込み（変数を初期化する／変数を設定する／変数の値を増やす／
+    配列変数に追加／作成(Compose)／選択(Select)／条件／Apply to each／
+    Do until／Filter array／Scope／Run a Child Flow）
+使用する接続:
+  - Teams接続: 対象チーム(envTeamId)・対象チャネル(envChannelId)への
+    メッセージ閲覧権限を持つ実行アカウントの接続。
+  - SharePoint接続: 保存先サイト(envSiteUrl)への読み書き権限を持つ接続
+    （MeetingArchiveStaging・添付保存フォルダともに同一サイト）。
+必要な権限:
+  - 対象チームのメンバーであること（チャネルメッセージ閲覧のため）。
+  - 対象SharePointサイトへの編集（Contribute以上）権限。
+  - 同一ソリューション内の子フロー[4][5]を呼び出す権限。
+プレミアムコネクタの有無: なし（すべて標準コネクタ／組み込みアクション）。
+管理者承認の必要性: 原則不要（標準コネクタのみ使用）。組織のDLP
+  ポリシーでTeams・SharePoint・Power Appsコネクタが同一グループに
+  属しているか要確認（要DLP確認）。子フロー機能の利用可否は
+  要ライセンス確認。
+
+■ 3. 入力引数（トリガー: フローを手動でトリガーする。子フロー入力）
+------------------------------------------------------------------------
+正典§5.3のとおり、5引数。
+
+| 引数名 | PA表示名 | 型 | 必須/任意 | 既定値 | 用途 |
+|---|---|---|---|---|---|
+| RunId | RunId | テキスト | 必須 | なし | 実行を一意に識別するID。呼出元（1/2）が発番したguid()文字列をそのまま受け取る |
+| StartDateUtc | StartDateUtc | テキスト | 必須 | なし | 取得開始UTC（ISO8601）。呼出元で必ず具体的な日時に確定済み |
+| EndDateUtc | EndDateUtc | テキスト | 必須 | なし | 取得終了UTC（ISO8601）。同上 |
+| DryRun | DryRun | はい/いいえ | 必須 | なし | はい＝Word生成・添付保存をスキップ（件数確認のみ） |
+| ForceReprocess | ForceReprocess | はい/いいえ | 必須 | なし | はい＝処理台帳を無視して再保存（子フロー[4]側の冪等性判定に影響） |
+
+呼出元: PA_Manual_Meeting_Archive_Start（1）のRun_Child_Flow_Orchestrator、
+  またはPA_Scheduled_Meeting_Archive_Start（2）の同名アクション。
+呼出元から渡す式（01_manual_archive_trigger.txtより再掲）:
+  RunId = variables('varRunId')（呼出元のInitialize_RunId=guid()）
+  StartDateUtc = outputs('Compose_StartDateUtc')
+  EndDateUtc = outputs('Compose_EndDateUtc')
+  DryRun = variables('varDryRun')
+  ForceReprocess = variables('varForceReprocess')
+
+要実環境確認: 手動トリガーの入力欄の内部キー名は追加順序に依存する
+  （01_manual_archive_trigger.txtの同項目参照）。本書のtriggerBody()?['RunId']
+  等の表記は可読性のためのものであり、実装時は「動的なコンテンツ」
+  パネルから入力名をクリックして挿入する方法を推奨する。
+
+■ 4. 出力（戻り値。Respond to a PowerApp or flow。正典§5.3）
+------------------------------------------------------------------------
+| 出力名 | 型 | 内容 | 呼出元での参照方法 |
+|---|---|---|---|
+| Status | テキスト | 'Success'または'Failed' | body('Run_Child_Flow_Orchestrator')?['Status'] |
+| MeetingCount | 数値 | 取得・処理できた会議件数 | body('Run_Child_Flow_Orchestrator')?['MeetingCount'] |
+| SavedCount | 数値 | 添付保存成功件数 | body('Run_Child_Flow_Orchestrator')?['SavedCount'] |
+| SkippedCount | 数値 | 添付スキップ件数 | body('Run_Child_Flow_Orchestrator')?['SkippedCount'] |
+| ArchiveUrl | テキスト | 生成されたWordファイルのURL（DryRunまたは未生成時は''） | body('Run_Child_Flow_Orchestrator')?['ArchiveUrl'] |
+| ErrorMessage | テキスト | エラー概要（成功時は''） | body('Run_Child_Flow_Orchestrator')?['ErrorMessage'] |
+
+要実環境確認: 01_manual_archive_trigger.txtと同様、実際のトークン形式は
+  outputs('Run_Child_Flow_Orchestrator')?['body/Status']のような形式に
+  なる場合がある。Dynamic contentパネルまたはPeek codeで確認すること。
+
+■ 5. 環境変数
+------------------------------------------------------------------------
+本フローが参照する環境変数（正典§2。表示名で参照）:
+  envTeamId          … Get_Channel_Messages／Get_Message_Repliesの
+                        Graph URI組立（詳細は04）
+  envChannelId       … 同上
+  envSiteUrl         … Create_Staging_Item／Get_Sorted_Meetingsの
+                        「サイトのアドレス」欄
+  envStagingListName … 値'MeetingArchiveStaging'。Create_Staging_Item／
+                        Get_Sorted_Meetingsの「リスト名」欄
+  envLibrary         … 07セクション（Word作成）で使用
+  envDestinationPath … 07セクションで使用
+  envRunLogListName  … 呼出先PA_Write_Run_Log（08）側で使用。本フロー
+                        からは直接参照しない
+  envIncludeKeywords、envExcludeKeywords … 正典§2で定義されているが、
+    正典§7.16のFilter_Messages_By_Periodには含意されていない（期間・
+    messageType・deletedDateTimeのみで判定する）。本フローでは現時点
+    では使用しない（将来、件名/本文キーワードでの絞り込みを追加する
+    場合の拡張用予約。要実環境確認）。
+  envLookbackDays    … 呼出元（1/2）側で使用。本フローは既に確定した
+    StartDateUtc/EndDateUtcを受け取るのみで、本フロー自身では使用しない。
+
+■ 6. 内部変数（正典§13。全てトップレベル＝Scope_Try直下で初期化）
+------------------------------------------------------------------------
+正典§13は10個の変数（varMessagesArray〜varSkippedCount）を列挙して
+いますが、そのヘッダー行自体は「varRunId」も内部変数の1つとして
+明記しています。また08_error_log_and_ledger.txtはvariables('varRunId')
+が本フロー内に存在する前提で書かれています。したがって本書ではvarRunId
+も先頭で初期化します（Initialize_RunId。正典§6「共通: Initialize_RunId」
+に対応。[1]手動フローのInitialize_RunIdとは別フロー内の別アクションで
+あり名称の重複は問題ありません）。
+
+さらに、Scope_Finally内のRespond_To_Caller（Status/ArchiveUrl/
+ErrorMessage出力）と07セクションのSet_ArchiveUrlを成立させるためには、
+正典§13に明記のない3つの変数（varArchiveUrl, varRunStatus,
+varErrorMessage）が実務上必要です。正典にはこれらの初期化アクション名
+が明記されていないため、本書で名称を補います（06の「本シートで補う
+補助アクション」と同じ考え方。以下の表で【補足】と明記します）。
+
+| 変数名 | 型 | 初期値 | 用途 | 更新するアクション | 並列実行時の注意 |
+|---|---|---|---|---|---|
+| varRunId | 文字列 | coalesce(triggerBody()?['RunId'], guid()) | 実行識別子。台帳/ログ/子フロー呼出のRunId引数として使用 | Initialize_RunId | Apply to each/Do untilを跨いで変更しないため競合なし |
+| varMessagesArray | 配列 | json('[]') | 親投稿全件（全ページ分）を保持 | Initialize_MessagesArray／Set_MessagesArray（Scope_Collect内） | Do_Until_Messages_Pagingは逐次実行のため競合なし |
+| varNextLink | 文字列 | messages初回URI（正典§7.15） | 次ページURL。空になったらDo_Until終了 | Initialize_NextLink／Set_NextLink | 同上 |
+| varRepliesArray | 配列 | json('[]') | 1親投稿分の返信全件を保持（会議ごとに再利用） | Initialize_RepliesArray（トップレベル）／Reset_RepliesArray（Apply_To_Each_Meeting各反復先頭）／Set_RepliesArray（Do_Until_Replies_Paging内） | Apply_To_Each_Meetingは並列オフ必須（同時実行を有効にする＝オフのまま） |
+| varReplyNextLink | 文字列 | '' | 返信ページングの次URL | Initialize_ReplyNextLink／Reset_ReplyNextLink（各反復先頭）／Set_ReplyNextLink（ループ内） | 同上 |
+| varAttachmentCandidates | 配列 | json('[]') | 親投稿＋全返信のattachmentsを集約した添付候補（1会議分） | Initialize_AttachmentCandidates／Reset_AttachmentCandidates（各反復先頭）／Set_AttachmentCandidates_From_Parent／Append_Reply_Attachments | 並列オフ必須（Apply_To_Each_Replyも並列オフ） |
+| varMeetingAttachments | 配列 | json('[]') | 保存成功/失敗した添付の結果配列（1会議分。{OriginalName,SavedName,SavedFileUrl,Status}） | Initialize_MeetingAttachments／Reset_MeetingAttachments（各反復先頭）／Append_Meeting_Attachment | 並列オフ必須（Apply_To_Each_Attachmentも並列オフ） |
+| varDocumentHtml | 文字列 | '' | Word用HTML全体を蓄積（詳細06） | Initialize_DocumentHtml／06セクションの各Set_*/Append_* | 06のApply_To_Each_Sorted_Meeting／Apply_To_Each_Saved_Attachmentは並列オフ必須 |
+| varMeetingIndex | 整数 | 0 | 処理済み会議の通し番号（改ページ判定・MeetingCountの根拠。詳細06） | Initialize_MeetingIndex／06のIncrement_MeetingIndex | 同上 |
+| varSavedCount | 整数 | 0 | 添付保存成功件数の累計 | Initialize_SavedCount／Increment_SavedCount（Apply_To_Each_Attachment内） | Apply_To_Each_Attachmentは並列オフ必須（カウンタ競合防止） |
+| varSkippedCount | 整数 | 0 | 添付スキップ件数の累計 | Initialize_SkippedCount／Increment_SkippedCount | 同上 |
+| varArchiveUrl【補足】 | 文字列 | '' | 生成されたWordファイルのURL（DryRun時/未生成時は''のまま） | Initialize_ArchiveUrl／07セクションのSet_ArchiveUrl | Scope_Finally/Respond_To_Callerから参照。並列ループでは更新しないため競合なし |
+| varRunStatus【補足】 | 文字列 | 'Failed' | 実行結果ステータス。Scope_Try完走時のみ'Success'に更新される安全側初期値 | Initialize_RunStatus／Set_RunStatus_Success（Scope_Try末尾）／Set_RunStatus_Failed（Scope_Catch、防御的） | 単一のトップレベル値のため競合なし |
+| varErrorMessage【補足】 | 文字列 | '' | エラー概要（Respond_To_CallerのErrorMessage出力元） | Initialize_ErrorMessage／Set_ErrorMessage（Scope_Catch） | 同上 |
+
+【補足】について: 正典§13にはvarArchiveUrl/varRunStatus/varErrorMessage
+の初期化アクション名が明記されていません（07セクションの詳細化が
+別ファイルであるため、正典側でも本フロー全体を貫くこれらの変数名までは
+書ききれていないと判断されます）。しかし正典§6「通知/ログ: ...
+Respond_To_Caller」が Status/ArchiveUrl/ErrorMessage を返す以上、
+これらの値を保持する何らかの変数（またはそれに準じる仕組み）が
+Scope_Try/Scope_Catch/Scope_Finallyの3スコープを跨いで必要になります。
+Power Automateの変数はトップレベルでしか初期化できず、かつ変数は
+スコープをまたいでも値を保持できるため、本書ではPower Automateの標準
+機能の範囲内でこの3変数をトップレベルに追加することで正典の要求
+（Respond_To_Callerの出力）を実現します。正典への追記を推奨します。
+
+■ 7. フロー全体構造（Scope_Try / Scope_Catch / Scope_Finally）
+------------------------------------------------------------------------
+本フローはトリガー直後に3つのScopeアクションを縦に並べる構成です。
+Scope自体はキャンバス上で兄弟（同じ階層）として並べ、実行条件（run
+after）の設定でCatch/Finallyの発火条件を制御します（Scope同士を
+入れ子にはしません）。
+
+  [トリガー] フローを手動でトリガーする
+       │
+  [Scope_Try]  … 本体処理（初期化〜通知まで、以下■8で詳細化）
+       │  （run after は既定のまま。Scope_Tryはトリガー成功後に実行）
+  [Scope_Catch] … Scope_Tryが「失敗した場合」「タイムアウトした場合」に実行
+       │  （run after: Scope_Try の has failed／has timed out にチェック。
+       │   is successful／is skipped のチェックは外す）
+  [Scope_Finally] … 必ず実行される後片付けブロック
+          （run after: Scope_Catch の is successful／has failed／
+           is skipped／has timed out の4つ全てにチェック。これにより
+           Scope_Tryが成功してScope_Catchがスキップされた場合でも
+           Scope_Finallyは必ず実行される）
+
+Scope_Try内のアクション順序（■8で1つずつ詳細化）:
+  初期化13個 → Scope_Collect（04詳細）→ Filter_Messages_By_Period →
+  Apply_To_Each_Meeting（本体） → Get_Sorted_Meetings →
+  Word用HTML生成セクション（06詳細）→ Word作成セクション（07詳細）→
+  Post_Result_Message → Set_RunStatus_Success
+
+■ 8. アクション一覧（画面操作の詳細・逐次操作粒度）
+------------------------------------------------------------------------
+以下、各アクションは「新しいステップ」→検索→追加→名前変更→各欄入力
+→式、の順で記載します。初回に登場するアクション種類（変数を初期化
+する・変数を設定する等）は操作手順をフルに記載し、2回目以降の同種
+アクションは変更点（名前・値）のみを記載します（06と同じ方針）。
+
+------------------------------------------------------------------------
+[トリガー] フローを手動でトリガーする（子フロー入力）
+------------------------------------------------------------------------
+コネクタ            : 組み込み（Manually trigger a flow）
+PA上のアクション名   : フローを手動でトリガーする
+配置場所            : フロー先頭（唯一のトリガー）
+操作手順:
+ 1. Power Automateで「作成」→「インスタントクラウドフロー」を選択する。
+ 2. フロー名に「PA_Meeting_Archive_Orchestrator」と入力する。
+ 3. トリガーの検索ボックスに「手動」と入力し「フローを手動でトリガー
+    する」を選択して「作成」をクリックする。
+ 4. トリガーカードを開き「+ 入力の追加」をクリックし、「テキスト」を
+    選び入力名を「RunId」に変更する。
+ 5. 「+ 入力の追加」→「テキスト」→入力名を「StartDateUtc」に変更する。
+ 6. 「+ 入力の追加」→「テキスト」→入力名を「EndDateUtc」に変更する。
+ 7. 「+ 入力の追加」→「はい/いいえ」→入力名を「DryRun」に変更する。
+ 8. 「+ 入力の追加」→「はい/いいえ」→入力名を「ForceReprocess」に変更する。
+ 9. 追加順序はRunId→StartDateUtc→EndDateUtc→DryRun→ForceReprocessに
+    揃える（■3の表の順。内部キー名の推測を本書記載と合わせるため。
+    実際に一致するかはPeek codeで要確認）。
+入力内容      : 上記■3の表の5項目
+使用する式    : なし
+出力          : triggerBody()?['RunId'] 等、各入力値
+次のアクション: Scope_Try
+実行条件      : 該当なし
+再試行/タイムアウト/エラー時の処理: 適用外（トリガー）
+
+------------------------------------------------------------------------
+[1] Scope_Try
+------------------------------------------------------------------------
+コネクタ            : 組み込み（Scope）
+PA上のアクション名   : スコープ（Scope）
+配置場所            : トリガーの直後
+操作手順:
+ 1. 「+ 新しいステップ」をクリックする。
+ 2. 検索ボックスに「スコープ」または「Scope」と入力する。
+ 3. 「範囲」または「Scope」を選択して追加する（英語UIでは"Scope"）。
+ 4. アクション名を「Scope_Try」に変更する。
+ 5. 以降■8の[2]〜[38]は、すべてこのScope_Tryのカードの枠内
+    （カードの内側の点線エリア）に追加していく。
+入力          : なし（コンテナのみ）
+使用する式    : なし
+出力          : result('Scope_Try')（内部の各アクションの実行結果配列。
+                Scope_Catch側でエラー概要抽出に使用）
+次のアクション: Scope_Catch
+実行条件      : 直前（トリガー）の成功後
+再試行        : 適用外（コンテナ自体に再試行設定はない）
+タイムアウト  : 既定（内部の個別アクションのタイムアウトに依存）
+エラー時の処理: 内部いずれかのアクションが失敗するとScope_Try全体が
+                失敗として終了し、Scope_Catchが発火する
+
+------------------------------------------------------------------------
+以下、[2]〜[38]は全てScope_Tryの枠内に配置します。
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+[2] Initialize_RunId
+------------------------------------------------------------------------
+コネクタ            : 組み込み（変数）
+PA上のアクション名   : 変数を初期化する（Initialize variable）
+配置場所            : Scope_Try枠内の先頭
+操作手順:
+ 1. Scope_Tryの枠内で「アクションの追加」をクリックする。
+ 2. 検索ボックスに「変数を初期化する」と入力する。
+ 3. 「変数を初期化する」を選択して追加する。
+ 4. アクション名の「...」→「名前の変更」で「Initialize_RunId」に変更する。
+ 5. 「名前」欄に varRunId と入力する。
+ 6. 「種類」で「文字列」を選択する。
+ 7. 「値」欄の数式タブに次の式を入力する（triggerBody()?['RunId']は
+    「動的なコンテンツ」から挿入する方法を推奨）:
+    coalesce(triggerBody()?['RunId'], guid())
+使用する式    : coalesce(triggerBody()?['RunId'], guid())
+出力          : variables('varRunId')
+次のアクション: Initialize_MessagesArray
+実行条件      : 直前（Scope_Try開始）
+再試行/タイムアウト: 既定なし/適用外
+エラー時の処理: coalesceは常にどちらかの候補を返すため通常失敗しない
+                （想定エラー(1)参照）
+
+------------------------------------------------------------------------
+[3] Initialize_MessagesArray
+------------------------------------------------------------------------
+コネクタ/種類 : 変数を初期化する
+操作手順      : [2]と同様に「変数を初期化する」を追加し、名前を
+                「Initialize_MessagesArray」に変更する。
+名前(変数名)  : varMessagesArray
+種類          : 配列
+値            : json('[]')
+出力          : variables('varMessagesArray')
+次のアクション: Initialize_NextLink
+実行条件      : Initialize_RunIdの成功後
+エラー時の処理: json('[]')は定数のため失敗しない
+
+------------------------------------------------------------------------
+[4] Initialize_NextLink
+------------------------------------------------------------------------
+コネクタ/種類 : 変数を初期化する
+名前(変数名)  : varNextLink
+種類          : 文字列
+値（正典§7.15。messages初回URI）:
+  concat('https://graph.microsoft.com/v1.0/teams/', <envTeamId>,
+  '/channels/', <envChannelId>, '/messages?$top=50')
+  ※ <envTeamId>・<envChannelId>の部分は、式エディターの「動的な
+    コンテンツ」パネルの「環境変数」グループから「envTeamId」
+    「envChannelId」をクリックして挿入する（正典自身がこの部分を
+    プレースホルダーとして記載しており、実際のトークン文字列は
+    Power Automateが自動生成するため手入力しない）。
+出力          : variables('varNextLink')
+次のアクション: Initialize_RepliesArray
+実行条件      : Initialize_MessagesArrayの成功後
+エラー時の処理: envTeamId/envChannelIdが未設定の場合、後続のGet_Channel_
+                Messagesが404/400になる（想定エラー(9)参照。詳細04）
+
+------------------------------------------------------------------------
+[5] Initialize_RepliesArray
+------------------------------------------------------------------------
+名前(変数名): varRepliesArray／種類: 配列／値: json('[]')
+出力: variables('varRepliesArray')／次: Initialize_ReplyNextLink
+
+------------------------------------------------------------------------
+[6] Initialize_ReplyNextLink
+------------------------------------------------------------------------
+名前(変数名): varReplyNextLink／種類: 文字列／値: ''
+出力: variables('varReplyNextLink')／次: Initialize_AttachmentCandidates
+補足: 初期値は空文字（''）。実際の返信初回URIはApply_To_Each_Meeting
+      内のReset_ReplyNextLinkで会議ごとに設定し直す（詳細04）。
+
+------------------------------------------------------------------------
+[7] Initialize_AttachmentCandidates
+------------------------------------------------------------------------
+名前(変数名): varAttachmentCandidates／種類: 配列／値: json('[]')
+出力: variables('varAttachmentCandidates')／次: Initialize_MeetingAttachments
+
+------------------------------------------------------------------------
+[8] Initialize_MeetingAttachments
+------------------------------------------------------------------------
+名前(変数名): varMeetingAttachments／種類: 配列／値: json('[]')
+出力: variables('varMeetingAttachments')／次: Initialize_DocumentHtml
+
+------------------------------------------------------------------------
+[9] Initialize_DocumentHtml
+------------------------------------------------------------------------
+名前(変数名): varDocumentHtml／種類: 文字列／値: ''
+出力: variables('varDocumentHtml')／次: Initialize_MeetingIndex
+補足: 実際のHTMLヘッダーはSet_DocumentHtml_Header（06セクション先頭）
+      で書き込む。ここでは空文字で初期化するのみ。
+
+------------------------------------------------------------------------
+[10] Initialize_MeetingIndex
+------------------------------------------------------------------------
+名前(変数名): varMeetingIndex／種類: 整数／値: 0
+出力: variables('varMeetingIndex')／次: Initialize_SavedCount
+
+------------------------------------------------------------------------
+[11] Initialize_SavedCount
+------------------------------------------------------------------------
+名前(変数名): varSavedCount／種類: 整数／値: 0
+出力: variables('varSavedCount')／次: Initialize_SkippedCount
+
+------------------------------------------------------------------------
+[12] Initialize_SkippedCount
+------------------------------------------------------------------------
+名前(変数名): varSkippedCount／種類: 整数／値: 0
+出力: variables('varSkippedCount')／次: Initialize_ArchiveUrl
+
+------------------------------------------------------------------------
+[13] Initialize_ArchiveUrl【補足。正典§13に明記なし。■6参照】
+------------------------------------------------------------------------
+名前(変数名): varArchiveUrl／種類: 文字列／値: ''
+出力: variables('varArchiveUrl')／次: Initialize_RunStatus
+補足: 07セクションのSet_ArchiveUrl（Condition_DryRunが「いいえ」かつ
+      Word作成成功時）でのみ実際のURLに更新される。DryRun=はい、または
+      Word作成前に失敗した場合は''のまま。
+
+------------------------------------------------------------------------
+[14] Initialize_RunStatus【補足】
+------------------------------------------------------------------------
+名前(変数名): varRunStatus／種類: 文字列／値: 'Failed'
+出力: variables('varRunStatus')／次: Initialize_ErrorMessage
+補足: あえて既定値を'Failed'（安全側）にする。Scope_Try内の全処理が
+      最後まで完走した場合のみ、末尾のSet_RunStatus_Successで
+      'Success'に上書きする。途中で失敗しSet_RunStatus_Successまで
+      到達しなければ'Failed'のまま維持されるため、Respond_To_Caller
+      が常に正しいStatusを返せる。
+
+------------------------------------------------------------------------
+[15] Initialize_ErrorMessage【補足】
+------------------------------------------------------------------------
+名前(変数名): varErrorMessage／種類: 文字列／値: ''
+出力: variables('varErrorMessage')／次: Scope_Collect
+補足: 成功時は''のまま。Scope_Catch内のSet_ErrorMessageでのみ更新される。
+
+------------------------------------------------------------------------
+[16] Scope_Collect（詳細は 04_collect_channel_messages.txt を参照）
+------------------------------------------------------------------------
+コネクタ            : 組み込み（Scope）
+PA上のアクション名   : スコープ（Scope）
+配置場所            : Initialize_ErrorMessageの直後
+役割                : Teamsチャネルの親投稿を@odata.nextLinkで全ページ
+                      追跡し、varMessagesArrayへ全件集約する。
+中身（04で逐次操作粒度で詳細化。ここではアクション名と配置のみ）:
+  Do_Until_Messages_Paging（Do until。終了条件 empty(variables('varNextLink'))）
+    ├ Get_Channel_Messages（Teams「Send a Microsoft Graph HTTP request」
+    │   GET variables('varNextLink')）
+    ├ Set_MessagesArray（変数を設定する。
+    │   union(variables('varMessagesArray'), body('Get_Channel_Messages')?['value'])）
+    └ Set_NextLink（変数を設定する。
+        coalesce(body('Get_Channel_Messages')?['@odata.nextLink'], '')）
+出力          : variables('varMessagesArray')（期間内外を問わず全件）
+次のアクション: Filter_Messages_By_Period
+実行条件      : Initialize_ErrorMessageの成功後
+再試行        : Get_Channel_Messagesの設定（Settings）→再試行ポリシー
+                →既定（4回・指数間隔）のまま。429/5xx対応の詳細は04参照。
+タイムアウト  : Do_Until_Messages_Pagingの設定（Settings）→ループの制限
+                の変更→カウント／タイムアウトを既定より拡大する
+                （要実環境確認・詳細04）。
+エラー時の処理: Scope_Collect内で解決しないエラーはScope_Try全体の失敗
+                としてScope_Catchへ波及する。
+
+------------------------------------------------------------------------
+[17] Filter_Messages_By_Period
+------------------------------------------------------------------------
+コネクタ            : 組み込み（データ操作）
+PA上のアクション名   : 配列のフィルター処理（Filter array）
+配置場所            : Scope_Collectの直後
+操作手順:
+ 1. 「アクションの追加」→検索「フィルター」→「配列のフィルター処理」
+    を選択して追加する。
+ 2. アクション名を「Filter_Messages_By_Period」に変更する。
+ 3. 「From」欄に variables('varMessagesArray') を指定する（動的な
+    コンテンツからvarMessagesArrayを選択）。
+ 4. 既定は簡易モード（値の比較）だが、複合条件のため詳細（advanced）
+    モードに切り替える（入力欄右上の「切り替え」リンクをクリックし
+    「テキストモードの切り替え」または「詳細エディター」を選ぶ）。
+ 5. 詳細モードのテキストボックスに次の式を入力する。
+使用する式（正典§7.16のperiod条件に、同じ§7.16注記のmessageType/
+  deletedDateTime条件を@and()で結合したもの）:
+  @and(
+    greaterOrEquals(item()?['createdDateTime'], triggerBody()?['StartDateUtc']),
+    lessOrEquals(item()?['createdDateTime'], triggerBody()?['EndDateUtc']),
+    equals(item()?['messageType'], 'message'),
+    equals(item()?['deletedDateTime'], null)
+  )
+入力          : variables('varMessagesArray')（配列。既定json('[]')が
+                Scope_Collectで必ず配列として維持されているため、
+                Filter arrayへnullが渡ることはない）
+出力          : body('Filter_Messages_By_Period')（配列。期間・
+                messageType・削除済み除外の3条件を満たす親投稿のみ）
+次のアクション: Apply_To_Each_Meeting
+実行条件      : Scope_Collectの成功後
+再試行/タイムアウト: 既定
+エラー時の処理: createdDateTime/StartDateUtc/EndDateUtcがISO8601同形式
+                の文字列であれば比較は失敗しない。型不一致時は想定
+                エラー(2)参照。
+
+------------------------------------------------------------------------
+[18] Apply_To_Each_Meeting
+------------------------------------------------------------------------
+コネクタ            : 組み込み（制御）
+PA上のアクション名   : Apply to each
+配置場所            : Filter_Messages_By_Periodの直後
+操作手順:
+ 1. 「アクションの追加」→検索「Apply to each」→追加する。
+ 2. アクション名を「Apply_To_Each_Meeting」に変更する。
+ 3. 「以前の手順から出力を選択」欄に body('Filter_Messages_By_Period')
+    を指定する。
+ 4. アクション右上「...」→設定（Settings）を開き、「同時実行を有効に
+    する（Concurrency Control）」は既定の**オフのまま変更しない**。
+    重要: このトグルをオンにすると最大50反復が並列実行され、
+    varRepliesArray/varAttachmentCandidates/varMeetingAttachments/
+    varSavedCount/varSkippedCount/varDocumentHtml/varMeetingIndexの
+    いずれも複数会議間で競合・上書きが発生する（正典§9「共通変数へ
+    Appendするループは並列オフ」）。オフのままにすることで既定の逐次
+    実行（1件ずつ順番に処理）になる。
+入力          : body('Filter_Messages_By_Period')（配列。0件でも空配列
+                のままでApply to eachはエラーなく0回反復する＝nullでは
+                ない）
+出力          : ループ内でitems('Apply_To_Each_Meeting')として親投稿
+                1件（Graph chatMessageオブジェクト）を参照
+次のアクション: Get_Sorted_Meetings（ループ全件終了後）
+実行条件      : Filter_Messages_By_Periodの成功後
+再試行        : ループ自体に再試行設定はない（内部個別アクションに依存）
+タイムアウト  : 既定（2年分で件数が多い場合は想定エラー(15)参照）
+エラー時の処理: ループ内個別アクションの失敗はScope_Try全体の失敗として
+                Scope_Catchへ波及する（1会議の失敗で即全体停止する設計。
+                添付1件の失敗は別途、子フロー[4]の戻り値Statusで吸収
+                するため全体停止しない。■13参照）
+
+  以下、[18-1]〜[18-17]はApply_To_Each_Meetingのループ内に、この順番
+  で追加します。
+
+  --------------------------------------------------------------------
+  [18-1] Compose_Author
+  --------------------------------------------------------------------
+  コネクタ/種類: 作成（Compose）
+  操作手順:
+   1. ループ内「アクションの追加」→「作成」→追加。
+   2. 名前を「Compose_Author」に変更。
+   3. 「入力」欄の数式タブに次の式（正典§7.2。安全参照＋trim＋空文字
+      /空白のみを「不明」に正規化）を入力する。
+  使用する式:
+    if(empty(trim(coalesce(items('Apply_To_Each_Meeting')?['from']?['user']?['displayName'], ''))),
+       '不明',
+       trim(coalesce(items('Apply_To_Each_Meeting')?['from']?['user']?['displayName'], '')))
+  出力: outputs('Compose_Author')（文字列）
+  次のアクション: Compose_Organizer
+  実行条件: ループ開始直後
+  エラー時の処理: 投稿者が退職済み等でfrom.userがnullでも
+                  coalesceで''に落ちるためtrim/emptyは失敗しない
+                  （想定エラー(5)参照）
+
+  --------------------------------------------------------------------
+  [18-2] Compose_Organizer
+  --------------------------------------------------------------------
+  コネクタ/種類: 作成（Compose）
+  使用する式（正典§7.3。主催者＝投稿者。ユーザー決定事項）:
+    outputs('Compose_Author')
+  出力: outputs('Compose_Organizer')
+  次のアクション: Compose_MeetingDate
+
+  --------------------------------------------------------------------
+  [18-3] Compose_MeetingDate
+  --------------------------------------------------------------------
+  コネクタ/種類: 作成（Compose）
+  使用する式（正典§7.4。JST変換・優先度3＝投稿日を主方式）:
+    formatDateTime(convertFromUtc(items('Apply_To_Each_Meeting')?['createdDateTime'],
+      'Tokyo Standard Time'), 'yyyy-MM-dd')
+  出力: outputs('Compose_MeetingDate')（文字列。yyyy-MM-dd）
+  次のアクション: Compose_PostedDateTimeJst
+  補足: 本文からの開催日抽出（仕様書3.4の優先度1/2）はPower Automateに
+        正規表現関数がなく確実に実装できないため不採用（正典§7.4注記。
+        要実環境確認：将来Peek code/カスタム式で拡張する余地はある）。
+
+  --------------------------------------------------------------------
+  [18-4] Compose_PostedDateTimeJst
+  --------------------------------------------------------------------
+  コネクタ/種類: 作成（Compose）
+  使用する式（正典§7.5）:
+    concat(formatDateTime(convertFromUtc(items('Apply_To_Each_Meeting')?['createdDateTime'],
+      'Tokyo Standard Time'), 'yyyy-MM-ddTHH:mm:ss'), '+09:00')
+  出力: outputs('Compose_PostedDateTimeJst')
+  次のアクション: Convert_Body_Html_To_Text
+
+  --------------------------------------------------------------------
+  [18-5] Convert_Body_Html_To_Text
+  --------------------------------------------------------------------
+  コネクタ            : Content Conversion
+  PA上のアクション名   : Html to text
+  操作手順:
+   1. 「アクションの追加」→検索「Html to text」→Content Conversion
+      コネクタのアクションを選択して追加する。
+   2. 名前を「Convert_Body_Html_To_Text」に変更する。
+   3. 入力欄（Content/Html等のラベル）に次の式を入力する。
+  使用する式（正典§7.8）:
+    coalesce(items('Apply_To_Each_Meeting')?['body']?['content'], '')
+  出力          : outputs('Convert_Body_Html_To_Text')（プレーンテキスト。
+                  正典指示のとおりCreate_Staging_ItemのBodyText欄で
+                  outputs('Convert_Body_Html_To_Text')としてそのまま
+                  参照する。要実環境確認: コネクタのバージョンにより
+                  実際の出力プロパティが body('Convert_Body_Html_To_Text')
+                  や outputs('Convert_Body_Html_To_Text')?['body']の
+                  形になる場合があるため、Peek codeまたは動的コンテンツ
+                  一覧で実際の参照式を確認すること。
+  次のアクション: Reset_ReplyNextLink
+  実行条件      : Compose_PostedDateTimeJstの成功後
+  エラー時の処理: 入力が''でもHtml to textは空文字を返すため通常失敗
+                  しない（想定エラー(4)参照）
+
+  --------------------------------------------------------------------
+  [18-6] Reset_ReplyNextLink【補足名。正典§6は"Set_ReplyNextLink"の
+         み列挙。本ループ先頭のリセット専用アクションとして名称を分離】
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する（Set variable）
+  操作手順:
+   1. 「アクションの追加」→「変数を設定する」→追加。
+   2. 名前を「Reset_ReplyNextLink」に変更。
+   3. 「名前」欄: varReplyNextLink
+   4. 「値」欄に次の式（正典§7.15。replies初回URI）を入力する。
+  使用する式:
+    concat('https://graph.microsoft.com/v1.0/teams/', <envTeamId>,
+    '/channels/', <envChannelId>, '/messages/',
+    items('Apply_To_Each_Meeting')?['id'], '/replies?$top=50')
+  出力: variables('varReplyNextLink')が今回の会議の返信初回URIに
+        リセットされる
+  次のアクション: Reset_RepliesArray
+  実行条件: Convert_Body_Html_To_Textの成功後
+  補足: なぜ「リセット」が必要か＝Power Automateの変数はトップレベル
+        （Scope_Try直下）でしか初期化(Initialize)できず、Apply to each
+        の反復のたびに新しい変数を作ることはできない。そのため、
+        前の会議で使い終えたvarReplyNextLink/varRepliesArrayの値を
+        今回の会議用に「変数を設定する」で明示的に上書き（リセット）
+        してから使い回す。詳細な理由と設計判断は04参照。
+
+  --------------------------------------------------------------------
+  [18-7] Reset_RepliesArray【補足名。正典§6は"Set_RepliesArray"のみ
+         列挙。本ループ先頭のリセット専用アクションとして名称を分離】
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する
+  名前(変数名): varRepliesArray
+  値          : json('[]')
+  出力: variables('varRepliesArray')が空配列にリセットされる
+  次のアクション: Do_Until_Replies_Paging
+  実行条件: Reset_ReplyNextLinkの成功後
+
+  --------------------------------------------------------------------
+  [18-8] Do_Until_Replies_Paging（詳細は04参照）
+  --------------------------------------------------------------------
+  コネクタ/種類: Do until（組み込み）
+  操作手順:
+   1. 「アクションの追加」→検索「Do until」→追加。
+   2. 名前を「Do_Until_Replies_Paging」に変更。
+   3. 終了条件の式: empty(variables('varReplyNextLink'))
+   4. 「...」→設定（Settings）→ループの制限の変更で、カウント／
+      タイムアウトを既定（60回／PT1H）から拡大するか検討する
+      （返信50件超のチャネルを想定。詳細04。要実環境確認）。
+  中身（この順で3アクションをDo until内に追加）:
+    [18-8-1] Get_Message_Replies
+      コネクタ: Microsoft Teams
+      PA上のアクション名: Send a Microsoft Graph HTTP request
+      操作手順:
+       1. Do untilの枠内「アクションの追加」→検索「Send a Microsoft
+          Graph HTTP request」→Teamsコネクタのアクションを追加。
+       2. 名前を「Get_Message_Replies」に変更。
+       3. メソッド: GET
+       4. URI: variables('varReplyNextLink')
+      使用する式: variables('varReplyNextLink')
+      出力: body('Get_Message_Replies')?['value']、
+            body('Get_Message_Replies')?['@odata.nextLink']
+      次のアクション: Set_RepliesArray
+      再試行: 設定→再試行ポリシー→既定のまま（429/5xx対応。詳細04）
+      エラー時の処理: 想定エラー(9)(10)参照
+
+    [18-8-2] Set_RepliesArray
+      コネクタ/種類: 変数を設定する
+      名前(変数名): varRepliesArray
+      値（正典§6の名称のとおり。union重複除去の注意点は04参照）:
+        union(variables('varRepliesArray'), body('Get_Message_Replies')?['value'])
+      次のアクション: Set_ReplyNextLink
+
+    [18-8-3] Set_ReplyNextLink
+      コネクタ/種類: 変数を設定する
+      名前(変数名): varReplyNextLink
+      値（正典§7.15のページング式。正典§6の名称のとおり）:
+        coalesce(body('Get_Message_Replies')?['@odata.nextLink'], '')
+      次のアクション: （Do until条件を再評価。空ならループ終了）
+  出力          : variables('varRepliesArray')（この会議の返信全件）
+  次のアクション: Reset_AttachmentCandidates
+  実行条件      : Reset_RepliesArrayの成功後
+  エラー時の処理: Scope_Try全体の失敗としてScope_Catchへ波及
+
+  --------------------------------------------------------------------
+  [18-9] Reset_AttachmentCandidates【補足】
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する
+  名前(変数名): varAttachmentCandidates
+  値          : json('[]')
+  出力: 今回の会議用に空配列へリセット
+  次のアクション: Compose_Parent_Attachments
+  実行条件: Do_Until_Replies_Pagingの成功後（全ページ取得完了後）
+
+  --------------------------------------------------------------------
+  [18-10] Compose_Parent_Attachments
+  --------------------------------------------------------------------
+  コネクタ/種類: 作成（Compose）
+  使用する式:
+    coalesce(items('Apply_To_Each_Meeting')?['attachments'], json('[]'))
+  出力: outputs('Compose_Parent_Attachments')（配列。親投稿自身の
+        attachments。返信のsourceReplyIdに相当するタグは付けない
+        ＝親投稿由来であることは後段でReplyId=空として扱うことで表現）
+  次のアクション: Set_AttachmentCandidates_From_Parent
+  エラー時の処理: attachmentsがない投稿でもcoalesceでjson('[]')に
+                  フォールバックするため失敗しない（想定エラー(6)参照）
+
+  --------------------------------------------------------------------
+  [18-11] Set_AttachmentCandidates_From_Parent【補足】
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する
+  名前(変数名): varAttachmentCandidates
+  値:
+    union(variables('varAttachmentCandidates'), outputs('Compose_Parent_Attachments'))
+  出力: 親投稿分の添付候補が集約される
+  次のアクション: Apply_To_Each_Reply
+  実行条件: Compose_Parent_Attachmentsの成功後
+
+  --------------------------------------------------------------------
+  [18-12] Apply_To_Each_Reply
+  --------------------------------------------------------------------
+  コネクタ/種類: Apply to each
+  操作手順:
+   1. 「アクションの追加」→「Apply to each」→追加。
+   2. 名前を「Apply_To_Each_Reply」に変更。
+   3. 「以前の手順から出力を選択」欄: variables('varRepliesArray')
+   4. 「...」→設定→「同時実行を有効にする」は既定の**オフのまま**
+      にする（varAttachmentCandidatesへの共通追記のため。オンにすると
+      複数返信が並列処理され追加漏れが発生する。正典§9）。
+  入力          : variables('varRepliesArray')（配列。0件でも空配列で
+                  0回反復。nullは渡らない）
+  出力          : ループ内でitems('Apply_To_Each_Reply')として返信1件
+                  （Graph chatMessageオブジェクト）を参照
+  次のアクション: Filter_File_Attachments（ループ全件終了後）
+  実行条件      : Set_AttachmentCandidates_From_Parentの成功後
+
+    ------------------------------------------------------------------
+    [18-12-1] Select_Reply_Attachments_With_ReplyId【補足。正典§6に
+      名称なし。返信1件が持つ複数のattachmentsへ一括でsourceReplyIdを
+      付与するため、Selectアクション（00_overview.txt許可リスト内）
+      を使用】
+    ------------------------------------------------------------------
+    コネクタ/種類: 選択（Select）
+    操作手順:
+     1. ループ内「アクションの追加」→検索「選択」または「Select」→追加。
+     2. 名前を「Select_Reply_Attachments_With_ReplyId」に変更。
+     3. 「From」欄: coalesce(items('Apply_To_Each_Reply')?['attachments'], json('[]'))
+     4. 「マップ」を「テキストモードを切り替える」で式入力に切り替え、
+        次の式を入力する（setProperty()は元のオブジェクトに新しい
+        プロパティを追加して返す標準の式関数）:
+        setProperty(item(), 'sourceReplyId', items('Apply_To_Each_Reply')?['id'])
+    入力          : coalesce(items('Apply_To_Each_Reply')?['attachments'], json('[]'))
+    出力          : body('Select_Reply_Attachments_With_ReplyId')（配列。
+                    各要素は元のattachmentオブジェクト＋sourceReplyId）
+    次のアクション: Append_Reply_Attachments
+    エラー時の処理: attachmentsが無い返信でもcoalesceで空配列になり
+                    Selectは0件の配列を返すため失敗しない
+
+    ------------------------------------------------------------------
+    [18-12-2] Append_Reply_Attachments
+    ------------------------------------------------------------------
+    コネクタ/種類: 変数を設定する（Set variable）
+    補足: 正典§6はこのアクションを"Append_Reply_Attachments"という
+          名称で列挙していますが、1件の返信が複数の添付を持つ場合に
+          配列を1要素としてネストさせず個々の添付をフラットに結合する
+          必要があるため、アクション種類は「配列変数に追加」ではなく
+          「変数を設定する」＋union()を採用します（「配列変数に追加」
+          は1回の実行で配列を1個の新要素として追加してしまい、
+          意図した平坦な配列にならないため）。
+    名前(変数名): varAttachmentCandidates
+    値:
+      union(variables('varAttachmentCandidates'), body('Select_Reply_Attachments_With_ReplyId'))
+    出力: この返信の添付が候補配列へ平坦に追加される
+    次のアクション: ループの次の反復、または全件終了でFilter_File_
+                    Attachmentsへ
+    実行条件: Select_Reply_Attachments_With_ReplyIdの成功後
+
+  --------------------------------------------------------------------
+  [18-13] Filter_File_Attachments
+  --------------------------------------------------------------------
+  コネクタ/種類: 配列のフィルター処理（Filter array）
+  操作手順:
+   1. 「アクションの追加」→「配列のフィルター処理」→追加。
+   2. 名前を「Filter_File_Attachments」に変更。
+   3. 「From」欄: variables('varAttachmentCandidates')
+   4. 詳細（advanced）モードに切り替え、次の式を入力する。
+  使用する式（contentTypeが'reference'＝ファイル参照型、かつcontentUrl
+    が空でないもの。カード/画像/会議オブジェクトの除外。要実環境確認:
+    実際のテナントで観測されるcontentType値・除外すべき値は環境
+    により異なるため、テスト実行時にGet_Message_Repliesの生出力を
+    確認し、必要に応じて除外条件を追加すること）:
+    @and(
+      equals(item()?['contentType'], 'reference'),
+      not(empty(item()?['contentUrl']))
+    )
+  入力          : variables('varAttachmentCandidates')
+  出力          : body('Filter_File_Attachments')（配列。保存対象の
+                  ファイル添付のみ）
+  次のアクション: Reset_MeetingAttachments
+  実行条件      : Apply_To_Each_Replyの成功後（全返信処理完了後）
+  エラー時の処理: 想定エラー(6)(7)参照
+
+  --------------------------------------------------------------------
+  [18-14] Reset_MeetingAttachments【補足】
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する
+  名前(変数名): varMeetingAttachments
+  値          : json('[]')
+  次のアクション: Apply_To_Each_Attachment
+  実行条件: Filter_File_Attachmentsの成功後
+
+  --------------------------------------------------------------------
+  [18-15] Apply_To_Each_Attachment
+  --------------------------------------------------------------------
+  コネクタ/種類: Apply to each
+  操作手順:
+   1. 「アクションの追加」→「Apply to each」→追加。
+   2. 名前を「Apply_To_Each_Attachment」に変更。
+   3. 「以前の手順から出力を選択」欄: body('Filter_File_Attachments')
+   4. 「...」→設定→「同時実行を有効にする」は既定の**オフのまま**
+      にする（varMeetingAttachments/varSavedCount/varSkippedCountへの
+      共通更新のため。正典§9）。
+  入力          : body('Filter_File_Attachments')
+  出力          : ループ内でitem()として添付候補1件を参照
+  次のアクション: Compose_SortKey（ループ全件終了後）
+  実行条件      : Reset_MeetingAttachmentsの成功後
+
+    ------------------------------------------------------------------
+    [18-15-1] Run_Child_Flow_Save_Attachment
+    ------------------------------------------------------------------
+    コネクタ/種類: Run a Child Flow（子フローの実行）
+    前提          : PA_Save_Meeting_Attachment（[4]）が同一ソリューション
+                    内に作成済みであること（05番のTXT参照。00_overview.txt
+                    の作成順序どおり[4]は本フローより先に作成する）。
+    操作手順:
+     1. ループ内「アクションの追加」→検索「Run a Child Flow」→
+        一覧から「PA_Save_Meeting_Attachment」を選択して追加。
+     2. 名前を「Run_Child_Flow_Save_Attachment」に変更。
+     3. 各入力欄に、動的コンテンツから次の式を設定する。
+    入力内容（正典§5.4）:
+      RunId            = variables('varRunId')
+      MessageId         = items('Apply_To_Each_Meeting')?['id']
+      ReplyId           = item()?['sourceReplyId']（親投稿由来の添付は
+                          このプロパティが存在せずnullになる。空文字
+                          ではなくnullのまま渡してよい。子フロー側の
+                          Compose_IdempotencyKey（正典§7.12）は
+                          coalesce(triggerBody()?['ReplyId'],'')で
+                          nullを吸収する設計）
+      AttachmentId      = item()?['id']
+      OriginalFileName  = item()?['name']
+      ContentUrl        = item()?['contentUrl']
+      MeetingDate       = outputs('Compose_MeetingDate')
+      DryRun            = triggerBody()?['DryRun']
+      ForceReprocess    = triggerBody()?['ForceReprocess']
+    出力          : body('Run_Child_Flow_Save_Attachment')?['Status']、
+                    ?['SavedName']、?['SavedFileUrl']、?['ErrorMessage']、
+                    ?['IdempotencyKey']（正典§5.4。要実環境確認:
+                    outputs('...')?['body/Status']形式になる場合あり。
+                    Peek code推奨）
+    次のアクション: Append_Meeting_Attachment
+    実行条件      : ループ開始直後
+    再試行        : 設定→再試行ポリシーは既定のままでよい（子フロー
+                    自体が内部で冪等性判定するため、多少の再試行は
+                    安全）。ただし親フロー全体のタイムアウトに影響
+                    する点は想定エラー(15)参照。
+    タイムアウト  : 既定（添付1件あたりの処理は軽量な想定）
+    エラー時の処理: 子フロー[4]は例外を投げず必ずStatus付きの戻り値を
+                    返す設計（08_error_log_and_ledger.txt §2.9(c)(d)
+                    参照）。そのため本アクション自体が失敗することは
+                    通常なく、失敗はStatus='Failed'として後続の
+                    Append_Meeting_Attachment/06セクションで処理する。
+
+    ------------------------------------------------------------------
+    [18-15-2] Append_Meeting_Attachment
+    ------------------------------------------------------------------
+    コネクタ/種類: 配列変数に追加（Append to array variable）
+    操作手順:
+     1. 「アクションの追加」→検索「配列変数に追加」→追加。
+     2. 名前を「Append_Meeting_Attachment」に変更。
+     3. 「名前」欄: varMeetingAttachments
+     4. 「値」欄に次の式を入力する。
+    補足: 06_build_word_html_child_flow.txtは、この配列の各要素を
+          {OriginalName, SavedName, SavedFileUrl, Status}という
+          先頭大文字のフィールド名で参照する前提のため、本アクション
+          でも同じフィールド名で組み立てる。addProperty()は
+          json('{}')から始めてプロパティを1つずつ追加する標準の
+          式関数（4回チェーンして4プロパティのオブジェクトを作る）。
+    使用する式（1件分の添付結果オブジェクト。1回の実行で1オブジェクト
+      を追加＝配列がネストしない正しい使い方）:
+      addProperty(
+        addProperty(
+          addProperty(
+            addProperty(json('{}'), 'OriginalName', coalesce(item()?['name'], 'file')),
+            'SavedName', body('Run_Child_Flow_Save_Attachment')?['SavedName']),
+          'SavedFileUrl', body('Run_Child_Flow_Save_Attachment')?['SavedFileUrl']),
+        'Status', body('Run_Child_Flow_Save_Attachment')?['Status'])
+    出力          : variables('varMeetingAttachments')に1件追加される
+    次のアクション: Condition_Attachment_Saved
+    実行条件      : Run_Child_Flow_Save_Attachmentの完了後（成功/失敗
+                    いずれでも子フローは戻り値を返すため、run afterは
+                    既定の「成功した場合」のみでよい）
+
+    ------------------------------------------------------------------
+    [18-15-3] Condition_Attachment_Saved【補足】
+    ------------------------------------------------------------------
+    コネクタ/種類: 条件（Condition）
+    操作手順:
+     1. 「アクションの追加」→「条件」→追加。
+     2. 名前を「Condition_Attachment_Saved」に変更。
+     3. 値1: body('Run_Child_Flow_Save_Attachment')?['Status']
+     4. 演算子: 「次の値に等しい」
+     5. 値2: 'Saved'
+    はいの場合:
+      [18-15-3-a] Increment_SavedCount
+        コネクタ/種類: 変数の値を増やす（Increment variable）
+        名前(変数名): varSavedCount／増分値: 1
+    いいえの場合: 何もしない（アクションを追加しない）
+    次のアクション: Condition_Attachment_Skipped
+    実行条件: Append_Meeting_Attachmentの成功後
+
+    ------------------------------------------------------------------
+    [18-15-4] Condition_Attachment_Skipped【補足】
+    ------------------------------------------------------------------
+    コネクタ/種類: 条件
+    値1: body('Run_Child_Flow_Save_Attachment')?['Status']
+    演算子: 次の値に等しい／値2: 'Skipped'
+    はいの場合:
+      [18-15-4-a] Increment_SkippedCount
+        コネクタ/種類: 変数の値を増やす
+        名前(変数名): varSkippedCount／増分値: 1
+    いいえの場合: 何もしない（Status='Failed'の場合はどちらの
+                  カウンタも増加させない。06セクションでStatus='Failed'
+                  は「（保存失敗）」表示になる）
+    次のアクション: ループの次の反復、または全件終了でCompose_SortKeyへ
+    実行条件: Condition_Attachment_Savedの完了後（はい/いいえ両分岐後）
+
+  --------------------------------------------------------------------
+  [18-16] Compose_SortKey
+  --------------------------------------------------------------------
+  コネクタ/種類: 作成（Compose）
+  配置          : Apply_To_Each_Attachmentループの外側・直後
+  使用する式（正典§7.6）:
+    concat(formatDateTime(convertFromUtc(items('Apply_To_Each_Meeting')?['createdDateTime'],
+      'Tokyo Standard Time'), 'yyyyMMddHHmmss'), '_', items('Apply_To_Each_Meeting')?['id'])
+  出力: outputs('Compose_SortKey')
+  次のアクション: Create_Staging_Item
+  実行条件: Apply_To_Each_Attachmentの成功後（全添付処理完了後）
+
+  --------------------------------------------------------------------
+  [18-17] Create_Staging_Item
+  --------------------------------------------------------------------
+  コネクタ            : SharePoint
+  PA上のアクション名   : 項目の作成（Create item）
+  配置                : Compose_SortKeyの直後（Apply_To_Each_Meeting
+                        ループの最後のアクション）
+  操作手順:
+   1. 「アクションの追加」→検索「SharePoint」→「項目の作成」を選択。
+   2. 名前を「Create_Staging_Item」に変更。
+   3. 「サイトのアドレス」欄: envSiteUrl（動的コンテンツの環境変数
+      グループから選択）
+   4. 「リスト名」欄: MeetingArchiveStaging（envStagingListNameの値と
+      一致するリストをドロップダウンから直接選択。動的に式で選びたい
+      場合はリスト名欄をカスタム値入力に切り替えてenvStagingListName
+      を挿入する）
+   5. 表示された列の入力欄に、それぞれ次の式を入力する。
+  入力内容（列: 式）:
+    Title              : items('Apply_To_Each_Meeting')?['id']
+                         （既定列。会議の追跡用にメッセージIDを入れる。
+                          他に読み出す用途はない）
+    RunId              : variables('varRunId')
+    SortKey            : outputs('Compose_SortKey')
+    MeetingDate        : outputs('Compose_MeetingDate')
+    PostedDateTimeJst  : outputs('Compose_PostedDateTimeJst')
+    MessageId          : items('Apply_To_Each_Meeting')?['id']
+    Author             : outputs('Compose_Author')
+    Organizer          : outputs('Compose_Organizer')
+    BodyText           : outputs('Convert_Body_Html_To_Text')
+    AttachmentsJson    : string(variables('varMeetingAttachments'))
+    TeamsMessageUrl    : items('Apply_To_Each_Meeting')?['webUrl']
+  使用する式: 上記11項目（いずれも既存のCompose出力／変数／items()の
+    参照のみ）
+  出力          : outputs('Create_Staging_Item')?['body/ID']（作成された
+                  項目のSharePoint ID。本フローでは未使用）
+  次のアクション: （ループの次の会議、または全件終了でGet_Sorted_
+                  Meetingsへ）
+  実行条件      : Compose_SortKeyの成功後
+  再試行        : SharePointコネクタの既定リトライポリシーのまま
+                  （429/503への自動再試行）
+  タイムアウト  : 既定
+  エラー時の処理: リスト不存在・列名相違は想定エラー(11)参照。文字数
+                  上限超過（複数行テキストの上限）でBodyText/
+                  AttachmentsJsonが切り詰められる可能性は想定エラー
+                  (13)参照。
+
+------------------------------------------------------------------------
+[19] Get_Sorted_Meetings
+------------------------------------------------------------------------
+コネクタ            : SharePoint
+PA上のアクション名   : 複数の項目の取得（Get items）
+配置場所            : Apply_To_Each_Meetingループの直後（ループの外側）
+操作手順:
+ 1. 「アクションの追加」→検索「SharePoint」→「複数の項目の取得」を
+    選択して追加する。
+ 2. 名前を「Get_Sorted_Meetings」に変更する。
+ 3. 「サイトのアドレス」欄: envSiteUrl
+ 4. 「リスト名」欄: MeetingArchiveStaging
+ 5. 「フィルタークエリ」欄に次の式を入力する（OData形式の文字列を
+    concatで組み立てる。シングルクォートはPA式内で''とエスケープ
+    する必要があるため、結果として''RunId eq ''<値>''のように見える
+    が、実際に評価されると RunId eq '実際のguid' という正しいOData
+    文字列になる）。
+ 6. 「並べ替え順」欄: SortKey asc（昇順）
+ 7. 「しきい値を超える場合の上限設定」を確認するため「...」→設定→
+    「ページ分割」をオン、「しきい値」に十分大きい値（例: 5000）を
+    設定する（要実環境確認: 2年分の会議件数が既定の上限(通常100〜
+    5000件)を超える可能性がある場合に必要。件数が既定内に収まると
+    見込まれる場合は既定のままでもよい）。
+使用する式:
+  フィルタークエリ = concat('RunId eq ''', variables('varRunId'), '''')
+出力          : body('Get_Sorted_Meetings')?['value']（配列。今回の
+                RunIdに属する会議がSortKey昇順で並んだ状態。06セクション
+                のApply_To_Each_Sorted_Meetingがこの配列を使用する）
+次のアクション: 06セクション（Set_DocumentHtml_Header）
+実行条件      : Apply_To_Each_Meetingの成功後
+再試行        : SharePointコネクタの既定リトライポリシーのまま
+タイムアウト  : 既定
+エラー時の処理: RunIdに一致する行が0件でもエラーにはならず空配列が
+                返る（想定エラー(16)参照）。リスト側のフィルタークエリ
+                構文エラーは想定エラー(11)参照。
+
+------------------------------------------------------------------------
+[20]〜[32] Word用HTML生成セクション（詳細は 06_build_word_html_child_
+　　　　　 flow.txt を参照。ここではアクション名の列挙と配置・実行
+　　　　　 条件のみ記載し、逐次操作手順は記載しません）
+------------------------------------------------------------------------
+配置場所      : Get_Sorted_Meetingsの直後（Scope_Try枠内）
+実行条件      : Get_Sorted_Meetingsの成功後
+含まれるアクション（06_build_word_html_child_flow.txtの記載順）:
+  Set_DocumentHtml_Header
+  Apply_To_Each_Sorted_Meeting（対象= body('Get_Sorted_Meetings')?['value']。
+    同時実行を有効にする＝オフのまま。ループ内は以下の順）
+    Compose_Page_Break
+    Condition_Insert_Page_Break（06補助アクション）
+      はいの場合: Append_Page_Break_Html（06補助アクション）
+    Escape_Ampersand → Escape_LessThan → Escape_GreaterThan →
+      Escape_DoubleQuote → Escape_SingleQuote → Compose_Body_With_Breaks
+    Append_Meeting_Html
+    Condition_Has_Attachments（06補助アクション）
+      はいの場合: Apply_To_Each_Saved_Attachment（対象=
+        json(coalesce(item()?['AttachmentsJson'], '[]'))。同時実行を
+        有効にする＝オフのまま）→ Append_Attachment_Html
+      いいえの場合: Append_No_Attachments_Text（06補助アクション）
+    Increment_MeetingIndex
+  Append_DocumentHtml_Footer
+次のアクション: 07セクション（Compose_ArchiveFileName）
+補足: 06セクションが参照するAttachmentsJson列の中身は、本ファイル
+      [18-15-2] Append_Meeting_Attachmentで組み立てたvarMeetingAttachments
+      をstring()化したもの（[18-17] Create_Staging_Item参照）であり、
+      フィールド名{OriginalName, SavedName, SavedFileUrl, Status}は
+      06側の参照式と一致させてある。
+
+------------------------------------------------------------------------
+[33]〜[37] Word互換.doc作成セクション（詳細は 07_create_word_archive_
+　　　　　 file.txt を参照。別ファイルで作成予定。ここではアクション名
+　　　　　 の列挙と配置・実行条件のみ記載します）
+------------------------------------------------------------------------
+配置場所      : 06セクション（Append_DocumentHtml_Footer）の直後
+実行条件      : Append_DocumentHtml_Footerの成功後
+含まれるアクション（正典§6の順）:
+  Compose_ArchiveFileName（正典§7.11。
+    concat('課内会議総括_', formatDateTime(convertFromUtc(utcNow(),
+    'Tokyo Standard Time'),'yyyyMMdd_HHmmss'), '.doc')）
+  Condition_DryRun（triggerBody()?['DryRun']がいいえの場合のみWord作成
+    へ進む。はい＝DryRunの場合はCreate_Word_Archive_File以降をスキップし
+    varArchiveUrlは''のまま）
+    いいえの場合（実際に保存する場合）:
+      Create_Word_Archive_File（SharePoint「ファイルの作成」。
+        variables('varDocumentHtml')をファイルコンテンツとして
+        envSiteUrl／envLibrary／envDestinationPath配下へCompose_
+        ArchiveFileNameのファイル名で保存。正典§7.14注記のとおり
+        本アクションの出力にwebUrlは含まれない）
+      Get_Saved_File_Properties（SharePoint「ファイルのプロパティの
+        取得」。作成直後のファイルのLink to itemを取得するために必須）
+      Set_ArchiveUrl（変数を設定する。variables('varArchiveUrl') =
+        outputs('Get_Saved_File_Properties')?['body/{Link}']。正典§7.14）
+次のアクション: Post_Result_Message
+補足: Condition_DryRunの「はいの場合」（DryRun=はい）は何もしない
+      （varArchiveUrlは[13]で初期化した''のまま）。
+
+------------------------------------------------------------------------
+[38] Post_Result_Message
+------------------------------------------------------------------------
+コネクタ            : Microsoft Teams
+PA上のアクション名   : チャットまたはチャネルでメッセージを投稿する
+配置場所            : 07セクション（Condition_DryRun）の直後
+操作手順:
+ 1. 「アクションの追加」→検索「メッセージを投稿する」→Microsoft
+    Teamsコネクタの「チャットまたはチャネルでメッセージを投稿する」
+    を選択して追加する。
+ 2. 名前を「Post_Result_Message」に変更する。
+ 3. 「投稿先」で「チャネル」を選択する。
+ 4. 「チーム」欄: envTeamIdに対応するチーム（動的コンテンツの環境
+    変数、またはチーム選択ドロップドウンで対象チームを直接選ぶ）
+ 5. 「チャネル」欄: 通知先チャネル（対象の03_課内会議チャネルに
+    投稿すると通知が紛れる場合は別の管理用チャネルを推奨。
+    要実環境確認）
+ 6. 「メッセージ」欄に次のような文言を入力し、{...}部分は動的
+    コンテンツから各変数・出力を挿入する。
+入力内容（メッセージ本文の例）:
+  課内会議アーカイブ実行結果（RunId: {variables('varRunId')}）
+  取得会議数: {length(body('Get_Sorted_Meetings')?['value'])} 件
+  （処理済み会議数: {variables('varMeetingIndex')} 件）
+  保存成功: {variables('varSavedCount')} 件 / スキップ: {variables('varSkippedCount')} 件
+  総括URL: {variables('varArchiveUrl')}
+使用する式:
+  length(body('Get_Sorted_Meetings')?['value'])
+  variables('varMeetingIndex')、variables('varSavedCount')、
+  variables('varSkippedCount')、variables('varArchiveUrl')、
+  variables('varRunId')
+  補足: 取得会議数はGet_Sorted_Meetingsのvalue件数（オーケストレータの
+  一次情報）を主表示とし、06セクションのvarMeetingIndex（HTML生成が
+  完了した会議数）を括弧内に併記する。両者はApply_To_Each_Sorted_
+  Meetingが全件正常処理された場合は一致するはずであり、一致しない
+  場合はHTML生成側での欠落を疑う診断材料になる（要実環境確認）。
+出力          : 投稿されたメッセージのID等（本フローでは未使用）
+次のアクション: Set_RunStatus_Success
+実行条件      : 07セクション（Condition_DryRun）の成功後
+再試行        : Teamsコネクタの既定リトライポリシーのまま
+タイムアウト  : 既定
+エラー時の処理: 本アクションの失敗はScope_Try全体の失敗としてScope_
+                Catchへ波及する（通知の失敗によりログ記録もされなく
+                なることを避けたい場合は、実行条件の構成を見直す
+                運用も検討可。要実環境確認）
+
+------------------------------------------------------------------------
+[39] Set_RunStatus_Success【補足】
+------------------------------------------------------------------------
+コネクタ/種類: 変数を設定する
+配置          : Post_Result_Messageの直後（Scope_Try枠内・最後の
+                アクション）
+名前(変数名)  : varRunStatus
+値            : 'Success'
+出力          : variables('varRunStatus')が'Success'に更新される
+次のアクション: なし（Scope_Tryの枠内はここで終わり。次はキャンバス上
+                でScope_Catchへ進む）
+実行条件      : Post_Result_Messageの成功後
+補足          : Scope_Try内の全アクションがここまで到達して初めて
+                'Success'になる。途中のいずれかで失敗すればここは
+                実行されず、varRunStatusは[14]で設定した既定値
+                'Failed'のまま維持される。
+
+------------------------------------------------------------------------
+[40] Scope_Catch
+------------------------------------------------------------------------
+コネクタ/種類: スコープ（Scope）
+配置          : Scope_Tryの直後（キャンバス上でScope_Tryと兄弟の
+                ブロックとして追加する。Scope_Tryの枠の中ではない）
+操作手順:
+ 1. Scope_Tryのカードの下（外側）で「+ 新しいステップ」をクリックする。
+ 2. 検索「スコープ」→追加。名前を「Scope_Catch」に変更する。
+ 3. Scope_Catchカードの「...」→「実行条件の構成（Configure run
+    after）」を開く。
+ 4. 「Scope_Try」の行で、既定でチェックが入っている「成功した場合
+    （is successful）」のチェックを外し、代わりに「失敗した場合
+    （has failed）」と「タイムアウトした場合（has timed out）」に
+    チェックを入れる（「スキップされた場合」は外したまま）。
+ 5. 保存する。
+入力          : なし（コンテナ）
+使用する式    : なし
+出力          : result('Scope_Catch')
+次のアクション: Scope_Finally
+実行条件      : Scope_Tryが「失敗」または「タイムアウト」の場合のみ
+再試行/タイムアウト: 適用外
+エラー時の処理: Scope_Catch自体が失敗した場合もScope_Finallyは
+                （下記[43]の設定により）必ず実行される
+
+  以下、[41]〜[42]はScope_Catchの枠内に配置します。
+
+  --------------------------------------------------------------------
+  [41] Set_ErrorMessage【補足】
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する
+  操作手順:
+   1. Scope_Catchの枠内で「アクションの追加」→「変数を設定する」→追加。
+   2. 名前を「Set_ErrorMessage」に変更。
+   3. 「名前」欄: varErrorMessage
+   4. 「値」欄に次の式を入力する。
+  使用する式（08_error_log_and_ledger.txtのErrorMessage引数の例示式
+    と同じ考え方。result()の生配列を丸ごと連結するとファイル本文等の
+    機微情報が混入するリスクがあるため、先頭要素のerror.messageのみを
+    抽出する）:
+    coalesce(first(result('Scope_Try'))?['error']?['message'], '実行中にエラーが発生しました')
+  出力          : variables('varErrorMessage')
+  次のアクション: Set_RunStatus_Failed
+  実行条件      : Scope_Catchが発火した直後
+  補足（要実環境確認）: first(result('Scope_Try'))は配列の先頭要素を
+    返すため、Scope_Try内の最初のアクション（Initialize_RunId等）が
+    常に成功している場合、その要素にはerrorプロパティ自体が存在せず、
+    coalesceの既定値'実行中にエラーが発生しました'側にフォールバック
+    してしまう可能性がある（実際に失敗した個別アクションの詳細
+    メッセージにはならない場合がある）。より正確に失敗要因を特定
+    したい場合は、Filter arrayでstatus='Failed'の要素に絞り込んでから
+    参照する方式への拡張を検討する。本書では08との命名・設計方針の
+    整合を優先し、簡易的なfirst()方式を採用する。
+
+  --------------------------------------------------------------------
+  [42] Set_RunStatus_Failed【補足。防御的。通常は[14]の既定値のまま
+        でも結果は同じだが、Scope_Catchで明示的に上書きすることで
+        意図を読み取りやすくする】
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する
+  名前(変数名): varRunStatus
+  値          : 'Failed'
+  次のアクション: Run_Child_Flow_Write_Run_Log_Error
+  実行条件      : Set_ErrorMessageの成功後
+
+  --------------------------------------------------------------------
+  [43] Run_Child_Flow_Write_Run_Log_Error
+  --------------------------------------------------------------------
+  コネクタ/種類: Run a Child Flow（子フローの実行）
+  操作手順:
+   1. 「アクションの追加」→検索「Run a Child Flow」→一覧から
+      「PA_Write_Run_Log」を選択して追加する。
+   2. 名前を「Run_Child_Flow_Write_Run_Log_Error」に変更する。
+   3. 各入力欄に、動的コンテンツから次の式を設定する。
+  入力内容（正典§5.5。08_error_log_and_ledger.txt §2.2と一致させる）:
+    RunId          = variables('varRunId')
+    FlowName       = 'PA_Meeting_Archive_Orchestrator'
+    ActionName     = coalesce(first(result('Scope_Try'))?['name'], 'Scope_Try')
+    MessageId      = ''（Scope_Catchはループ外のためitems('Apply_To_Each_
+                     Meeting')は参照できない。08の例示は将来ループ内から
+                     直接呼ぶ場合の参考であり、本設計では空文字とする）
+    ReplyId        = ''
+    AttachmentId   = ''
+    Level          = 'Error'
+    ErrorMessage   = variables('varErrorMessage')
+    MeetingCount   = variables('varMeetingIndex')
+    SavedCount     = variables('varSavedCount')
+    SkippedCount   = variables('varSkippedCount')
+    ArchiveUrl     = variables('varArchiveUrl')
+  出力          : body('Run_Child_Flow_Write_Run_Log_Error')?['LogItemId']
+                  （本フローでは未使用。ログのため）
+  次のアクション: なし（Scope_Catchの枠内はここで終わり）
+  実行条件      : Set_RunStatus_Failedの成功後
+  再試行        : 既定のまま
+  タイムアウト  : 既定
+  エラー時の処理: 本アクション自体が失敗した場合もScope_Finallyは
+                  必ず実行される（実行結果に「スキップ」「失敗」を
+                  含めているため）。ログが記録できなかったこと自体は
+                  Power Automateの実行履歴から事後確認する。
+
+------------------------------------------------------------------------
+[44] Scope_Finally
+------------------------------------------------------------------------
+コネクタ/種類: スコープ（Scope）
+配置          : Scope_Catchの直後（兄弟ブロック）
+操作手順:
+ 1. Scope_Catchのカードの下（外側）で「+ 新しいステップ」をクリックする。
+ 2. 検索「スコープ」→追加。名前を「Scope_Finally」に変更する。
+ 3. 「...」→「実行条件の構成」を開き、「Scope_Catch」の行で
+    「成功した場合」「失敗した場合」「スキップされた場合」
+    「タイムアウトした場合」の**4つ全て**にチェックを入れる。
+ 4. 保存する。
+入力          : なし
+使用する式    : なし
+出力          : なし
+次のアクション: なし（フロー末尾）
+実行条件      : Scope_Catchの成功／失敗／スキップ／タイムアウトの
+                いずれでも実行（Scope_Tryが成功しScope_Catchがスキップ
+                された通常ケースを含め、常に実行される）
+再試行/タイムアウト: 適用外
+エラー時の処理: 本Scope自体が失敗した場合、フロー全体が失敗として
+                終了する（Respond_To_Callerが実行されない可能性が
+                ある。想定エラー(17)相当として運用時に監視する）
+
+  以下、[45]〜[46]はScope_Finallyの枠内に配置します。
+
+  --------------------------------------------------------------------
+  [45] Run_Child_Flow_Write_Run_Log_Info
+  --------------------------------------------------------------------
+  コネクタ/種類: Run a Child Flow
+  操作手順: [43]と同様に「PA_Write_Run_Log」を追加し、名前を
+    「Run_Child_Flow_Write_Run_Log_Info」に変更する。
+  入力内容:
+    RunId          = variables('varRunId')
+    FlowName       = 'PA_Meeting_Archive_Orchestrator'
+    ActionName     = 'Scope_Finally'
+    MessageId      = ''
+    ReplyId        = ''
+    AttachmentId   = ''
+    Level          = 'Info'
+    ErrorMessage   = variables('varErrorMessage')（成功時は''のまま。
+                     Scope_Catchを経由した場合はエラー概要が入っている
+                     ため、Info行にも参考情報として残す）
+    MeetingCount   = length(coalesce(body('Get_Sorted_Meetings')?['value'], json('[]')))
+                     （タスク指示どおりGet_Sorted_Meetingsの件数を正と
+                     する。Scope_Try失敗によりGet_Sorted_Meetingsが
+                     未実行の場合はcoalesceでjson('[]')にフォール
+                     バックしlength=0になる。要実環境確認：未実行
+                     アクションの出力参照時にエラーにならずnullを
+                     返すか、テナントで確認すること）
+    SavedCount     = variables('varSavedCount')
+    SkippedCount   = variables('varSkippedCount')
+    ArchiveUrl     = variables('varArchiveUrl')
+  補足: 08_error_log_and_ledger.txt §2.2ではMeetingCountの例示式として
+    variables('varMeetingIndex')も挙げられている。Apply_To_Each_Sorted_
+    Meeting（06）が全件正常処理されていればlength(Get_Sorted_Meetings
+    value)とvarMeetingIndexは一致するはずであり、本書ではタスク指示に
+    従いGet_Sorted_Meetings基準を採用しつつ、両者の不一致を運用時の
+    点検項目とする。
+  出力          : body('Run_Child_Flow_Write_Run_Log_Info')?['LogItemId']
+                  （未使用）
+  次のアクション: Respond_To_Caller
+  実行条件      : Scope_Finally開始直後
+  再試行/タイムアウト: 既定
+  エラー時の処理: 失敗してもRespond_To_Callerは（run afterの設定次第
+                  だが既定では）実行されない点に注意。ログ書込み失敗時
+                  も呼出元へは応答したい場合はRespond_To_Callerの実行
+                  条件に失敗/スキップ/タイムアウトも追加する運用を
+                  検討する（要実環境確認）。
+
+  --------------------------------------------------------------------
+  [46] Respond_To_Caller
+  --------------------------------------------------------------------
+  コネクタ            : Power Apps
+  PA上のアクション名   : Respond to a PowerApp or flow
+  操作手順:
+   1. 「アクションの追加」→検索「Respond to a PowerApp or flow」→
+      Power Appsコネクタのアクションを選択して追加する。
+   2. 名前を「Respond_To_Caller」に変更する。
+   3. 「+ 出力の追加」を6回クリックし、正典§5.3のとおり次の出力を
+      追加する（種類を選んでから名前を変更する）:
+        Status        : テキスト
+        MeetingCount  : 数値
+        SavedCount    : 数値
+        SkippedCount  : 数値
+        ArchiveUrl    : テキスト
+        ErrorMessage  : テキスト
+   4. 各出力の値欄に、動的コンテンツから次の式を設定する。
+  入力内容（＝出力パラメータの値）:
+    Status        = variables('varRunStatus')
+    MeetingCount  = length(coalesce(body('Get_Sorted_Meetings')?['value'], json('[]')))
+    SavedCount    = variables('varSavedCount')
+    SkippedCount  = variables('varSkippedCount')
+    ArchiveUrl    = variables('varArchiveUrl')
+    ErrorMessage  = variables('varErrorMessage')
+  出力          : 呼出元（1/2）が body('Run_Child_Flow_Orchestrator')
+                  ?['Status'] 等として参照する値（■4参照）
+  次のアクション: なし（フロー終了）
+  実行条件      : Run_Child_Flow_Write_Run_Log_Infoの成功後
+  再試行        : 該当なし（Respond系は通常再試行不要）
+  タイムアウト  : 既定
+  エラー時の処理: 本アクションが失敗するとフロー自体は完走していても
+                  呼出元へ戻り値が返らず、呼出元側は「失敗」として
+                  検知する（想定エラー(17)参照）
+
+■ 9. 条件・ループ等 一覧まとめ
+------------------------------------------------------------------------
+条件（Condition）: Condition_Attachment_Saved、Condition_Attachment_
+  Skipped（本ファイル、共に【補足】）。06セクションのCondition_Insert_
+  Page_Break、Condition_Has_Attachments、07セクションのCondition_
+  DryRunは別ファイル参照。
+Apply to each（全て「同時実行を有効にする」＝既定のオフのまま。並列
+  オフ必須）:
+  | ループ名 | 対象配列の式 | 同時実行 |
+  |---|---|---|
+  | Apply_To_Each_Meeting | body('Filter_Messages_By_Period') | オフ |
+  | Apply_To_Each_Reply | variables('varRepliesArray') | オフ |
+  | Apply_To_Each_Attachment | body('Filter_File_Attachments') | オフ |
+  | （06）Apply_To_Each_Sorted_Meeting | body('Get_Sorted_Meetings')?['value'] | オフ（06参照） |
+  | （06）Apply_To_Each_Saved_Attachment | json(coalesce(item()?['AttachmentsJson'],'[]')) | オフ（06参照） |
+Do until（04で詳細化。共に既定で逐次実行＝並列設定なし）:
+  | ループ名 | 終了条件 | 配置 |
+  |---|---|---|
+  | Do_Until_Messages_Paging | empty(variables('varNextLink')) | Scope_Collect内（04） |
+  | Do_Until_Replies_Paging | empty(variables('varReplyNextLink')) | Apply_To_Each_Meeting内（04） |
+Select: Select_Reply_Attachments_With_ReplyId（[18-12-1]。1件のみ）
+Filter array: Filter_Messages_By_Period（[17]）、Filter_File_Attachments
+  （[18-13]）
+Compose: Compose_Author, Compose_Organizer, Compose_MeetingDate,
+  Compose_PostedDateTimeJst, Compose_Parent_Attachments, Compose_SortKey
+  （本ファイル）。06/07セクションのCompose群は別ファイル参照。
+
+■ 10. ページング
+------------------------------------------------------------------------
+本フローには2種類のページングがあります。いずれも@odata.nextLinkを
+追跡するDo untilで実装し、詳細（429/5xx対応・上限設定・簡易代替・
+union重複除去の注意点）は04_collect_channel_messages.txtで扱います。
+  (a) 親投稿ページング: Scope_Collect内のDo_Until_Messages_Paging
+      （1回のフロー実行につき1回だけ実行）
+  (b) 返信ページング: Apply_To_Each_Meeting内のDo_Until_Replies_Paging
+      （会議の件数だけ繰り返し実行される。1会議＝1回のDo until）
+本ファイル側では、上記2つのDo untilを「どこに配置するか」「前後の
+Reset/Set/Compose群とどうつながるか」までを■8で確定させています。
+04はその内部の仕組み（なぜnextLinkが必要か、なぜvarRepliesArrayを
+リセットして使い回すか、429/5xxへの対応、上限設定の具体値の検討）を
+深掘りします。
+
+■ 11. 並列実行に関する注意（■6・■9の要約）
+------------------------------------------------------------------------
+Apply_To_Each_Meeting／Apply_To_Each_Reply／Apply_To_Each_Attachmentの
+3つは、いずれも共通のトップレベル変数（varRepliesArray、varReplyNextLink、
+varAttachmentCandidates、varMeetingAttachments、varSavedCount、
+varSkippedCount）へ「読み取り→更新→書き戻し」を行うため、3つとも
+「同時実行を有効にする（Concurrency Control）」を既定のオフのまま
+にすることが必須です（正典§9）。誤ってオンにすると、複数の会議・
+返信・添付が同時に同じ変数を読み書きし、後勝ちの書き込みにより一部の
+データが欠落します（想定エラー(14)参照）。
+Do_Until_Messages_Paging／Do_Until_Replies_Pagingは構造上常に逐次
+実行（1ページ処理してから次のページへ進む）であり、並列設定自体が
+存在しません。
+
+■ 12. エラー処理
+------------------------------------------------------------------------
+本フロー全体はScope_Try／Scope_Catch／Scope_Finallyの3段構成です
+（■7・[1][40][44]参照）。
+  - Scope_Try内で発生したエラーはScope_Try全体を失敗させ、Scope_Catch
+    （実行条件: 失敗した場合／タイムアウトした場合）が発火する。
+  - Scope_Catchはvar ErrorMessage/varRunStatusを更新し、PA_Write_Run_Log
+    へLevel='Error'で記録する。
+  - Scope_Finallyは成功／失敗／スキップ／タイムアウトのいずれでも必ず
+    実行され、PA_Write_Run_Logへ集計サマリを記録したのち、Respond_To_
+    Callerで呼出元へ結果を返す。
+  - 添付1件の保存失敗は、子フロー[4]がStatus='Failed'を戻り値として
+    返すことで吸収し、会議処理・フロー全体を停止させない（正典§9
+    「添付1件失敗で全停止しない」。[18-15-1]〜[18-15-4]参照）。一方、
+    Teams取得・SharePointリスト書込み・Word作成等、添付保存以外の
+    アクションが失敗した場合はScope_Try全体の失敗として扱われる
+    （1会議・1ページの失敗で全体を止めない設計にはなっていない点に
+    注意。将来的な改善余地として想定エラー(15)に記載）。
+
+■ 13. ログ
+------------------------------------------------------------------------
+本フローはPA_Write_Run_Log（[5]。08_error_log_and_ledger.txt）を
+Scope_CatchとScope_Finallyの2箇所から呼び出します（[43][45]）。
+  - Scope_Catch: Level='Error'。ErrorMessageはfirst(result('Scope_Try'))
+    の先頭要素のerror.messageのみを渡し、result()の生配列全体は渡さ
+    ない（正典§9「ログにトークン/本文/認証情報を記録しない」に配慮）。
+  - Scope_Finally: Level='Info'。MeetingCount/SavedCount/SkippedCount/
+    ArchiveUrlの集計値のみを渡し、投稿本文・添付本体・認証情報は渡さ
+    ない。
+添付1件ごとの成功/失敗はMeetingArchiveLedger（子フロー[4]内、詳細は
+05番のTXT）に記録され、本フローからは直接書き込まない。
+
+■ 14. 想定されるエラーと修正方法（正典§12書式。必須16項目＋本フロー
+　　　　固有の追加項目）
+------------------------------------------------------------------------
+(1)
+想定エラー: coalesceの候補値の型不一致（Initialize_RunId等）
+原因: triggerBody()?['RunId']がテキスト型でない、または既定値guid()と
+  型が食い違う
+確認するアクション: Initialize_RunId
+確認する入力: トリガーのRunId入力欄が「テキスト」型になっているか
+修正方法: 入力欄の型を「テキスト」に統一する
+修正後の式: coalesce(triggerBody()?['RunId'], guid())（両方文字列で統一）
+
+(2)
+想定エラー: trim対象への非文字列混入・期間比較の型不一致
+原因: StartDateUtc/EndDateUtcにISO8601以外の文字列、またはcreatedDateTime
+  と比較形式が揃っていない
+確認するアクション: Filter_Messages_By_Period
+確認する入力: triggerBody()?['StartDateUtc']、triggerBody()?['EndDateUtc']
+修正方法: 呼出元（01/02）でISO8601形式に統一されていることを確認する
+修正後の式: 変更不要（呼出元側のデータ品質の問題）
+
+(3)
+想定エラー: Apply to eachへnullが渡りループがエラーになる
+原因: Filter_Messages_By_Period／Filter_File_Attachments／variables(...)
+  の参照先が配列でなくnullになっている
+確認するアクション: Apply_To_Each_Meeting、Apply_To_Each_Reply、
+  Apply_To_Each_Attachment
+確認する入力: 各ループの「以前の手順から出力を選択」欄
+修正方法: Filter array/Composeの出力は必ずjson('[]')既定のcoalesceで
+  ガードされた配列変数を参照するよう統一する（本ファイルはすべて
+  この方針で実装済み）
+修正後の式: 変更不要（既にガード済み。新規にApply to eachを追加する
+  場合は同じ方針を踏襲する）
+
+(4)
+想定エラー: AttachmentsJsonのjson()パース失敗（Parse JSON不一致）
+原因: string(variables('varMeetingAttachments'))で生成した文字列が
+  想定外の形式になっている（addProperty()の適用順序ミス等）
+確認するアクション: Append_Meeting_Attachment、Create_Staging_Item
+確認する入力: item()?['AttachmentsJson']（06セクション側で確認）
+修正方法: [18-15-2]のaddProperty()チェーンの4プロパティ（OriginalName/
+  SavedName/SavedFileUrl/Status）の順序・キー名を06側の参照式と
+  再度突き合わせる
+修正後の式: 変更なし（キー名の綴りを再確認する）
+
+(5)
+想定エラー: 投稿者情報が取得できず空欄になる
+原因: 退職者・外部ユーザー等でfrom.user.displayNameがnull
+確認するアクション: Compose_Author
+確認する入力: items('Apply_To_Each_Meeting')?['from']?['user']?['displayName']
+修正方法: 既にtrim(coalesce(...,''))＋if(empty(...),'不明',...)で対応
+  済み。'不明'が多発する場合はfrom.applicationやfrom.deviceも確認する
+  拡張を検討する（要実環境確認）
+修正後の式: 変更不要（現行式で「不明」表示に正しくフォールバックする）
+
+(6)
+想定エラー: attachmentsプロパティが存在しない投稿でエラーになる
+原因: 添付のない親投稿・返信ではattachmentsキー自体が存在しないか空配列
+確認するアクション: Compose_Parent_Attachments、Select_Reply_
+  Attachments_With_ReplyId
+確認する入力: items(...)?['attachments']
+修正方法: 既にcoalesce(..., json('[]'))でガード済み
+修正後の式: 変更不要
+
+(7)
+想定エラー: 添付のOriginalFileNameがnullで子フロー[4]の命名処理が
+  エラーになる
+原因: Graphのattachmentオブジェクトでnameプロパティが欠落している
+確認するアクション: Run_Child_Flow_Save_Attachment（OriginalFileName欄）
+確認する入力: item()?['name']
+修正方法: [18-15-2]同様coalesce(item()?['name'], 'file')でガードする。
+  子フロー側（05番のTXT）でも正典§7.13のとおりOriginalFileNameがnull時
+  は'file'を使用する設計になっている
+修正後の式: OriginalFileName = coalesce(item()?['name'], 'file')
+  （Run_Child_Flow_Save_Attachmentの入力欄もこの形に統一する）
+
+(8)
+想定エラー: contentUrlがnullの添付がFilter_File_Attachmentsを通過
+  してしまう、または保存対象から漏れる
+原因: 一部のカード型添付・会議添付でcontentUrlが空のケースがある
+確認するアクション: Filter_File_Attachments
+確認する入力: item()?['contentUrl']
+修正方法: 既にnot(empty(item()?['contentUrl']))で除外済み。除外され
+  すぎる/されなさすぎる場合はcontentTypeの実際の値をGet_Message_
+  Repliesの生出力（テスト実行の入力/出力ペイン）で確認し、条件式を
+  調整する（要実環境確認）
+修正後の式: 現行のまま。必要に応じ
+  @and(equals(item()?['contentType'],'reference'), not(empty(item()?['contentUrl'])),
+  not(equals(item()?['contentType'],'儀式的に除外したい値')))のように
+  追加のnot(equals(...))条件を足す
+
+(9)
+想定エラー: SharePointリスト不存在・列名相違でCreate_Staging_Item／
+  Get_Sorted_Meetingsが失敗する（SharePointファイル無に相当）
+原因: MeetingArchiveStagingの作成時に正典§3.2と異なる列名で作成した
+確認するアクション: Create_Staging_Item、Get_Sorted_Meetings
+確認する入力: サイトのアドレス、リスト名、各列マッピング
+修正方法: 08_error_log_and_ledger.txt 第1部の列名表と実際のリストを
+  突き合わせて修正する
+修正後の式: 変更不要（UI設定・リスト定義の修正）
+
+(10)
+想定エラー: 同名ファイルが既に保存先フォルダに存在する（Word総括
+  ファイルの同名衝突）
+原因: 短時間に複数回本番実行し、同一秒でCompose_ArchiveFileNameの
+  タイムスタンプが重複した、または手動で同名ファイルを事前配置した
+確認するアクション: 07セクションのCreate_Word_Archive_File
+確認する入力: Compose_ArchiveFileNameの出力（yyyyMMdd_HHmmss単位）
+修正方法: タイムスタンプの粒度を秒単位から更に一意にしたい場合は
+  ファイル名にRunId等を追加することを検討する（要実環境確認。詳細07）
+修正後の式: 例）concat('課内会議総括_', formatDateTime(...,'yyyyMMdd_HHmmss'),
+  '_', substring(variables('varRunId'),0,8), '.doc')
+
+(11)
+想定エラー: 保存先フォルダ（envDestinationPath）が存在せずCreate_Word_
+  Archive_Fileが失敗する
+原因: SharePoint側で「123_伝送システム/00_共用フォルダ/60_庶務担当/
+  99_過去の課内会議」フォルダーが未作成
+確認するアクション: 07セクションのCreate_Word_Archive_File
+確認する入力: envDestinationPath
+修正方法: SharePoint側で事前にフォルダー階層を作成しておく（詳細07）
+修正後の式: 変更不要（事前準備の問題）
+
+(12)
+想定エラー: ファイルリンク取得不可（Get_Saved_File_Propertiesで
+  Link to itemが取得できない）
+原因: 正典§7.14注記のとおりCreate_Word_Archive_File自体の出力には
+  webUrlが含まれないため、後続のGet_Saved_File_Propertiesを省略すると
+  varArchiveUrlが決定できない
+確認するアクション: 07セクションのGet_Saved_File_Properties、Set_
+  ArchiveUrl
+確認する入力: outputs('Get_Saved_File_Properties')?['body/{Link}']
+修正方法: 07セクションでCreate_Word_Archive_Fileの直後に必ずGet_Saved_
+  File_Propertiesを配置する（詳細07）
+修正後の式: 代替式（正典§7.14代替）:
+  concat(<envSiteUrl>, replace(outputs('Get_Saved_File_Properties')
+  ?['body/{FullPath}'], ' ', '%20'))
+
+(13)
+想定エラー: varDocumentHtmlのHTML文字列が肥大化しCreate_Word_Archive_
+  Fileでサイズ超過エラーになる
+原因: 2年分・数十〜百件超の会議・添付を1つの文字列変数に連結するため
+確認するアクション: 06セクションのAppend_DocumentHtml_Footer
+確認する入力: variables('varDocumentHtml')の実サイズ
+修正方法: 00_overview.txtの推奨どおりLookbackDays=7で段階テストして
+  から2年本番へ進む。超過が確認された場合はHTMLの分割保存を検討する
+  （06_build_word_html_child_flow.txt §17参照）
+修正後の式: 変更なし（運用（LookbackDays）で調整）
+
+(14)
+想定エラー: Apply to eachの「同時実行を有効にする」を誤ってオンにし、
+  varRepliesArray/varAttachmentCandidates/varMeetingAttachments/
+  varSavedCount/varSkippedCountの一部が欠落する
+原因: [18][18-12][18-15]いずれかの設定を誤って変更した
+確認するアクション: 各Apply to eachの設定（...→設定）
+確認する入力: 「同時実行を有効にする」のオン/オフ
+修正方法: 3つとも既定のオフに戻す
+修正後の式: 変更不要（設定項目の修正のみ）
+
+(15)
+想定エラー: 過去2年分の一括処理でフロー全体または個別アクションが
+  タイムアウトする
+原因: メッセージ・返信・添付件数が多く、既定のアクション/フロー
+  タイムアウト内に収まらない。またはGraphの429スロットリングが頻発する
+確認するアクション: フロー実行履歴全体の所要時間、Get_Channel_
+  Messages／Get_Message_Repliesの429発生回数（詳細04）
+確認する入力: 実行時間、Do_Until_Messages_Paging/Do_Until_Replies_Paging
+  のカウント上限到達有無
+修正方法: 01_manual_archive_trigger.txtの想定エラー(6)と同様、
+  Run_Child_Flow_Orchestrator（呼出元側）のタイムアウト設定を延長する。
+  Do untilのカウント/タイムアウト上限も04の指示に従い拡大する。
+  それでも収まらない場合はLookbackDaysを分割して複数回実行する
+修正後の式: 変更なし（設定・運用で対応）
+
+(16)
+想定エラー: Word互換.doc（拡張子.docだが実体はHTML）を開く際に
+  「ファイル形式が異なります」等の警告が表示される
+原因: WordはHTMLをネイティブの.docx（Open XML）と区別して認識し、
+  拡張子と内容の不一致を検知して警告を出す仕様
+確認するアクション: 07セクションのCreate_Word_Archive_File
+確認する入力: ファイル名の拡張子（.doc固定）
+修正方法: 仕様上想定済みの挙動であるため、利用者に「はい」で開いて
+  よい旨を事前周知する。警告を避けたい場合は.html保存の代替を検討
+  する（正典§0・00_overview.txt「Word生成」参照。要Word表示確認）
+修正後の式: 変更不要（運用上の周知で対応）
+
+(17)
+想定エラー: RunIdに一致する会議が0件（Get_Sorted_Meetingsが空配列）
+原因: 期間指定が狭すぎる、またはFilter_Messages_By_Periodの条件で
+  全件除外された
+確認するアクション: Get_Sorted_Meetings、Filter_Messages_By_Period
+確認する入力: triggerBody()?['StartDateUtc']/['EndDateUtc']、
+  Filter_Messages_By_Periodの出力件数
+修正方法: 0件はエラーではなく正常な結果としてMeetingCount=0、
+  ArchiveUrl=''のまま正常応答する（想定内の仕様）。テスト時に0件が
+  想定外の場合は期間指定・除外条件を見直す
+修正後の式: 変更不要
+
+(18)
+想定エラー: Respond_To_Callerが実行されず呼出元が結果を受け取れない
+原因: Scope_Finally自体が失敗した、またはRun_Child_Flow_Write_Run_
+  Log_Infoの失敗でrun afterの条件によりRespond_To_Callerがスキップ
+  された
+確認するアクション: Respond_To_Caller、Scope_Finallyの実行履歴
+確認する入力: Scope_Finally内各アクションの実行結果
+修正方法: 呼出元側（01/02）でRun_Child_Flow_Orchestrator自体の失敗を
+  検知できるようにしておく（01の想定エラー(4)参照）。必要であれば
+  Respond_To_Callerの実行条件に「直前が失敗した場合」も加える
+  （ただしその場合は出力値が未確定になる点に注意。要実環境確認）
+修正後の式: 変更不要（実行条件設定の見直し）
+
+■ 15. テスト手順
+------------------------------------------------------------------------
+本フローは子フローのため単体では「テスト」実行がしづらい。
+01_manual_archive_trigger.txtの[手順A][手順B]から呼び出して結合
+テストする方法を基本とするが、開発中は以下のように直接テストする
+ことも可能。
+ 1. Power Automateの本フロー編集画面で「テスト」→「手動」→「実行」
+    を選び、トリガー入力（RunId=適当なguid文字列、StartDateUtc/
+    EndDateUtcに直近7日相当のISO8601文字列、DryRun=はい、
+    ForceReprocess=いいえ）を直接入力して実行する。
+ 2. 実行後、Filter_Messages_By_Periodの出力件数、Apply_To_Each_
+    Meetingの反復回数、Get_Sorted_Meetingsのvalue件数が一致するか
+    確認する。
+ 3. MeetingArchiveStagingリストを開き、RunIdに一致する行がSortKey
+    順に正しく並んでいるか、BodyText/Author/Organizer/
+    PostedDateTimeJst/AttachmentsJsonが正しく入っているか確認する。
+ 4. DryRun=いいえで再実行し、varSavedCount/varSkippedCountが添付の
+    実際の保存結果と一致するか、MeetingArchiveLedgerに正しく行が
+    追加されるか（05番のTXT参照）確認する。
+ 5. わざと失敗するケース（例: envChannelIdを一時的に誤った値にする）
+    を作り、Scope_Catchが発火してMeetingArchiveRunLogにLevel='Error'
+    の行が記録されること、Respond_To_CallerのStatusが'Failed'になる
+    ことを確認する。
+ 6. 01_manual_archive_trigger.txtの[手順A][手順B]に従い、呼出元経由
+    での結合テストを実施する。
+
+■ 16. 完成条件
+------------------------------------------------------------------------
+- Scope_Try/Scope_Catch/Scope_Finallyが正典§9・■7の実行条件どおりに
+  構成されている。
+- 内部変数13個（varRunId〜varErrorMessage）が全てScope_Try直下で
+  初期化されている。
+- Do_Until_Messages_Paging／Do_Until_Replies_Pagingが@odata.nextLink
+  を正しく追跡し、全件取得できる（04の完成条件と合わせて確認）。
+- Apply_To_Each_Meeting／Apply_To_Each_Reply／Apply_To_Each_Attachment
+  の「同時実行を有効にする」が全てオフになっている。
+- 添付が正しく抽出・保存され、varMeetingAttachmentsが06セクションの
+  期待するフィールド名{OriginalName,SavedName,SavedFileUrl,Status}と
+  一致している。
+- MeetingArchiveStagingにRunId・SortKey等が正しく書き込まれ、
+  Get_Sorted_MeetingsでSortKey昇順に読み戻せる。
+- Scope_Catch/Scope_Finallyが正しくPA_Write_Run_Logを呼び出し、
+  Respond_To_CallerがStatus/MeetingCount/SavedCount/SkippedCount/
+  ArchiveUrl/ErrorMessageを正しく返す。
+- 7日間テスト（■15手順1〜5）で問題がないことを確認済み。
+
+■ 17. 式・型検査結果
+------------------------------------------------------------------------
+| 式 | 使用アクション | 型 | 検査結果 |
+|---|---|---|---|
+| coalesce(triggerBody()?['RunId'], guid()) | Initialize_RunId | 文字列 | OK |
+| json('[]') | Initialize_MessagesArray 等5件 | 配列 | OK |
+| concat('https://graph.microsoft.com/...',<envTeamId>,...) | Initialize_NextLink | 文字列 | OK（envTeamId/envChannelIdは動的コンテンツで挿入。要実環境確認） |
+| if(empty(trim(coalesce(...displayName,''))),'不明',trim(coalesce(...))) | Compose_Author | 文字列 | OK（trim対象は文字列のみ、coalesce候補同一型） |
+| formatDateTime(convertFromUtc(...,'Tokyo Standard Time'),'yyyy-MM-dd') | Compose_MeetingDate | 文字列 | OK |
+| coalesce(items(...)?['body']?['content'], '') | Convert_Body_Html_To_Text入力 | 文字列 | OK |
+| union(variables('varRepliesArray'), body('Get_Message_Replies')?['value']) | Set_RepliesArray | 配列 | OK（両候補配列で統一。重複除去の注意は04参照） |
+| setProperty(item(), 'sourceReplyId', items('Apply_To_Each_Reply')?['id']) | Select_Reply_Attachments_With_ReplyId | オブジェクト | OK（実在する標準WDL関数） |
+| @and(equals(item()?['contentType'],'reference'), not(empty(item()?['contentUrl']))) | Filter_File_Attachments | ブール型 | OK（要実環境確認: 実際の除外条件は環境依存） |
+| addProperty(addProperty(addProperty(addProperty(json('{}'),...)))) | Append_Meeting_Attachment | オブジェクト | OK（実在する標準WDL関数のチェーン） |
+| concat('RunId eq ''', variables('varRunId'), '''') | Get_Sorted_Meetings フィルタークエリ | 文字列 | OK（OData文字列リテラルのエスケープ） |
+| coalesce(first(result('Scope_Try'))?['error']?['message'], '実行中にエラーが発生しました') | Set_ErrorMessage | 文字列 | OK（要実環境確認: first()が必ずしも失敗アクションを指すとは限らない旨■14(該当なし。本文■8[41]参照)） |
+| length(coalesce(body('Get_Sorted_Meetings')?['value'], json('[]'))) | Run_Child_Flow_Write_Run_Log_Info、Respond_To_Caller | 数値 | OK |
+
+■ 18. 監査表（正典§11・全17問）
+------------------------------------------------------------------------
+```
+式・型監査
+trim対象はすべて文字列か: Yes。Compose_Authorのtrim(coalesce(items(...)?['from']?['user']?['displayName'], ''))のみがtrim使用箇所であり、対象は常に文字列（displayNameまたは既定値''）。
+coalesceの候補値は同一型か: Yes。文字列同士（Compose_Author、Initialize_RunId、Set_ErrorMessage等）、配列同士（Initialize_*Array、Filter出力ガード）、数値・オブジェクトの混在はない。
+nullと空文字列を区別しているか: Yes。ReplyId（親投稿由来の添付はnullのまま子フローへ渡し、子フロー側でcoalesce(triggerBody()?['ReplyId'],'')により空文字列として扱う。正典§7.12）、deletedDateTimeはnull比較（equals(...,null)）で明示的に区別している。
+空白だけの文字列を考慮しているか: Yes。Compose_Authorはtrim()を挟んでからempty()判定するため、空白のみのdisplayNameも「不明」に正規化される。
+配列の既定値がjson('[]')になっているか: Yes。varMessagesArray/varRepliesArray/varAttachmentCandidates/varMeetingAttachmentsは全てjson('[]')で初期化し、Compose_Parent_Attachments等の中間出力もcoalesce(...,json('[]'))でガードしている。
+オブジェクトの既定値がjson('{}')になっているか: Yes。Append_Meeting_AttachmentのaddProperty()チェーンはjson('{}')から開始している。他にオブジェクト型変数は使用しない。
+falseを未設定扱いしていないか: Yes。triggerBody()?['DryRun']/['ForceReprocess']はそのままRun_Child_Flow_Save_Attachmentへ渡し、falseを「未指定」として上書きするロジックはない。
+0を未設定扱いしていないか: Yes。varSavedCount/varSkippedCount/varMeetingIndexの初期値0、Condition_Attachment_Saved/Skippedでの判定はいずれも0を正当な値として扱う。
+Apply to eachへnullを渡していないか: Yes。Apply_To_Each_Meeting/Reply/Attachmentの対象式はいずれもFilter array出力またはjson('[]')既定の変数であり、0件時は空配列（nullではない）。
+JSONプロパティを安全に参照しているか: Yes。全て?['x']?['y']形式の安全参照を使用している。
+HTMLへ入れる値をエスケープしているか: 該当箇所は06セクション（別ファイル）が担当。本ファイルではHTML文字列への直接埋め込みは行わない（varDocumentHtmlへの追記は06参照）。
+未定義の変数がないか: Yes。使用する13変数（varRunId〜varErrorMessage）は全て■6・■8[2]〜[15]でScope_Try直下で初期化してから使用している。varArchiveUrl/varRunStatus/varErrorMessageは正典§13に明記のない補足である旨を■6・■8で明記済み。
+未定義のアクション参照がないか: Yes。outputs()/items()/body()の参照先アクション名は全て本ファイル内で■8として定義済み、または04/06/07の既定名（正典§6）と一致する。
+式内のアクション名が実在するか: Yes。Compose_Author、Convert_Body_Html_To_Text、Get_Sorted_Meetings等、式中に登場するアクション名は全て本ファイルで作成した実在アクション。
+添付リンクが保存後SharePointファイルを指しているか: 該当箇所は06セクション（別ファイル）が担当。本ファイルのAppend_Meeting_AttachmentはSavedFileUrl（子フロー[4]がGet_Saved_File_Properties経由で取得した保存後URL。05番のTXT参照）をそのまま格納するのみ。
+会議が日付順に並ぶか: Yes。Get_Sorted MeetingsはSortKey（yyyyMMddHHmmss_メッセージID）昇順で取得するため、開催日（投稿日JST）昇順・同日は投稿日時昇順になる（08_error_log_and_ledger.txt §1.2参照）。
+各会議が新しいページから開始するか: 該当箇所は06セクション（別ファイル）が担当。本ファイルはvarMeetingIndexの初期化とGet_Sorted_Meetingsによる並び替え結果の提供までを担う。
+```
+
+■ 想定エラー（正典§12・総括）
+------------------------------------------------------------------------
+上記■14に(1)〜(18)として全て記載済み（正典§12必須16項目＋本フロー
+固有の追加2項目）。
+
+========================================================================
+以上（03_archive_orchestrator.txt）
+========================================================================

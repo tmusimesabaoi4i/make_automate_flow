@@ -1,0 +1,1177 @@
+{
+  "name": "9b3e7d05-1c84-42fa-8e69-5a0d7c31b6e2",
+  "id": "/providers/Microsoft.Flow/flows/9b3e7d05-1c84-42fa-8e69-5a0d7c31b6e2",
+  "type": "Microsoft.Flow/flows",
+  "properties": {
+    "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+    "displayName": "Flow2 Teams投稿URLから全返信を取得",
+    "definition": {
+      "metadata": {
+        "creator": {},
+        "provisioningMethod": "FromDefinition",
+        "creationSource": "Portal",
+        "modifiedSources": "Portal"
+      },
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "TeamsPostUrl": {
+                  "title": "Teams投稿URL",
+                  "type": "string",
+                  "description": "Teamsチャネル投稿の「リンクをコピー」で取得したURLを貼り付けてください"
+                }
+              },
+              "required": [
+                "TeamsPostUrl"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Initialize_InputUrl": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInputUrl",
+                "type": "string",
+                "value": "@trim(coalesce(triggerBody()?['TeamsPostUrl'], ''))"
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialize_TenantId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varTenantId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_InputUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_TeamId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varTeamId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_TenantId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ChannelId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varChannelId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_TeamId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_UrlMessageId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varUrlMessageId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ChannelId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ParentMessageId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varParentMessageId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_UrlMessageId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_TargetMessageId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varTargetMessageId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ParentMessageId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_Replies": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varReplies",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_TargetMessageId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ResultObject": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varResultObject",
+                "type": "object",
+                "value": "@json('{}')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Replies": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ResultJson": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varResultJson",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ResultObject": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ErrorMessages": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varErrorMessages",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ResultJson": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_RepliesRaw": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varRepliesRaw",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ErrorMessages": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ReplyNextLink": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varReplyNextLink",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RepliesRaw": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_IsValid": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varIsValid",
+                "type": "boolean",
+                "value": true
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ReplyNextLink": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_Stage": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varStage",
+                "type": "string",
+                "value": "Initialize"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_IsValid": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ErrorCode": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varErrorCode",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Stage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ErrorMessage": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varErrorMessage",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ErrorCode": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_LastStatusCode": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLastStatusCode",
+                "type": "string",
+                "value": "0"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_ParseUrl": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_ParseUrl": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "ParseUrl"
+              },
+              "runAfter": {}
+            },
+            "Compose_Url_Without_Fragment": {
+              "type": "Compose",
+              "inputs": "@first(split(variables('varInputUrl'), '#'))",
+              "runAfter": {
+                "Set_Stage_ParseUrl": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Url_Path_Raw": {
+              "type": "Compose",
+              "inputs": "@first(split(outputs('Compose_Url_Without_Fragment'), '?'))",
+              "runAfter": {
+                "Compose_Url_Without_Fragment": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Url_Path_Part": {
+              "type": "Compose",
+              "inputs": "@if(endsWith(outputs('Compose_Url_Path_Raw'), '/'), join(take(split(outputs('Compose_Url_Path_Raw'), '/'), sub(length(split(outputs('Compose_Url_Path_Raw'), '/')), 1)), '/'), outputs('Compose_Url_Path_Raw'))",
+              "runAfter": {
+                "Compose_Url_Path_Raw": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Url_Query_Part": {
+              "type": "Compose",
+              "inputs": "@if(contains(outputs('Compose_Url_Without_Fragment'), '?'), last(split(outputs('Compose_Url_Without_Fragment'), '?')), '')",
+              "runAfter": {
+                "Compose_Url_Path_Part": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Query_Normalized": {
+              "type": "Compose",
+              "inputs": "@concat('&', outputs('Compose_Url_Query_Part'), '&')",
+              "runAfter": {
+                "Compose_Url_Query_Part": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Message_Path_Tail": {
+              "type": "Compose",
+              "inputs": "@if(contains(outputs('Compose_Url_Path_Part'), '/l/message/'), last(split(outputs('Compose_Url_Path_Part'), '/l/message/')), '')",
+              "runAfter": {
+                "Compose_Query_Normalized": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Parse_ChannelId_From_Path": {
+              "type": "Compose",
+              "inputs": "@trim(decodeUriComponent(first(split(outputs('Compose_Message_Path_Tail'), '/'))))",
+              "runAfter": {
+                "Compose_Message_Path_Tail": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Parse_MessageId_From_Path": {
+              "type": "Compose",
+              "inputs": "@if(contains(outputs('Compose_Message_Path_Tail'), '/'), trim(decodeUriComponent(last(split(outputs('Compose_Message_Path_Tail'), '/')))), '')",
+              "runAfter": {
+                "Parse_ChannelId_From_Path": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Parse_TenantId_From_Query": {
+              "type": "Compose",
+              "inputs": "@if(contains(outputs('Compose_Query_Normalized'), '&tenantId='), trim(decodeUriComponent(first(split(last(split(outputs('Compose_Query_Normalized'), '&tenantId=')), '&')))), '')",
+              "runAfter": {
+                "Parse_MessageId_From_Path": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Parse_TeamId_From_Query": {
+              "type": "Compose",
+              "inputs": "@if(contains(outputs('Compose_Query_Normalized'), '&groupId='), trim(decodeUriComponent(first(split(last(split(outputs('Compose_Query_Normalized'), '&groupId=')), '&')))), '')",
+              "runAfter": {
+                "Parse_TenantId_From_Query": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Parse_ParentMessageId_From_Query": {
+              "type": "Compose",
+              "inputs": "@if(contains(outputs('Compose_Query_Normalized'), '&parentMessageId='), trim(decodeUriComponent(first(split(last(split(outputs('Compose_Query_Normalized'), '&parentMessageId=')), '&')))), '')",
+              "runAfter": {
+                "Parse_TeamId_From_Query": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_ChannelId": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varChannelId",
+                "value": "@outputs('Parse_ChannelId_From_Path')"
+              },
+              "runAfter": {
+                "Parse_ParentMessageId_From_Query": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_UrlMessageId": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varUrlMessageId",
+                "value": "@outputs('Parse_MessageId_From_Path')"
+              },
+              "runAfter": {
+                "Set_ChannelId": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_TenantId": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varTenantId",
+                "value": "@outputs('Parse_TenantId_From_Query')"
+              },
+              "runAfter": {
+                "Set_UrlMessageId": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_TeamId": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varTeamId",
+                "value": "@outputs('Parse_TeamId_From_Query')"
+              },
+              "runAfter": {
+                "Set_TenantId": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_ParentMessageId": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varParentMessageId",
+                "value": "@outputs('Parse_ParentMessageId_From_Query')"
+              },
+              "runAfter": {
+                "Set_TeamId": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Determine_TargetMessageId": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varTargetMessageId",
+                "value": "@if(or(empty(variables('varParentMessageId')), equals(variables('varParentMessageId'), '0')), variables('varUrlMessageId'), variables('varParentMessageId'))"
+              },
+              "runAfter": {
+                "Set_ParentMessageId": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Validate_ParsedIdentifiers": {
+              "type": "Compose",
+              "inputs": "@if(empty(variables('varInputUrl')), 'ERR_URL_EMPTY', if(not(or(contains(variables('varInputUrl'), 'teams.microsoft.com'), contains(variables('varInputUrl'), 'teams.cloud.microsoft'))), 'ERR_NOT_TEAMS_URL', if(not(contains(outputs('Compose_Url_Path_Part'), '/l/message/')), 'ERR_NOT_CHANNEL_MESSAGE_URL', if(contains(variables('varChannelId'), 'unq.gbl.spaces'), 'ERR_CHAT_URL_NOT_SUPPORTED', if(empty(variables('varTeamId')), 'ERR_GROUPID_NOT_FOUND', if(empty(variables('varChannelId')), 'ERR_CHANNELID_NOT_FOUND', if(empty(variables('varTargetMessageId')), 'ERR_MESSAGEID_NOT_FOUND', '')))))))",
+              "runAfter": {
+                "Determine_TargetMessageId": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_ErrorCode_From_Validation": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varErrorCode",
+                "value": "@outputs('Validate_ParsedIdentifiers')"
+              },
+              "runAfter": {
+                "Validate_ParsedIdentifiers": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_IsValid": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varIsValid",
+                "value": "@empty(outputs('Validate_ParsedIdentifiers'))"
+              },
+              "runAfter": {
+                "Set_ErrorCode_From_Validation": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_ErrorMessage_From_Validation": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varErrorMessage",
+                "value": "@if(equals(variables('varErrorCode'), 'ERR_URL_EMPTY'), 'Teams投稿URLが入力されていません。', if(equals(variables('varErrorCode'), 'ERR_NOT_TEAMS_URL'), 'Microsoft TeamsのURLではありません（teams.microsoft.com / teams.cloud.microsoft を含みません）。', if(equals(variables('varErrorCode'), 'ERR_NOT_CHANNEL_MESSAGE_URL'), 'Teamsチャネル投稿のURLではありません（パスに /l/message/ が含まれていません）。', if(equals(variables('varErrorCode'), 'ERR_CHAT_URL_NOT_SUPPORTED'), 'チャット（1対1・グループ・会議）のURLは対象外です。チャネル投稿のURLを指定してください。', if(equals(variables('varErrorCode'), 'ERR_GROUPID_NOT_FOUND'), 'URLのクエリに groupId が見つかりません。チャネル投稿の「リンクをコピー」で取得したURLをそのまま貼り付けてください。', if(equals(variables('varErrorCode'), 'ERR_CHANNELID_NOT_FOUND'), 'URLのパスからチャネルIDを取得できません。', if(equals(variables('varErrorCode'), 'ERR_MESSAGEID_NOT_FOUND'), 'URLのパスからメッセージIDを取得できません。', '')))))))"
+              },
+              "runAfter": {
+                "Set_IsValid": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Condition_Has_Parse_Error": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      false
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Append_Parse_Error_Message": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varErrorMessages",
+                    "value": "@concat(variables('varErrorCode'), ': ', variables('varErrorMessage'))"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "runAfter": {
+                "Set_ErrorMessage_From_Validation": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_LastStatusCode": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_GetTeamsData": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_GetTeamsData": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "GetTeamsData"
+              },
+              "runAfter": {}
+            },
+            "Condition_Is_Valid": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Get_Parent_Message": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "Uri": "@concat('https://graph.microsoft.com/v1.0/teams/', variables('varTeamId'), '/channels/', uriComponent(variables('varChannelId')), '/messages/', variables('varTargetMessageId'))",
+                      "Method": "GET",
+                      "ContentType": "application/json"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "connectionName": "shared_teams",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Set_LastStatusCode": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varLastStatusCode",
+                    "value": "@string(coalesce(outputs('Get_Parent_Message')?['statusCode'], 0))"
+                  },
+                  "runAfter": {
+                    "Get_Parent_Message": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Condition_Message_Deleted": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "not": {
+                          "equals": [
+                            "@coalesce(body('Get_Parent_Message')?['deletedDateTime'], '')",
+                            ""
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Set_ErrorCode_Message_Deleted": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varErrorCode",
+                        "value": "ERR_MESSAGE_DELETED"
+                      },
+                      "runAfter": {}
+                    },
+                    "Set_ErrorMessage_Message_Deleted": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varErrorMessage",
+                        "value": "対象の投稿は削除済みです（deletedDateTime が設定されています）。"
+                      },
+                      "runAfter": {
+                        "Set_ErrorCode_Message_Deleted": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Set_IsValid_Message_Deleted": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varIsValid",
+                        "value": false
+                      },
+                      "runAfter": {
+                        "Set_ErrorMessage_Message_Deleted": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Append_Message_Deleted_Error": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varErrorMessages",
+                        "value": "@concat('ERR_MESSAGE_DELETED: deletedDateTime=', string(coalesce(body('Get_Parent_Message')?['deletedDateTime'], '')))"
+                      },
+                      "runAfter": {
+                        "Set_IsValid_Message_Deleted": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Get_Parent_Message": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Condition_Parent_Available": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [
+                          "@variables('varIsValid')",
+                          true
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Set_ReplyNextLink_First": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varReplyNextLink",
+                        "value": "@concat('https://graph.microsoft.com/v1.0/teams/', variables('varTeamId'), '/channels/', uriComponent(variables('varChannelId')), '/messages/', variables('varTargetMessageId'), '/replies?$top=50')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Do_Until_Replies_Paging": {
+                      "type": "Until",
+                      "expression": "@empty(variables('varReplyNextLink'))",
+                      "limit": {
+                        "count": 5000,
+                        "timeout": "PT1H"
+                      },
+                      "actions": {
+                        "Get_All_Replies": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "Uri": "@variables('varReplyNextLink')",
+                              "Method": "GET",
+                              "ContentType": "application/json"
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                              "connectionName": "shared_teams",
+                              "operationId": "HttpRequest"
+                            },
+                            "authentication": {
+                              "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                              "type": "Raw"
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "Set_Replies_Status_Code": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varLastStatusCode",
+                            "value": "@string(coalesce(outputs('Get_All_Replies')?['statusCode'], 0))"
+                          },
+                          "runAfter": {
+                            "Get_All_Replies": [
+                              "Succeeded",
+                              "Failed"
+                            ]
+                          }
+                        },
+                        "Process_Retrieved_Replies": {
+                          "type": "Foreach",
+                          "foreach": "@coalesce(body('Get_All_Replies')?['value'], json('[]'))",
+                          "actions": {
+                            "Append_Raw_Reply": {
+                              "type": "AppendToArrayVariable",
+                              "inputs": {
+                                "name": "varRepliesRaw",
+                                "value": "@item()"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 1
+                            }
+                          },
+                          "runAfter": {
+                            "Get_All_Replies": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Set_ReplyNextLink": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varReplyNextLink",
+                            "value": "@coalesce(body('Get_All_Replies')?['@odata.nextLink'], '')"
+                          },
+                          "runAfter": {
+                            "Process_Retrieved_Replies": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Set_ReplyNextLink_First": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Apply_To_Each_Raw_Reply": {
+                      "type": "Foreach",
+                      "foreach": "@variables('varRepliesRaw')",
+                      "actions": {
+                        "Compose_Normalized_Reply": {
+                          "type": "Compose",
+                          "inputs": {
+                            "id": "@coalesce(items('Apply_To_Each_Raw_Reply')?['id'], '')",
+                            "replyToId": "@coalesce(items('Apply_To_Each_Raw_Reply')?['replyToId'], '')",
+                            "etag": "@coalesce(items('Apply_To_Each_Raw_Reply')?['etag'], '')",
+                            "messageType": "@coalesce(items('Apply_To_Each_Raw_Reply')?['messageType'], '')",
+                            "createdDateTime": "@coalesce(items('Apply_To_Each_Raw_Reply')?['createdDateTime'], '')",
+                            "lastModifiedDateTime": "@coalesce(items('Apply_To_Each_Raw_Reply')?['lastModifiedDateTime'], '')",
+                            "from": {
+                              "displayName": "@coalesce(items('Apply_To_Each_Raw_Reply')?['from']?['user']?['displayName'], '')",
+                              "userId": "@coalesce(items('Apply_To_Each_Raw_Reply')?['from']?['user']?['id'], '')",
+                              "email": ""
+                            },
+                            "body": {
+                              "contentType": "@coalesce(items('Apply_To_Each_Raw_Reply')?['body']?['contentType'], '')",
+                              "content": "@coalesce(items('Apply_To_Each_Raw_Reply')?['body']?['content'], '')"
+                            },
+                            "webUrl": "@coalesce(items('Apply_To_Each_Raw_Reply')?['webUrl'], '')",
+                            "attachments": "@coalesce(items('Apply_To_Each_Raw_Reply')?['attachments'], json('[]'))",
+                            "mentions": "@coalesce(items('Apply_To_Each_Raw_Reply')?['mentions'], json('[]'))",
+                            "reactions": "@coalesce(items('Apply_To_Each_Raw_Reply')?['reactions'], json('[]'))",
+                            "raw": "@items('Apply_To_Each_Raw_Reply')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Append_Normalized_Reply": {
+                          "type": "AppendToArrayVariable",
+                          "inputs": {
+                            "name": "varReplies",
+                            "value": "@outputs('Compose_Normalized_Reply')"
+                          },
+                          "runAfter": {
+                            "Compose_Normalized_Reply": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {
+                        "Do_Until_Replies_Paging": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Condition_Message_Deleted": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_GetTeamsData": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_ParseUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_CreateResult": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_CreateResult": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "CreateResult"
+              },
+              "runAfter": {}
+            },
+            "Condition_Build_Result": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Create_Result_Object": {
+                  "type": "Compose",
+                  "inputs": {
+                    "success": true,
+                    "flowName": "Flow2_GetAllTeamsChannelPostRepliesFromUrl",
+                    "sourceUrl": "@variables('varInputUrl')",
+                    "retrievedAt": "@utcNow()",
+                    "identifiers": {
+                      "tenantId": "@variables('varTenantId')",
+                      "teamId": "@variables('varTeamId')",
+                      "channelId": "@variables('varChannelId')",
+                      "urlMessageId": "@variables('varUrlMessageId')",
+                      "parentMessageId": "@variables('varParentMessageId')",
+                      "targetMessageId": "@variables('varTargetMessageId')"
+                    },
+                    "parentMessage": {
+                      "id": "@coalesce(body('Get_Parent_Message')?['id'], '')",
+                      "createdDateTime": "@coalesce(body('Get_Parent_Message')?['createdDateTime'], '')",
+                      "from": {
+                        "displayName": "@coalesce(body('Get_Parent_Message')?['from']?['user']?['displayName'], '')",
+                        "userId": "@coalesce(body('Get_Parent_Message')?['from']?['user']?['id'], '')",
+                        "email": ""
+                      },
+                      "body": {
+                        "contentType": "@coalesce(body('Get_Parent_Message')?['body']?['contentType'], '')",
+                        "content": "@coalesce(body('Get_Parent_Message')?['body']?['content'], '')"
+                      },
+                      "webUrl": "@coalesce(body('Get_Parent_Message')?['webUrl'], '')"
+                    },
+                    "replyCount": "@length(variables('varReplies'))",
+                    "replies": "@variables('varReplies')"
+                  },
+                  "runAfter": {}
+                },
+                "Set_ResultObject": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varResultObject",
+                    "value": "@outputs('Create_Result_Object')"
+                  },
+                  "runAfter": {
+                    "Create_Result_Object": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Create_Error_Result_Object": {
+                    "type": "Compose",
+                    "inputs": {
+                      "success": false,
+                      "flowName": "Flow2_GetAllTeamsChannelPostRepliesFromUrl",
+                      "sourceUrl": "@variables('varInputUrl')",
+                      "retrievedAt": "@utcNow()",
+                      "error": {
+                        "code": "@variables('varErrorCode')",
+                        "message": "@variables('varErrorMessage')",
+                        "stage": "@variables('varStage')",
+                        "details": "@variables('varErrorMessages')"
+                      },
+                      "identifiers": {
+                        "tenantId": "@variables('varTenantId')",
+                        "teamId": "@variables('varTeamId')",
+                        "channelId": "@variables('varChannelId')",
+                        "urlMessageId": "@variables('varUrlMessageId')",
+                        "parentMessageId": "@variables('varParentMessageId')",
+                        "targetMessageId": "@variables('varTargetMessageId')"
+                      }
+                    },
+                    "runAfter": {}
+                  },
+                  "Set_ResultObject_Error": {
+                    "type": "SetVariable",
+                    "inputs": {
+                      "name": "varResultObject",
+                      "value": "@outputs('Create_Error_Result_Object')"
+                    },
+                    "runAfter": {
+                      "Create_Error_Result_Object": [
+                        "Succeeded"
+                      ]
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_CreateResult": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Serialize_Result_To_Json": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varResultJson",
+                "value": "@string(variables('varResultObject'))"
+              },
+              "runAfter": {
+                "Condition_Build_Result": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_GetTeamsData": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_ErrorHandler": {
+          "type": "Scope",
+          "actions": {
+            "Compose_Handler_Error_Code": {
+              "type": "Compose",
+              "inputs": "@if(not(empty(variables('varErrorCode'))), variables('varErrorCode'), if(equals(variables('varLastStatusCode'), '401'), 'ERR_PERMISSION_DENIED', if(equals(variables('varLastStatusCode'), '403'), 'ERR_PERMISSION_DENIED', if(equals(variables('varLastStatusCode'), '404'), 'ERR_MESSAGE_NOT_FOUND', if(equals(variables('varLastStatusCode'), '400'), 'ERR_GRAPH_BAD_REQUEST', 'ERR_UNEXPECTED_FAILURE')))))",
+              "runAfter": {}
+            },
+            "Compose_Handler_Error_Message": {
+              "type": "Compose",
+              "inputs": "@if(not(empty(variables('varErrorMessage'))), variables('varErrorMessage'), if(equals(variables('varLastStatusCode'), '401'), 'Teamsコネクタの認証に失敗しました。接続を再作成してください。', if(equals(variables('varLastStatusCode'), '403'), '対象のチーム／チャネルを読み取る権限がありません。チームのメンバーであること、チャネルへのアクセス権を確認してください。', if(equals(variables('varLastStatusCode'), '404'), '対象の投稿が見つかりません（存在しない、削除済み、またはチーム／チャネルにアクセスできません）。', if(equals(variables('varLastStatusCode'), '400'), 'Graph要求が不正です。URLから取得した teamId / channelId / messageId の値を確認してください。', '想定外のエラーが発生しました。実行履歴で失敗したアクションを確認してください。')))))",
+              "runAfter": {
+                "Compose_Handler_Error_Code": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Handler_Error_Details": {
+              "type": "Compose",
+              "inputs": "@union(variables('varErrorMessages'), createArray(concat('stage=', variables('varStage')), concat('httpStatusCode=', variables('varLastStatusCode')), concat('collectedReplies=', string(length(variables('varRepliesRaw')))), concat('nextLinkAtFailure=', variables('varReplyNextLink'))))",
+              "runAfter": {
+                "Compose_Handler_Error_Message": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Handle_Error": {
+              "type": "Compose",
+              "inputs": {
+                "success": false,
+                "flowName": "Flow2_GetAllTeamsChannelPostRepliesFromUrl",
+                "sourceUrl": "@variables('varInputUrl')",
+                "retrievedAt": "@utcNow()",
+                "error": {
+                  "code": "@outputs('Compose_Handler_Error_Code')",
+                  "message": "@outputs('Compose_Handler_Error_Message')",
+                  "stage": "@variables('varStage')",
+                  "details": "@outputs('Compose_Handler_Error_Details')"
+                },
+                "identifiers": {
+                  "tenantId": "@variables('varTenantId')",
+                  "teamId": "@variables('varTeamId')",
+                  "channelId": "@variables('varChannelId')",
+                  "urlMessageId": "@variables('varUrlMessageId')",
+                  "parentMessageId": "@variables('varParentMessageId')",
+                  "targetMessageId": "@variables('varTargetMessageId')"
+                },
+                "partialReplyCount": "@length(variables('varRepliesRaw'))"
+              },
+              "runAfter": {
+                "Compose_Handler_Error_Details": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_ResultObject_Handler": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varResultObject",
+                "value": "@outputs('Handle_Error')"
+              },
+              "runAfter": {
+                "Handle_Error": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Serialize_Handler_Result_To_Json": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varResultJson",
+                "value": "@string(variables('varResultObject'))"
+              },
+              "runAfter": {
+                "Set_ResultObject_Handler": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_CreateResult": [
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        },
+        "Scope_Finalize": {
+          "type": "Scope",
+          "actions": {
+            "Compose_Flow_Output": {
+              "type": "Compose",
+              "inputs": {
+                "success": "@coalesce(variables('varResultObject')?['success'], false)",
+                "replyCount": "@length(variables('varReplies'))",
+                "resultObject": "@variables('varResultObject')",
+                "resultJson": "@variables('varResultJson')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Scope_ErrorHandler": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    },
+    "connectionReferences": {
+      "shared_teams": {
+        "connectionName": "7d21c9a4e5b8406f83c1d76e2a95b408",
+        "source": "Invoker",
+        "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+        "tier": "NotSpecified",
+        "apiName": "teams"
+      }
+    },
+    "flowFailureAlertSubscribed": false,
+    "isManaged": false
+  }
+}

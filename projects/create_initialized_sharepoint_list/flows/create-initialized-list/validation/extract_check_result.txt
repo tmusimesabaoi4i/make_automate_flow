@@ -1,0 +1,20 @@
+=== ZIP再展開検査 ===
+対象ZIP : release/CreateInitializedSharePointList_20260724211020.zip
+エントリ数: 5
+    Microsoft.Flow/flows/d07c8e5a-3f92-4b61-a8d4-15e69c2f0b73/apisMap.json
+    Microsoft.Flow/flows/d07c8e5a-3f92-4b61-a8d4-15e69c2f0b73/connectionsMap.json
+    Microsoft.Flow/flows/d07c8e5a-3f92-4b61-a8d4-15e69c2f0b73/definition.json
+    Microsoft.Flow/flows/manifest.json
+    manifest.json
+
+  OK: パッケージGUID 3点一致: d07c8e5a-3f92-4b61-a8d4-15e69c2f0b73
+  OK: 接続参照キー一致: ['shared_sharepointonline']
+  OK: GetByTitle( の出現 0 件（対象はリストIDでのみ特定）
+  OK: sample_raw は拡張リッチテキスト（RichTextMode=FullHtml）
+  OK: サイトURLの実値埋め込み 0 件（実行時にURLから解決）
+  OK: displayName: SharePointリスト新規作成＋初期化（既存リスト保護）
+  OK: 展開結果は source/package とバイト単位で一致
+
+=== ERRORS ===
+(0 errors)
+展開先: validation/extracted （検証用コピー。正典は source/package）

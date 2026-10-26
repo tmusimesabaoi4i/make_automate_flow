@@ -1,0 +1,485 @@
+========================================================================
+02_scheduled_archive_trigger.txt
+PA_Scheduled_Meeting_Archive_Start — 定期実行フロー（将来運用のためのオプション）
+本ファイルは CANONICAL_REFERENCE.md（正典）と 00_overview.txt に基づく詳細設計です。
+名称・型・式は正典からコピーしており、勝手な変更はしていません。
+========================================================================
+
+■ 冒頭の重要な注意（必ず読むこと）
+------------------------------------------------------------------------
+本プロジェクトの主目的は「明日からの大規模システム移行に備え、過去2年分の
+Teams投稿を一発でアーカイブすること」であり、その主役は01
+(PA_Manual_Meeting_Archive_Start)である。本フロー(02)は将来の週次差分運用
+のためのオプションであり、今回の主目的の達成には必須ではない。01による
+7日間テスト・2年間本番実行を完了させることを最優先とし、本フローの作成は
+後回し、または省略しても差し支えない。
+
+■ このフローについて
+------------------------------------------------------------------------
+表示名: PA_Scheduled_Meeting_Archive_Start
+推奨名(英語): PA_Scheduled_Meeting_Archive_Start
+ファイル名(本TXT): 02_scheduled_archive_trigger.txt
+フロー種別: スケジュール（繰り返しトリガー）クラウドフロー・オプション
+作成場所: [3]PA_Meeting_Archive_Orchestrator、[4]PA_Save_Meeting_Attachment、
+  [5]PA_Write_Run_Log と同一のPower Platformソリューション内
+役割: 週次等の差分実行。最終成功日時（MeetingArchiveRunLogのLevel=Info最新行）
+  から2日分さかのぼった日時〜現在を取得範囲としてオーケストレータを呼び出す。
+  重複取得が発生してもファイル単位の重複保存は台帳(MeetingArchiveLedger、
+  子フロー4の責務)で防止される。
+呼出元: なし（繰り返しトリガーにより自動実行）
+呼出先: PA_Meeting_Archive_Orchestrator（Run a Child Flow）
+
+使用するコネクタ:
+  - SharePoint（複数の項目の取得）
+  - 変数を初期化する／作成(Compose)／Run a Child Flow は組み込みアクション
+使用する接続:
+  - SharePoint: envSiteUrlで示すサイトのMeetingArchiveRunLogリストを読み取る接続
+必要な権限:
+  - 対象SharePointサイト(envSiteUrl)のMeetingArchiveRunLogリスト閲覧権限
+  - 同一ソリューション内の子フロー(PA_Meeting_Archive_Orchestrator)を呼び出す権限
+    （要ライセンス確認）
+プレミアムコネクタの有無: なし（SharePoint・組み込みアクションはいずれも標準）
+管理者承認の必要性: 原則不要（標準コネクタのみ使用）。ただし組織のDLPポリシーで
+  SharePointコネクタの利用が制限されている場合は管理者確認が必要（要DLP確認）。
+
+■ 入力引数（トリガー: 繰り返し）
+------------------------------------------------------------------------
+本フローには手動入力はなく、トリガーのスケジュール設定が「入力」に相当する。
+| 設定項目 | 値(例) | 用途 |
+|---|---|---|
+| 頻度 | 週(Week) | 週1回の差分実行 |
+| 間隔 | 1 | 毎週 |
+| 実行曜日 | 月曜日 | 週初めに前週分を回収する例 |
+| 時刻 | 03:00 | 業務時間外に実行する例 |
+| タイムゾーン | (UTC+09:00) 大阪、札幌、東京 | JSTで曜日・時刻を解釈させるため |
+
+呼出元: なし（スケジューラによる自動起動）。呼出元から渡す式: 該当なし。
+
+要実環境確認: 「繰り返し」トリガーの既定タイムゾーンは環境によりUTCになる
+  場合がある。JSTの月曜03:00に実行させたい場合は、詳細オプションで必ず
+  タイムゾーンを明示的に「(UTC+09:00) 大阪、札幌、東京」に設定すること。
+
+■ 出力
+------------------------------------------------------------------------
+本フローは子フローではないため戻り値はない。実行結果はPower Automateの
+実行履歴画面で、Run_Child_Flow_Orchestratorの出力（Status/MeetingCount/
+SavedCount/SkippedCount/ArchiveUrl/ErrorMessage）を確認する。
+本フローには（01と異なり）Teams通知アクションを標準では含めない
+（正典§6の定期(2)用アクション一覧に通知アクションは定義されていない）。
+無人実行であるため失敗に気づく仕組みが必要になる点は「エラー処理」章を参照。
+
+呼出先（オーケストレータ）からの戻り値:
+| 出力名 | 型 | 内容 | 本フロー内での参照方法 |
+|---|---|---|---|
+| Status | テキスト | Success/Failed等の実行結果 | body('Run_Child_Flow_Orchestrator')?['Status'] |
+| MeetingCount | 数値 | 取得会議数 | body('Run_Child_Flow_Orchestrator')?['MeetingCount'] |
+| SavedCount | 数値 | 保存成功添付数 | body('Run_Child_Flow_Orchestrator')?['SavedCount'] |
+| SkippedCount | 数値 | スキップ添付数 | body('Run_Child_Flow_Orchestrator')?['SkippedCount'] |
+| ArchiveUrl | テキスト | 生成されたWordファイルのURL | body('Run_Child_Flow_Orchestrator')?['ArchiveUrl'] |
+| ErrorMessage | テキスト | エラー概要 | body('Run_Child_Flow_Orchestrator')?['ErrorMessage'] |
+
+要実環境確認: 実際のトークン形式は01と同様にPeek code/Dynamic contentで確認すること。
+
+■ 環境変数
+------------------------------------------------------------------------
+| 表示名 | 使用箇所 | 備考 |
+|---|---|---|
+| envSiteUrl | Get_Last_Success_Logの「サイトのアドレス」 | 動的なコンテンツから表示名で選択（正典§2） |
+| envRunLogListName | Get_Last_Success_Logの「リスト名」 | 既定値 MeetingArchiveRunLog。動的なコンテンツから表示名で選択、または直接ドロップダウンから同名リストを選択 |
+
+要実環境確認: 環境変数は正典§2の注記どおり「フロー内では表示名で選択」する。
+  リスト名欄はドロップダウン式のため、環境変数を差し込むには欄の右側にある
+  「カスタム値の入力」アイコンで数式モードに切り替える必要がある場合がある。
+
+■ 内部変数
+------------------------------------------------------------------------
+| 変数名 | 型 | 初期値 | 用途 | 更新するアクション | 並列実行時の注意 |
+|---|---|---|---|---|---|
+| varRunId | 文字列 | guid() | 実行を一意に識別するID。オーケストレータ/台帳/ログ全体で串刺しキーとして使用 | Initialize_RunId | 本フローはApply to each/Do untilを使用しないため並列実行の考慮なし |
+
+■ アクション一覧
+------------------------------------------------------------------------
+
+[0] トリガー: 繰り返し
+コネクタ: 組み込み（スケジュール）
+PA上のアクション名: 繰り返し（Recurrence）
+配置場所: フロー先頭（唯一のトリガー）
+入力内容: 頻度=週／間隔=1／実行曜日=月曜日／時刻=03:00／
+  タイムゾーン=(UTC+09:00) 大阪、札幌、東京
+使用する式: なし
+出力: なし（トリガー自体は業務データを持たない）
+次のアクション: Initialize_RunId
+実行条件: 該当なし
+再試行: 適用外
+タイムアウト: 適用外
+エラー時の処理: 適用外
+
+操作手順:
+ 1. Power Automateで「作成」→「スケジュール済みクラウドフロー」を選択する
+    （または「自動化したクラウドフロー」でトリガー検索から「繰り返し」を選ぶ）。
+ 2. フロー名に「PA_Scheduled_Meeting_Archive_Start」と入力する。
+ 3. 「実行間隔」に 1、「頻度」に「週」を設定して「作成」をクリックする。
+ 4. トリガーカードの詳細オプション「+新しいパラメーターの追加」から
+    「タイムゾーン」を選び「(UTC+09:00) 大阪、札幌、東京」に設定する。
+ 5. 同様に「時刻」を追加し 03:00 に設定する。
+ 6. 同様に「曜日ごとに」を追加し「月曜日」にチェックを入れる。
+
+[1] Initialize_RunId
+コネクタ: 組み込み（変数）
+PA上のアクション名: 変数を初期化する
+配置場所: トリガーの直後
+入力内容: 名前=varRunId／種類=文字列／値=下記式
+使用する式: guid()
+出力: variables('varRunId')
+次のアクション: Get_Last_Success_Log
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし（このアクション種別に再試行ポリシー設定はない）
+タイムアウト: 適用外
+エラー時の処理: なし（guid()は失敗しない組み込み関数）
+
+操作手順:
+ 1. 「+新しいステップ」→検索ボックスに「変数を初期化する」と入力する。
+ 2. 「変数を初期化する」を選択して追加する。
+ 3. アクション名を「Initialize_RunId」に変更する。
+ 4. 「名前」欄に varRunId と入力する。
+ 5. 「種類」で「文字列」を選択する。
+ 6. 「値」欄の数式タブに guid() と入力する。
+
+[2] Get_Last_Success_Log
+コネクタ: SharePoint
+PA上のアクション名: 複数の項目の取得（Get items）
+配置場所: Initialize_RunIdの直後
+入力内容:
+  サイトのアドレス: envSiteUrl（環境変数。動的なコンテンツから表示名envSiteUrlを選択）
+  リスト名: envRunLogListName（環境変数。既定値 MeetingArchiveRunLog）
+  フィルタークエリ: Level eq 'Info'
+  並べ替え(Order By): OccurredDateTimeUtc desc
+  上位件数(Top Count): 1
+使用する式: なし（フィルタークエリ・並べ替えは静的なODataクエリ文字列であり式ではない）
+出力: body('Get_Last_Success_Log')?['value']（配列。0件または1件）
+次のアクション: Compose_StartDateUtc
+実行条件: 直前のアクションが成功した場合
+再試行: 既定のSharePointコネクタ標準リトライポリシーのまま
+タイムアウト: 既定のまま
+エラー時の処理: リスト未作成・列内部名相違・権限不足の場合はこのアクションで
+  失敗する。想定エラー参照。
+
+操作手順:
+ 1. 「+新しいステップ」→検索ボックスに「複数の項目の取得」と入力する。
+ 2. SharePointコネクタの「複数の項目の取得」を選択して追加する。
+ 3. アクション名を「Get_Last_Success_Log」に変更する。
+ 4. 「サイトのアドレス」欄をクリックし、一覧に対象サイトがあれば直接選択する。
+    無い場合は「カスタム値の入力」に切り替え、動的なコンテンツから
+    環境変数「envSiteUrl」を選択する。
+ 5. 「リスト名またはライブラリ名」欄でドロップダウンから
+    「MeetingArchiveRunLog」を選択する。表示されない場合は右側の
+    「カスタム値の入力」アイコンに切り替え、環境変数「envRunLogListName」
+    を選択する。
+ 6. アクションカード下部の「詳細オプションを表示する」を開く。
+ 7. 「フィルタークエリ」欄に Level eq 'Info' と入力する。
+ 8. 「並べ替え順序」欄に OccurredDateTimeUtc desc と入力する。
+ 9. 「上位に指定する件数」欄に 1 と入力する。
+
+要実環境確認(1): OccurredDateTimeUtcはSharePoint上「単一行テキスト」列
+  （正典§3.3）であり日付/時刻型ではない。ISO8601形式（例:
+  2026-07-09T03:00:00Z）で保存されている前提で、文字列としての降順並べ替え
+  が日時降順と一致する（ISO8601は辞書順ソートと日時順ソートが一致する
+  形式のため）。書き込み側（PA_Write_Run_Log、正典08）が必ずこの形式で
+  書き込むことを前提とする。
+要実環境確認(2): Level='Info'の項目が必ず「完走成功時のサマリ行」である
+  ことを前提とする。オーケストレータ側（Run_Child_Flow_Write_Run_Log_Info
+  の呼出条件）の実装と整合させること。
+
+[3] Compose_StartDateUtc
+コネクタ: 組み込み（データ操作）
+PA上のアクション名: 作成（Compose）
+配置場所: Get_Last_Success_Logの直後
+入力内容: 入力欄に下記式
+使用する式:
+  addDays(coalesce(first(body('Get_Last_Success_Log')?['value'])?['OccurredDateTimeUtc'], addDays(utcNow(), -9)), -2)
+出力: outputs('Compose_StartDateUtc')（文字列、ISO8601日時）
+次のアクション: Compose_EndDateUtc
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし
+タイムアウト: 適用外
+エラー時の処理: 想定エラー参照（0件時の既定値フォールバック、日付形式不正）。
+
+操作手順:
+ 1. 「+新しいステップ」→「作成」を追加する。
+ 2. アクション名を「Compose_StartDateUtc」に変更する。
+ 3. 「入力」欄の数式タブに次の式を入力する:
+    addDays(coalesce(first(body('Get_Last_Success_Log')?['value'])?['OccurredDateTimeUtc'], addDays(utcNow(), -9)), -2)
+
+式の意味（分解して理解する）:
+  a) first(body('Get_Last_Success_Log')?['value']) … 取得した配列の先頭要素
+     （Top Count=1のため0件か1件）。0件のときはnullを返す（エラーにならない）。
+  b) (a)?['OccurredDateTimeUtc'] … 安全参照。(a)がnullでもエラーにならずnullを返す。
+  c) coalesce((b), addDays(utcNow(), -9)) … (b)がnull（＝ログがまだ1件もない、
+     または直近のInfo行が見つからない初回実行）の場合、既定値として
+     「現在から9日前」を採用する。両候補とも文字列型で一致している。
+  d) addDays((c), -2) … 最終成功日時（または初回既定値）から更に2日分
+     さかのぼる。取りこぼし防止のバッファであり、重複取得分は台帳
+     (MeetingArchiveLedger)のIdempotencyKeyによる冪等性チェックで吸収される
+     （子フロー4の責務。00_overview.txt参照）。
+
+[4] Compose_EndDateUtc
+コネクタ: 組み込み（データ操作）
+PA上のアクション名: 作成（Compose）
+配置場所: Compose_StartDateUtcの直後
+入力内容: 入力欄に下記式
+使用する式: utcNow()
+出力: outputs('Compose_EndDateUtc')（文字列、ISO8601日時）
+次のアクション: Run_Child_Flow_Orchestrator
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし
+タイムアウト: 適用外
+エラー時の処理: なし（utcNow()は引数なしで失敗しない）
+
+操作手順:
+ 1. 「+新しいステップ」→「作成」を追加する。
+ 2. アクション名を「Compose_EndDateUtc」に変更する。
+ 3. 「入力」欄の数式タブに utcNow() と入力する。
+
+[5] Run_Child_Flow_Orchestrator
+コネクタ: 組み込み（Run a Child Flow）
+PA上のアクション名: Run a Child Flow（子フローの実行）
+配置場所: Compose_EndDateUtcの直後
+前提条件: PA_Meeting_Archive_Orchestratorが同一ソリューション内に先に
+  作成済みであること。
+入力内容:
+  呼び出す子フロー: PA_Meeting_Archive_Orchestrator
+  RunId = variables('varRunId')
+  StartDateUtc = outputs('Compose_StartDateUtc')
+  EndDateUtc = outputs('Compose_EndDateUtc')
+  DryRun = いいえ（固定。動的なコンテンツを使わず選択肢から直接指定）
+  ForceReprocess = いいえ（固定。同上）
+使用する式: RunId/StartDateUtc/EndDateUtcの3項目のみ（DryRun/ForceReprocessは固定値であり式は使わない）
+出力: body('Run_Child_Flow_Orchestrator')?['Status'] ほか
+次のアクション: なし（既定では最終アクション。任意でTeams通知を追加可能。下記参照）
+実行条件: 直前のアクションが成功した場合
+再試行: 「なし」を推奨する。理由は01と同じ（自動リトライにより子フロー
+  全体が再実行されると、タイムスタンプ付きのWordファイルが重複生成される）。
+  無人実行のため、01以上にこの設定の徹底が重要。
+タイムアウト: 週次差分は対象期間が短いため既定タイムアウトで収まる可能性が
+  高いが、初回実行や長期間フロー停止後の再開時は対象期間が広がるため、
+  01と同様にP1D程度への延長を検討する。
+エラー時の処理: 本フローは無人実行のため、失敗に気づく仕組みが重要である。
+  次のいずれかを推奨する。
+    (a) Power Automate環境既定の「フロー失敗時のオーナー通知メール」機能を
+        有効にしておく（要実環境確認: 有効化状況はテナント/環境設定による）。
+    (b) 01のNotify_Manual_Resultと同様の「チャットまたはチャネルで
+        メッセージを投稿する」アクションを本フローにも追加する（任意拡張。
+        正典§6の定期(2)用アクション一覧には含まれていないため、追加する
+        場合は表示名の重複衝突がないことを確認し、運用判断で追加する）。
+
+操作手順:
+ 1. 「+新しいステップ」→検索ボックスに「Run a Child Flow」と入力する。
+ 2. 表示された一覧から「PA_Meeting_Archive_Orchestrator」を選択する。
+ 3. アクション名を「Run_Child_Flow_Orchestrator」に変更する。
+ 4. 「RunId」欄に動的なコンテンツから「varRunId」を選択する。
+ 5. 「StartDateUtc」欄に動的なコンテンツから「Compose_StartDateUtcの出力」を選択する。
+ 6. 「EndDateUtc」欄に動的なコンテンツから「Compose_EndDateUtcの出力」を選択する。
+ 7. 「DryRun」欄は動的なコンテンツを使わず、選択肢から直接「いいえ」を選ぶ。
+ 8. 「ForceReprocess」欄も同様に直接「いいえ」を選ぶ。
+ 9. アクション右上の「...」→「設定」を開き、「再試行ポリシー」を「なし」に、
+    必要に応じて「アクションのタイムアウト」を延長する。
+
+■ 条件・ループ等の使用状況
+------------------------------------------------------------------------
+条件(Condition): 未使用（0件/1件の分岐はCompose_StartDateUtc内のcoalesceで吸収する）。
+Apply to each: 未使用。
+Do until: 未使用。
+Select: 未使用。
+Filter array: 未使用（SharePoint「複数の項目の取得」のフィルタークエリで
+  絞り込むため、別途Filter arrayアクションは不要）。
+Compose: Compose_StartDateUtc, Compose_EndDateUtc の2件。
+ページング: 該当なし（Top Count=1で1件のみ取得するためページングは発生しない）。
+並列実行: 該当なし（ループを持たないため同時実行度の設定はない）。
+エラー処理: Scope（Try/Catch/Finally）は未使用（正典の統一アクション表示名
+  一覧で本フローにはScope系アクションが定義されていないため）。無人実行の
+  ため、失敗検知の仕組み（環境既定の失敗通知メール、または任意のTeams通知
+  追加）を運用として用意すること。
+ログ: 本フロー自体はMeetingArchiveRunLogへ直接書き込まない（読み取りのみ。
+  書き込みはオーケストレータ内のRun_Child_Flow_Write_Run_Log_Info/Errorが担当する）。
+
+■ 想定されるエラーと修正方法
+------------------------------------------------------------------------
+(1)
+想定エラー: Compose_StartDateUtcでcoalesceの型不一致
+原因: first(body('Get_Last_Success_Log')?['value'])?['OccurredDateTimeUtc']
+  が文字列以外（例: SharePoint側の列変更により数値やnull以外の異常値）を
+  返し、既定値addDays(utcNow(), -9)（文字列）と型が食い違う
+確認するアクション: Get_Last_Success_Log, Compose_StartDateUtc
+確認する入力: MeetingArchiveRunLogのOccurredDateTimeUtc列が単一行テキストの
+  ままか、値がISO8601形式で書き込まれているか
+修正方法: OccurredDateTimeUtc列の型・書き込み形式をPA_Write_Run_Log側で
+  ISO8601固定にする
+修正後の式: 変更なし（coalesce自体は正しい。書き込み側のデータ品質を是正する）
+
+(2)
+想定エラー: Get_Last_Success_Logが0件のときのnull参照
+原因: 初回実行時、またはMeetingArchiveRunLogにLevel='Info'の行がまだ
+  存在しない場合、first(...)がnullを返す
+確認するアクション: Compose_StartDateUtc
+確認する入力: 該当なし（設計上、安全参照?[]とcoaleseにより意図的に
+  addDays(utcNow(), -9)へフォールバックする仕様。想定内の挙動）
+修正方法: 対応不要。ただし初回実行時に9日より広い範囲を取得したい場合は
+  既定値のaddDays(utcNow(), -9)の「-9」を変更する
+修正後の式: addDays(utcNow(), -N)（Nは任意の初回既定日数）
+
+(3)
+想定エラー: フィルタークエリでLevel列の内部名相違によりエラーまたは0件
+原因: SharePointリストの列表示名とOData内部名が一致しない
+  （日本語表示名の場合、内部名が自動採番されたコード名になる場合がある）
+確認するアクション: Get_Last_Success_Log
+確認する入力: フィルタークエリ Level eq 'Info' が正しく実行されているか
+  （実行履歴の入力/出力で確認）
+修正方法: SharePointリストの「Level」列がプレーンな半角英字名で作成されて
+  いるか確認する。内部名が異なる場合はその内部名に置き換える
+修正後の式: <実際の内部列名> eq 'Info'
+
+(4)
+想定エラー: 子フロー呼出失敗（Run_Child_Flow_Orchestrator）
+原因: オーケストレータ側の内部エラー、権限不足、取得期間が想定より
+  長くなりタイムアウトする等
+確認するアクション: Run_Child_Flow_Orchestrator
+確認する入力: RunId/StartDateUtc/EndDateUtcが正しく渡っているか。
+  オーケストレータ側の実行履歴でエラー詳細を確認する
+修正方法: オーケストレータの実行履歴で失敗アクションを特定し対処する。
+  長期間フロー停止後の再開等で取得期間が異常に広い場合は、01を使って
+  手動で範囲を分割実行することを検討する
+修正後の式: 該当なし（呼出元の式に問題はない。子フロー側で対処する）
+
+(5)
+想定エラー: 日付式エラー（addDaysに不正な日時文字列が渡る）
+原因: OccurredDateTimeUtc列の値がISO8601形式でない、または列自体が空文字列
+  ''（nullではない）で保存されており、coalesceでは既定値に置換されない
+確認するアクション: Get_Last_Success_Log, Compose_StartDateUtc
+確認する入力: OccurredDateTimeUtc列の実際の値
+修正方法: 空文字列の可能性がある場合はcoalesceの前提を「nullのみ」から
+  「null相当（trim後空文字列も含む）」に拡張する
+修正後の式:
+  addDays(coalesce(if(empty(trim(coalesce(first(body('Get_Last_Success_Log')?['value'])?['OccurredDateTimeUtc'], ''))), null, first(body('Get_Last_Success_Log')?['value'])?['OccurredDateTimeUtc']), addDays(utcNow(), -9)), -2)
+  （nullを明示的に返す必要がある場合の拡張例。通常運用ではPA_Write_Run_Log
+  側が必ず値を書き込む前提のため、基本式のままで問題ない想定）
+
+(6)
+想定エラー: 長期間フロー停止後の初回差分実行でRun_Child_Flow_Orchestratorが
+  タイムアウトする（2年処理タイムアウトの派生パターン）
+原因: フロー無効化・障害等で長期間実行されず、Compose_StartDateUtcが
+  想定より大幅に過去の日時になり、取得対象期間が数か月〜規模に拡大する
+確認するアクション: Run_Child_Flow_Orchestrator
+確認する入力: 実行履歴の所要時間、StartDateUtc/EndDateUtcの実際の値
+修正方法: タイムアウトを延長する。それでも収まらない場合は本フローを
+  一時的に無効化し、01（手動）で範囲を分割して追いつかせてから、
+  再度02を有効化する
+修正後の式: 該当なし（設定変更・運用対応で対応する）
+
+■ テスト手順
+------------------------------------------------------------------------
+[手順A] 初回状態（ログ0件）の確認
+ 1. MeetingArchiveRunLogにLevel='Info'の行が存在しないことを確認する。
+ 2. 「PA_Scheduled_Meeting_Archive_Start」を開き「テスト」→「手動」→「実行」。
+ 3. Compose_StartDateUtcの出力が「現在時刻から9日+2日=11日前」相当になって
+    いることを実行履歴で確認する。
+
+[手順B] 通常時（ログ1件以上）の確認
+ 1. MeetingArchiveRunLogにLevel='Info'の行を1件用意する（テスト用に
+    OccurredDateTimeUtcへ任意のISO8601日時、例えば7日前の日時を手動登録する）。
+ 2. 再度テスト実行し、Compose_StartDateUtcの出力が「登録した日時から2日
+    さかのぼった日時」になっていることを確認する。
+
+[手順C] スケジュール実行の確認
+ 1. フローを保存し、「オンにする」を確認する。
+ 2. 次回の月曜03:00(JST)に自動実行されることを実行履歴で確認する
+    （即時確認したい場合は「テスト」→「手動」で代用する）。
+
+■ 完成条件
+------------------------------------------------------------------------
+- 繰り返しトリガーが週1回、タイムゾーン(UTC+09:00)で明示設定されている。
+- ログ0件時にaddDays(utcNow(), -9)へフォールバックすることを確認済み。
+- ログ1件以上のときにその日時から2日さかのぼった値がStartDateUtcになる
+  ことを確認済み。
+- Run_Child_Flow_OrchestratorがDryRun=いいえ、ForceReprocess=いいえで
+  呼び出される。
+- 本フローが「主目的(01の2年一発実行)には必須ではない任意運用」である
+  ことが冒頭に明記されている。
+- 無人実行の失敗検知手段（環境既定メール通知、または任意のTeams通知追加）
+  の方針が明確になっている。
+
+■ 式・型検査結果
+------------------------------------------------------------------------
+| 式 | 使用アクション | 型 | 検査結果 |
+|---|---|---|---|
+| guid() | Initialize_RunId | 文字列 | OK（引数なし、失敗しない） |
+| Level eq 'Info'（ODataフィルタークエリ） | Get_Last_Success_Log | 文字列(クエリ) | OK（式ではなく静的クエリ文字列。列内部名の一致は要実環境確認） |
+| OccurredDateTimeUtc desc（並べ替え） | Get_Last_Success_Log | 文字列(クエリ) | OK（ISO8601前提での文字列降順が日時降順と一致することを前提とする。要実環境確認） |
+| addDays(coalesce(first(body('Get_Last_Success_Log')?['value'])?['OccurredDateTimeUtc'], addDays(utcNow(), -9)), -2) | Compose_StartDateUtc | 文字列 | OK（first/安全参照でnullを許容し、coalesce候補は両方とも文字列で一致） |
+| utcNow() | Compose_EndDateUtc | 文字列 | OK（引数なし、失敗しない） |
+| body('Run_Child_Flow_Orchestrator')?['Status'] 等 | (参照用) | 文字列/数値 | 要実環境確認（実際のトークン形式はPeek codeで確認要） |
+
+------------------------------------------------------------------------
+以下、正典§11の監査表（17問）と正典§12の想定エラー分類の総括を記載する。
+------------------------------------------------------------------------
+
+■ 式・型監査（正典§11 / 全17問）
+------------------------------------------------------------------------
+trim対象はすべて文字列か:
+  該当あり(想定エラー(5)の拡張式のみ)。基本式ではtrimを使用していない。
+  拡張式を採用する場合、trim対象は
+  first(body('Get_Last_Success_Log')?['value'])?['OccurredDateTimeUtc']
+  でありSharePoint単一行テキスト列の値（文字列）が対象のためYes。
+coalesceの候補値は同一型か:
+  Yes。Compose_StartDateUtcのcoalesceは、OccurredDateTimeUtc（文字列列の値）と
+  addDays(utcNow(), -9)（文字列）で型が一致している。
+nullと空文字列を区別しているか:
+  基本式では区別していない（coalesceはnullのみを既定値に置換し、空文字列
+  ''は置換しない）。SharePoint列が未入力の場合は通常nullが返る前提のため
+  基本式で問題ないが、空文字列で保存される可能性がある場合は想定エラー(5)
+  の拡張式を採用する必要がある（要実環境確認）。
+空白だけの文字列を考慮しているか:
+  基本式では非考慮。拡張式(想定エラー(5))ではtrim().emptyで空白のみの
+  文字列も空扱いにできる。
+配列の既定値がjson('[]')になっているか:
+  該当なし。本フローは配列変数を宣言・初期化しない
+  （body('Get_Last_Success_Log')?['value']はアクション出力への参照であり、
+  安全参照?[]でnull時も後続のfirst/coalesceが処理できるためエラーにならない）。
+オブジェクトの既定値がjson('{}')になっているか:
+  該当なし。本フローはオブジェクト変数を使用しない。
+falseを未設定扱いしていないか:
+  Yes。Run_Child_Flow_OrchestratorのDryRun/ForceReprocessはいずれも
+  選択肢UIから直接「いいえ」を固定指定しており、coalesce等による
+  上書きロジックを介さないため、falseがそのまま子フローへ渡る。
+0を未設定扱いしていないか:
+  該当なし。本フローは0を意味のある値として扱う変数・入力を持たない
+  （Top Count=1は固定値であり0との混同は生じない）。
+Apply to eachへnullを渡していないか:
+  該当なし。本フローはApply to each/Do untilを使用しない。関連する
+  リスクとして、first(body(...)?['value'])が0件時にnullを返す点は
+  安全参照とcoalesceにより吸収済み。
+JSONプロパティを安全に参照しているか:
+  Yes。body('Get_Last_Success_Log')?['value']、
+  first(...)?['OccurredDateTimeUtc']、
+  body('Run_Child_Flow_Orchestrator')?['...']はいずれも?[]安全参照を使用している。
+HTMLへ入れる値をエスケープしているか:
+  該当なし。本フローはHTMLを生成しない（HTML生成はオーケストレータの責務）。
+未定義の変数がないか:
+  Yes。varRunIdは使用前にInitialize_RunIdで初期化済み。
+未定義のアクション参照がないか:
+  Yes。body('Get_Last_Success_Log')はCompose_StartDateUtcより前に実行済み。
+  outputs('Compose_StartDateUtc')/outputs('Compose_EndDateUtc')は
+  Run_Child_Flow_Orchestratorより前に定義済み。
+式内のアクション名が実在するか:
+  Yes。Initialize_RunId, Get_Last_Success_Log, Compose_StartDateUtc,
+  Compose_EndDateUtc, Run_Child_Flow_Orchestratorは本ファイル内で作成した
+  実在アクション名と一致する。
+添付リンクが保存後SharePointファイルを指しているか:
+  該当なし。本フローは添付保存を行わない（オーケストレータ/子フロー4の責務）。
+会議が日付順に並ぶか:
+  該当なし。本フローは会議の並び替えを行わない。
+各会議が新しいページから開始するか:
+  該当なし。本フローはWord/HTML生成を行わない。
+
+========================================================================
+以上
+========================================================================

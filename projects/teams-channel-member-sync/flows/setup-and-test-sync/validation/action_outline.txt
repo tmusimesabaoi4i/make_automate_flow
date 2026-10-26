@@ -1,0 +1,427 @@
+=== v4 アクションアウトライン（実行順・ネスト・通し番号=定義上の全アクション） ===
+trigger: manual (Request/Button) inputs: TeamsChannelUrl*/SharePointSiteUrl*/SharePointListName*/DisableOtherConfigs/AdminSiteUrl  ※*=必須
+  1 Initialize_IsValid  <InitializeVariable> [varIsValid:boolean]  runAfter: -
+  2 Initialize_Stage  <InitializeVariable> [varStage:string]  runAfter: Initialize_IsValid(Succeeded)
+  3 Initialize_FailedStage  <InitializeVariable> [varFailedStage:string]  runAfter: Initialize_Stage(Succeeded)
+  4 Initialize_ErrorCode  <InitializeVariable> [varErrorCode:string]  runAfter: Initialize_FailedStage(Succeeded)
+  5 Initialize_ErrorMessage  <InitializeVariable> [varErrorMessage:string]  runAfter: Initialize_ErrorCode(Succeeded)
+  6 Initialize_LastStatusCode  <InitializeVariable> [varLastStatusCode:string]  runAfter: Initialize_ErrorMessage(Succeeded)
+  7 Initialize_LastErrorBody  <InitializeVariable> [varLastErrorBody:string]  runAfter: Initialize_LastStatusCode(Succeeded)
+  8 Initialize_ItemErrors  <InitializeVariable> [varItemErrors:array]  runAfter: Initialize_LastErrorBody(Succeeded)
+  9 Initialize_ConfigSiteUrl  <InitializeVariable> [varConfigSiteUrl:string]  runAfter: Initialize_ItemErrors(Succeeded)
+ 10 Initialize_ConfigListId  <InitializeVariable> [varConfigListId:string]  runAfter: Initialize_ConfigSiteUrl(Succeeded)
+ 11 Initialize_ConfigListEntityType  <InitializeVariable> [varConfigListEntityType:string]  runAfter: Initialize_ConfigListId(Succeeded)
+ 12 Initialize_TeamsChannelUrl  <InitializeVariable> [varTeamsChannelUrl:string]  runAfter: Initialize_ConfigListEntityType(Succeeded)
+ 13 Initialize_TeamId  <InitializeVariable> [varTeamId:string]  runAfter: Initialize_TeamsChannelUrl(Succeeded)
+ 14 Initialize_ChannelId  <InitializeVariable> [varChannelId:string]  runAfter: Initialize_TeamId(Succeeded)
+ 15 Initialize_TenantId  <InitializeVariable> [varTenantId:string]  runAfter: Initialize_ChannelId(Succeeded)
+ 16 Initialize_ChannelType  <InitializeVariable> [varChannelType:string]  runAfter: Initialize_TenantId(Succeeded)
+ 17 Initialize_ChannelDisplayName  <InitializeVariable> [varChannelDisplayName:string]  runAfter: Initialize_ChannelType(Succeeded)
+ 18 Initialize_SiteUrl  <InitializeVariable> [varSiteUrl:string]  runAfter: Initialize_ChannelDisplayName(Succeeded)
+ 19 Initialize_ListName  <InitializeVariable> [varListName:string]  runAfter: Initialize_SiteUrl(Succeeded)
+ 20 Initialize_ListId  <InitializeVariable> [varListId:string]  runAfter: Initialize_ListName(Succeeded)
+ 21 Initialize_ListEntityType  <InitializeVariable> [varListEntityType:string]  runAfter: Initialize_ListId(Succeeded)
+ 22 Initialize_ListCreated  <InitializeVariable> [varListCreated:boolean]  runAfter: Initialize_ListEntityType(Succeeded)
+ 23 Initialize_CurrentFieldName  <InitializeVariable> [varCurrentFieldName:string]  runAfter: Initialize_ListCreated(Succeeded)
+ 24 Initialize_DefaultViewId  <InitializeVariable> [varDefaultViewId:string]  runAfter: Initialize_CurrentFieldName(Succeeded)
+ 25 Initialize_ViewFieldsOk  <InitializeVariable> [varViewFieldsOk:boolean]  runAfter: Initialize_DefaultViewId(Succeeded)
+ 26 Initialize_MemberSource  <InitializeVariable> [varMemberSource:string]  runAfter: Initialize_ViewFieldsOk(Succeeded)
+ 27 Initialize_MembersRaw  <InitializeVariable> [varMembersRaw:array]  runAfter: Initialize_MemberSource(Succeeded)
+ 28 Initialize_MembersNormalized  <InitializeVariable> [varMembersNormalized:array]  runAfter: Initialize_MembersRaw(Succeeded)
+ 29 Initialize_MemberKeys  <InitializeVariable> [varMemberKeys:array]  runAfter: Initialize_MembersNormalized(Succeeded)
+ 30 Initialize_MembersFetchComplete  <InitializeVariable> [varMembersFetchComplete:boolean]  runAfter: Initialize_MemberKeys(Succeeded)
+ 31 Initialize_MemberCount  <InitializeVariable> [varMemberCount:integer]  runAfter: Initialize_MembersFetchComplete(Succeeded)
+ 32 Initialize_MembersNextLink  <InitializeVariable> [varMembersNextLink:string]  runAfter: Initialize_MemberCount(Succeeded)
+ 33 Initialize_AllMembersFetched  <InitializeVariable> [varAllMembersFetched:boolean]  runAfter: Initialize_MembersNextLink(Succeeded)
+ 34 Initialize_ResolvedEmail  <InitializeVariable> [varResolvedEmail:string]  runAfter: Initialize_AllMembersFetched(Succeeded)
+ 35 Initialize_EmailLookupFailures  <InitializeVariable> [varEmailLookupFailures:integer]  runAfter: Initialize_ResolvedEmail(Succeeded)
+ 36 Initialize_ExistingItems  <InitializeVariable> [varExistingItems:array]  runAfter: Initialize_EmailLookupFailures(Succeeded)
+ 37 Initialize_ExistingFetchComplete  <InitializeVariable> [varExistingFetchComplete:boolean]  runAfter: Initialize_ExistingItems(Succeeded)
+ 38 Initialize_ExistingNextUri  <InitializeVariable> [varExistingNextUri:string]  runAfter: Initialize_ExistingFetchComplete(Succeeded)
+ 39 Initialize_CurrentSyncKey  <InitializeVariable> [varCurrentSyncKey:string]  runAfter: Initialize_ExistingNextUri(Succeeded)
+ 40 Initialize_CreatedCount  <InitializeVariable> [varCreatedCount:integer]  runAfter: Initialize_CurrentSyncKey(Succeeded)
+ 41 Initialize_UpdatedCount  <InitializeVariable> [varUpdatedCount:integer]  runAfter: Initialize_CreatedCount(Succeeded)
+ 42 Initialize_UnchangedCount  <InitializeVariable> [varUnchangedCount:integer]  runAfter: Initialize_UpdatedCount(Succeeded)
+ 43 Initialize_DeactivatedCount  <InitializeVariable> [varDeactivatedCount:integer]  runAfter: Initialize_UnchangedCount(Succeeded)
+ 44 Initialize_ErrorCount  <InitializeVariable> [varErrorCount:integer]  runAfter: Initialize_DeactivatedCount(Succeeded)
+ 45 Initialize_InputChannelUrl  <InitializeVariable> [varInputChannelUrl:string]  runAfter: Initialize_ErrorCount(Succeeded)
+ 46 Initialize_InputSiteUrl  <InitializeVariable> [varInputSiteUrl:string]  runAfter: Initialize_InputChannelUrl(Succeeded)
+ 47 Initialize_InputListName  <InitializeVariable> [varInputListName:string]  runAfter: Initialize_InputSiteUrl(Succeeded)
+ 48 Initialize_DisableOtherConfigs  <InitializeVariable> [varDisableOtherConfigs:boolean]  runAfter: Initialize_InputListName(Succeeded)
+ 49 Initialize_ConfigKey  <InitializeVariable> [varConfigKey:string]  runAfter: Initialize_DisableOtherConfigs(Succeeded)
+ 50 Initialize_ConfigSaved  <InitializeVariable> [varConfigSaved:boolean]  runAfter: Initialize_ConfigKey(Succeeded)
+ 51 Initialize_AdminSiteSource  <InitializeVariable> [varAdminSiteSource:string]  runAfter: Initialize_ConfigSaved(Succeeded)
+ 52 Compose_AdminSiteUrl  <Compose>  runAfter: Initialize_AdminSiteSource(Succeeded)
+ 53 Scope_00_Bootstrap  <Scope>  runAfter: Compose_AdminSiteUrl(Succeeded)
+ 54   Set_Stage_Bootstrap  <SetVariable> [varStage]  runAfter: -
+ 55   Compose_Admin_Candidate  <Compose>  runAfter: Set_Stage_Bootstrap(Succeeded)
+ 56   Compose_Admin_NoFragment  <Compose>  runAfter: Compose_Admin_Candidate(Succeeded)
+ 57   Compose_Admin_NoQuery  <Compose>  runAfter: Compose_Admin_NoFragment(Succeeded)
+ 58   Compose_Admin_Lower  <Compose>  runAfter: Compose_Admin_NoQuery(Succeeded)
+ 59   Compose_Admin_CutIndex  <Compose>  runAfter: Compose_Admin_Lower(Succeeded)
+ 60   Compose_Admin_Cut  <Compose>  runAfter: Compose_Admin_CutIndex(Succeeded)
+ 61   Compose_Admin_CutLower  <Compose>  runAfter: Compose_Admin_Cut(Succeeded)
+ 62   Compose_Admin_AnchorIndex  <Compose>  runAfter: Compose_Admin_CutLower(Succeeded)
+ 63   Compose_Admin_Anchored  <Compose>  runAfter: Compose_Admin_AnchorIndex(Succeeded)
+ 64   Compose_Admin_SiteRoot  <Compose>  runAfter: Compose_Admin_Anchored(Succeeded)
+ 65   Compose_Bootstrap_Code  <Compose>  runAfter: Compose_Admin_SiteRoot(Succeeded)
+ 66   Set_Bootstrap_ErrorCode  <SetVariable> [varErrorCode]  runAfter: Compose_Bootstrap_Code(Succeeded)
+ 67   Condition_Bootstrap_Failed  <If>  runAfter: Set_Bootstrap_ErrorCode(Succeeded)
+ 68     Set_Bootstrap_Invalid  <SetVariable> [varIsValid]  runAfter: -
+ 69     Set_Bootstrap_FailedStage  <SetVariable> [varFailedStage]  runAfter: Set_Bootstrap_Invalid(Succeeded)
+ 70     Set_Bootstrap_ErrorMessage  <SetVariable> [varErrorMessage]  runAfter: Set_Bootstrap_FailedStage(Succeeded)
+ 71 Scope_01_ValidateInput  <Scope>  runAfter: Scope_00_Bootstrap(Succeeded)
+ 72   Set_Stage_ValidateInput  <SetVariable> [varStage]  runAfter: -
+ 73   Compose_Input_Channel_Url  <Compose>  runAfter: Set_Stage_ValidateInput(Succeeded)
+ 74   Compose_Input_Site_Url  <Compose>  runAfter: Compose_Input_Channel_Url(Succeeded)
+ 75   Compose_Input_List_Name  <Compose>  runAfter: Compose_Input_Site_Url(Succeeded)
+ 76   Set_InputChannelUrl  <SetVariable> [varInputChannelUrl]  runAfter: Compose_Input_List_Name(Succeeded)
+ 77   Set_InputSiteUrl  <SetVariable> [varInputSiteUrl]  runAfter: Set_InputChannelUrl(Succeeded)
+ 78   Set_InputListName  <SetVariable> [varInputListName]  runAfter: Set_InputSiteUrl(Succeeded)
+ 79   Set_TeamsChannelUrl  <SetVariable> [varTeamsChannelUrl]  runAfter: Set_InputListName(Succeeded)
+ 80   Set_ListName  <SetVariable> [varListName]  runAfter: Set_TeamsChannelUrl(Succeeded)
+ 81   Set_DisableOtherConfigs  <SetVariable> [varDisableOtherConfigs]  runAfter: Set_ListName(Succeeded)
+ 82   Compose_Channel_NoFragment  <Compose>  runAfter: Set_DisableOtherConfigs(Succeeded)
+ 83   Compose_Channel_Path  <Compose>  runAfter: Compose_Channel_NoFragment(Succeeded)
+ 84   Compose_Channel_Host  <Compose>  runAfter: Compose_Channel_Path(Succeeded)
+ 85   Compose_SiteInput_NoFragment  <Compose>  runAfter: Compose_Channel_Host(Succeeded)
+ 86   Compose_SiteInput_Path  <Compose>  runAfter: Compose_SiteInput_NoFragment(Succeeded)
+ 87   Compose_Site_Host  <Compose>  runAfter: Compose_SiteInput_Path(Succeeded)
+ 88   Condition_Can_Validate  <If>  runAfter: Compose_Site_Host(Succeeded)
+ 89     Compose_Validation_Code  <Compose>  runAfter: -
+ 90     Set_Input_ErrorCode  <SetVariable> [varErrorCode]  runAfter: Compose_Validation_Code(Succeeded)
+ 91     Set_Input_ErrorMessage  <SetVariable> [varErrorMessage]  runAfter: Set_Input_ErrorCode(Succeeded)
+ 92     Condition_Input_Invalid  <If>  runAfter: Set_Input_ErrorMessage(Succeeded)
+ 93       Set_Input_Invalid  <SetVariable> [varIsValid]  runAfter: -
+ 94       Set_Input_FailedStage  <SetVariable> [varFailedStage]  runAfter: Set_Input_Invalid(Succeeded)
+ 95 Scope_02_ParseTeamsUrl  <Scope>  runAfter: Scope_01_ValidateInput(Succeeded)
+ 96   Set_Stage_ParseTeamsUrl  <SetVariable> [varStage]  runAfter: -
+ 97   Condition_Can_Parse_Teams  <If>  runAfter: Set_Stage_ParseTeamsUrl(Succeeded)
+ 98     Compose_Channel_Query_Part  <Compose>  runAfter: -
+ 99     Compose_Channel_Query_Normalized  <Compose>  runAfter: Compose_Channel_Query_Part(Succeeded)
+100     Parse_TeamId_From_Query  <Compose>  runAfter: Compose_Channel_Query_Normalized(Succeeded)
+101     Parse_TenantId_From_Query  <Compose>  runAfter: Parse_TeamId_From_Query(Succeeded)
+102     Compose_Channel_Path_Tail  <Compose>  runAfter: Parse_TenantId_From_Query(Succeeded)
+103     Parse_ChannelId_From_Path  <Compose>  runAfter: Compose_Channel_Path_Tail(Succeeded)
+104     Set_TeamId  <SetVariable> [varTeamId]  runAfter: Parse_ChannelId_From_Path(Succeeded)
+105     Set_ChannelId  <SetVariable> [varChannelId]  runAfter: Set_TeamId(Succeeded)
+106     Compose_TenantId_Checked  <Compose>  runAfter: Set_ChannelId(Succeeded)
+107     Set_TenantId  <SetVariable> [varTenantId]  runAfter: Compose_TenantId_Checked(Succeeded)
+108     Compose_Parse_Code  <Compose>  runAfter: Set_TenantId(Succeeded)
+109     Set_Parse_ErrorCode  <SetVariable> [varErrorCode]  runAfter: Compose_Parse_Code(Succeeded)
+110     Set_Parse_ErrorMessage  <SetVariable> [varErrorMessage]  runAfter: Set_Parse_ErrorCode(Succeeded)
+111     Condition_Parse_Invalid  <If>  runAfter: Set_Parse_ErrorMessage(Succeeded)
+112       Set_Parse_Invalid  <SetVariable> [varIsValid]  runAfter: -
+113       Set_Parse_FailedStage  <SetVariable> [varFailedStage]  runAfter: Set_Parse_Invalid(Succeeded)
+114 Scope_03_ParseSharePointUrl  <Scope>  runAfter: Scope_02_ParseTeamsUrl(Succeeded)
+115   Set_Stage_ParseSiteUrl  <SetVariable> [varStage]  runAfter: -
+116   Condition_Can_Parse_Site  <If>  runAfter: Set_Stage_ParseSiteUrl(Succeeded)
+117     Compose_Site_NoFragment  <Compose>  runAfter: -
+118     Compose_Site_NoQuery  <Compose>  runAfter: Compose_Site_NoFragment(Succeeded)
+119     Compose_Site_Lower  <Compose>  runAfter: Compose_Site_NoQuery(Succeeded)
+120     Compose_Site_CutIndex  <Compose>  runAfter: Compose_Site_Lower(Succeeded)
+121     Compose_Site_Cut  <Compose>  runAfter: Compose_Site_CutIndex(Succeeded)
+122     Compose_Site_CutLower  <Compose>  runAfter: Compose_Site_Cut(Succeeded)
+123     Compose_Site_AnchorIndex  <Compose>  runAfter: Compose_Site_CutLower(Succeeded)
+124     Compose_Site_Anchored  <Compose>  runAfter: Compose_Site_AnchorIndex(Succeeded)
+125     Compose_Site_SiteRoot  <Compose>  runAfter: Compose_Site_Anchored(Succeeded)
+126     Set_SiteUrl  <SetVariable> [varSiteUrl]  runAfter: Compose_Site_SiteRoot(Succeeded)
+127     Condition_Site_Url_Empty  <If>  runAfter: Set_SiteUrl(Succeeded)
+128       Set_Site_Invalid  <SetVariable> [varIsValid]  runAfter: -
+129       Set_Site_FailedStage  <SetVariable> [varFailedStage]  runAfter: Set_Site_Invalid(Succeeded)
+130       Set_Site_ErrorCode  <SetVariable> [varErrorCode]  runAfter: Set_Site_FailedStage(Succeeded)
+131       Set_Site_ErrorMessage  <SetVariable> [varErrorMessage]  runAfter: Set_Site_ErrorCode(Succeeded)
+132 Scope_03A_ResolveConfigSite  <Scope>  runAfter: Scope_03_ParseSharePointUrl(Succeeded)
+133   Set_Stage_ResolveConfigSite  <SetVariable> [varStage]  runAfter: -
+134   Condition_Can_Resolve_Config_Site  <If>  runAfter: Set_Stage_ResolveConfigSite(Succeeded)
+135     Compose_Config_Site_Resolved  <Compose>  runAfter: -
+136     Compose_Admin_Site_Source  <Compose>  runAfter: Compose_Config_Site_Resolved(Succeeded)
+137     Set_AdminSiteSource  <SetVariable> [varAdminSiteSource]  runAfter: Compose_Admin_Site_Source(Succeeded)
+138     Set_ConfigSiteUrl  <SetVariable> [varConfigSiteUrl]  runAfter: Set_AdminSiteSource(Succeeded)
+139     Condition_Config_Site_Empty  <If>  runAfter: Set_ConfigSiteUrl(Succeeded)
+140       Set_Resolve_Invalid  <SetVariable> [varIsValid]  runAfter: -
+141       Set_Resolve_FailedStage  <SetVariable> [varFailedStage]  runAfter: Set_Resolve_Invalid(Succeeded)
+142       Set_Resolve_ErrorCode  <SetVariable> [varErrorCode]  runAfter: Set_Resolve_FailedStage(Succeeded)
+143       Set_Resolve_ErrorMessage  <SetVariable> [varErrorMessage]  runAfter: Set_Resolve_ErrorCode(Succeeded)
+144 Scope_03B_EnsureConfigList  <Scope>  runAfter: Scope_03A_ResolveConfigSite(Succeeded)
+145   Set_Stage_EnsureList_Config  <SetVariable> [varStage]  runAfter: -
+146   Condition_Can_Ensure_Config  <If>  runAfter: Set_Stage_EnsureList_Config(Succeeded)
+147     Get_All_Lists_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+148     Set_Lists_Status_Config  <SetVariable> [varLastStatusCode]  runAfter: Get_All_Lists_Config(Succeeded/Failed)
+149     Set_Lists_Error_Body_Config  <SetVariable> [varLastErrorBody]  runAfter: Get_All_Lists_Config(Failed/TimedOut)
+150     Filter_Matching_Lists_Config  <Query>  runAfter: Set_Lists_Status_Config(Succeeded/Skipped),Set_Lists_Error_Body_Config(Succeeded/Skipped)
+151     Condition_List_Found_Config  <If>  runAfter: Filter_Matching_Lists_Config(Succeeded)
+152       Set_ListId_Existing_Config  <SetVariable> [varConfigListId]  runAfter: -
+        [else]
+153       Recheck_Lists_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+154       Filter_Recheck_Lists_Config  <Query>  runAfter: Recheck_Lists_Config(Succeeded)
+155       Condition_Recheck_Found_Config  <If>  runAfter: Filter_Recheck_Lists_Config(Succeeded)
+156         Set_ListId_Race_Config  <SetVariable> [varConfigListId]  runAfter: -
+          [else]
+157         Compose_Create_List_Body_Config  <Compose>  runAfter: -
+158         Create_List_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Create_List_Body_Config(Succeeded)
+159         Set_Create_Status_Config  <SetVariable> [varLastStatusCode]  runAfter: Create_List_Config(Succeeded/Failed)
+160         Get_Lists_After_Create_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Create_Status_Config(Succeeded)
+161         Filter_Lists_After_Create_Config  <Query>  runAfter: Get_Lists_After_Create_Config(Succeeded)
+162         Condition_Created_Config  <If>  runAfter: Filter_Lists_After_Create_Config(Succeeded)
+163           Set_ListId_After_Create_Config  <SetVariable> [varConfigListId]  runAfter: -
+164           Set_List_Created_Config  <SetVariable> [varListCreated]  runAfter: Set_ListId_After_Create_Config(Succeeded)
+            [else]
+165           Set_Create_List_Invalid_Config  <SetVariable> [varIsValid]  runAfter: -
+166           Set_Create_List_FailedStage_Config  <SetVariable> [varFailedStage]  runAfter: Set_Create_List_Invalid_Config(Succeeded)
+167           Set_Create_List_ErrorCode_Config  <SetVariable> [varErrorCode]  runAfter: Set_Create_List_FailedStage_Config(Succeeded)
+168           Set_Create_List_ErrorMessage_Config  <SetVariable> [varErrorMessage]  runAfter: Set_Create_List_ErrorCode_Config(Succeeded)
+169     Condition_Has_ListId_Config  <If>  runAfter: Condition_List_Found_Config(Succeeded)
+170       Get_List_Info_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+171       Set_List_EntityType_Config  <SetVariable> [varConfigListEntityType]  runAfter: Get_List_Info_Config(Succeeded)
+172       Get_Fields_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_List_EntityType_Config(Succeeded)
+173       Compose_Required_Fields_Config  <Compose>  runAfter: Get_Fields_Config(Succeeded)
+174       Foreach_Required_Field_Config  <Foreach> [in: @outputs('Compose_Required_Fields_Config')]  runAfter: Compose_Required_Fields_Config(Succeeded)
+175         Set_Current_Field_Name_Config  <SetVariable> [varCurrentFieldName]  runAfter: -
+176         Filter_Existing_Field_Config  <Query>  runAfter: Set_Current_Field_Name_Config(Succeeded)
+177         Condition_Field_Missing_Config  <If>  runAfter: Filter_Existing_Field_Config(Succeeded)
+178           Compose_Field_Body_Config  <Compose>  runAfter: -
+179           Create_Field_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Field_Body_Config(Succeeded)
+180           Compose_Rename_Body_Config  <Compose>  runAfter: Create_Field_Config(Succeeded)
+181           Rename_Field_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Rename_Body_Config(Succeeded)
+182           Append_Field_Error_Config  <AppendToArrayVariable> [varItemErrors]  runAfter: Create_Field_Config(Failed/TimedOut)
+183           Increment_Field_Error_Config  <IncrementVariable> [varErrorCount]  runAfter: Append_Field_Error_Config(Succeeded)
+184           Append_Rename_Error_Config  <AppendToArrayVariable> [varItemErrors]  runAfter: Rename_Field_Config(Failed/TimedOut)
+185       Get_List_Views_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Foreach_Required_Field_Config(Succeeded)
+186       Filter_Default_View_Config  <Query>  runAfter: Get_List_Views_Config(Succeeded)
+187       Set_Default_View_Id_Config  <SetVariable> [varDefaultViewId]  runAfter: Filter_Default_View_Config(Succeeded)
+188       Get_View_Fields_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Default_View_Id_Config(Succeeded)
+189       Set_View_Fields_Ok_Config  <SetVariable> [varViewFieldsOk]  runAfter: Get_View_Fields_Config(Succeeded)
+190       Set_View_Fields_Ng_Config  <SetVariable> [varViewFieldsOk]  runAfter: Get_View_Fields_Config(Failed/TimedOut)
+191       Filter_Missing_View_Fields_Config  <Query>  runAfter: Set_View_Fields_Ok_Config(Succeeded/Skipped),Set_View_Fields_Ng_Config(Succeeded/Skipped)
+192       Compose_View_Field_Body_Config  <Compose>  runAfter: Filter_Missing_View_Fields_Config(Succeeded)
+193       Foreach_View_Field_Config  <Foreach> [in: @body('Filter_Missing_View_Fields_Config')]  runAfter: Compose_View_Field_Body_Config(Succeeded)
+194         Set_Current_View_Field_Config  <SetVariable> [varCurrentFieldName]  runAfter: -
+195         Add_View_Field_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Current_View_Field_Config(Succeeded)
+196         Append_View_Field_Error_Config  <AppendToArrayVariable> [varItemErrors]  runAfter: Add_View_Field_Config(Failed/TimedOut)
+197 Scope_04_CheckTeamsAccess  <Scope>  runAfter: Scope_03B_EnsureConfigList(Succeeded)
+198   Set_Stage_CheckTeamsAccess  <SetVariable> [varStage]  runAfter: -
+199   Condition_Can_Check_Teams  <If>  runAfter: Set_Stage_CheckTeamsAccess(Succeeded)
+200     Get_Channel_Info  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+201     Set_Channel_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Get_Channel_Info(Succeeded/Failed)
+202     Set_Channel_Error_Body  <SetVariable> [varLastErrorBody]  runAfter: Get_Channel_Info(Failed/TimedOut)
+203     Condition_Channel_Info_Ok  <If>  runAfter: Set_Channel_Status_Code(Succeeded/Skipped),Set_Channel_Error_Body(Succeeded/Skipped)
+204       Set_Channel_Type  <SetVariable> [varChannelType]  runAfter: -
+205       Set_Channel_Display_Name  <SetVariable> [varChannelDisplayName]  runAfter: Set_Channel_Type(Succeeded)
+        [else]
+206       Set_Teams_Access_Invalid  <SetVariable> [varIsValid]  runAfter: -
+207       Set_Teams_Access_FailedStage  <SetVariable> [varFailedStage]  runAfter: Set_Teams_Access_Invalid(Succeeded)
+208       Set_Teams_Access_ErrorCode  <SetVariable> [varErrorCode]  runAfter: Set_Teams_Access_FailedStage(Succeeded)
+209       Set_Teams_Access_ErrorMessage  <SetVariable> [varErrorMessage]  runAfter: Set_Teams_Access_ErrorCode(Succeeded)
+210 Scope_05_EnsureMemberList  <Scope>  runAfter: Scope_04_CheckTeamsAccess(Succeeded)
+211   Set_Stage_EnsureList_Member  <SetVariable> [varStage]  runAfter: -
+212   Condition_Can_Ensure_Member  <If>  runAfter: Set_Stage_EnsureList_Member(Succeeded)
+213     Get_All_Lists_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+214     Set_Lists_Status_Member  <SetVariable> [varLastStatusCode]  runAfter: Get_All_Lists_Member(Succeeded/Failed)
+215     Set_Lists_Error_Body_Member  <SetVariable> [varLastErrorBody]  runAfter: Get_All_Lists_Member(Failed/TimedOut)
+216     Filter_Matching_Lists_Member  <Query>  runAfter: Set_Lists_Status_Member(Succeeded/Skipped),Set_Lists_Error_Body_Member(Succeeded/Skipped)
+217     Condition_List_Found_Member  <If>  runAfter: Filter_Matching_Lists_Member(Succeeded)
+218       Set_ListId_Existing_Member  <SetVariable> [varListId]  runAfter: -
+        [else]
+219       Recheck_Lists_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+220       Filter_Recheck_Lists_Member  <Query>  runAfter: Recheck_Lists_Member(Succeeded)
+221       Condition_Recheck_Found_Member  <If>  runAfter: Filter_Recheck_Lists_Member(Succeeded)
+222         Set_ListId_Race_Member  <SetVariable> [varListId]  runAfter: -
+          [else]
+223         Compose_Create_List_Body_Member  <Compose>  runAfter: -
+224         Create_List_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Create_List_Body_Member(Succeeded)
+225         Set_Create_Status_Member  <SetVariable> [varLastStatusCode]  runAfter: Create_List_Member(Succeeded/Failed)
+226         Get_Lists_After_Create_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Create_Status_Member(Succeeded)
+227         Filter_Lists_After_Create_Member  <Query>  runAfter: Get_Lists_After_Create_Member(Succeeded)
+228         Condition_Created_Member  <If>  runAfter: Filter_Lists_After_Create_Member(Succeeded)
+229           Set_ListId_After_Create_Member  <SetVariable> [varListId]  runAfter: -
+230           Set_List_Created_Member  <SetVariable> [varListCreated]  runAfter: Set_ListId_After_Create_Member(Succeeded)
+            [else]
+231           Set_Create_List_Invalid_Member  <SetVariable> [varIsValid]  runAfter: -
+232           Set_Create_List_FailedStage_Member  <SetVariable> [varFailedStage]  runAfter: Set_Create_List_Invalid_Member(Succeeded)
+233           Set_Create_List_ErrorCode_Member  <SetVariable> [varErrorCode]  runAfter: Set_Create_List_FailedStage_Member(Succeeded)
+234           Set_Create_List_ErrorMessage_Member  <SetVariable> [varErrorMessage]  runAfter: Set_Create_List_ErrorCode_Member(Succeeded)
+235     Condition_Has_ListId_Member  <If>  runAfter: Condition_List_Found_Member(Succeeded)
+236       Get_List_Info_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+237       Set_List_EntityType_Member  <SetVariable> [varListEntityType]  runAfter: Get_List_Info_Member(Succeeded)
+238       Get_Fields_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_List_EntityType_Member(Succeeded)
+239       Compose_Required_Fields_Member  <Compose>  runAfter: Get_Fields_Member(Succeeded)
+240       Foreach_Required_Field_Member  <Foreach> [in: @outputs('Compose_Required_Fields_Member')]  runAfter: Compose_Required_Fields_Member(Succeeded)
+241         Set_Current_Field_Name_Member  <SetVariable> [varCurrentFieldName]  runAfter: -
+242         Filter_Existing_Field_Member  <Query>  runAfter: Set_Current_Field_Name_Member(Succeeded)
+243         Condition_Field_Missing_Member  <If>  runAfter: Filter_Existing_Field_Member(Succeeded)
+244           Compose_Field_Body_Member  <Compose>  runAfter: -
+245           Create_Field_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Field_Body_Member(Succeeded)
+246           Compose_Rename_Body_Member  <Compose>  runAfter: Create_Field_Member(Succeeded)
+247           Rename_Field_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Rename_Body_Member(Succeeded)
+248           Append_Field_Error_Member  <AppendToArrayVariable> [varItemErrors]  runAfter: Create_Field_Member(Failed/TimedOut)
+249           Increment_Field_Error_Member  <IncrementVariable> [varErrorCount]  runAfter: Append_Field_Error_Member(Succeeded)
+250           Append_Rename_Error_Member  <AppendToArrayVariable> [varItemErrors]  runAfter: Rename_Field_Member(Failed/TimedOut)
+251       Get_List_Views_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Foreach_Required_Field_Member(Succeeded)
+252       Filter_Default_View_Member  <Query>  runAfter: Get_List_Views_Member(Succeeded)
+253       Set_Default_View_Id_Member  <SetVariable> [varDefaultViewId]  runAfter: Filter_Default_View_Member(Succeeded)
+254       Get_View_Fields_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Default_View_Id_Member(Succeeded)
+255       Set_View_Fields_Ok_Member  <SetVariable> [varViewFieldsOk]  runAfter: Get_View_Fields_Member(Succeeded)
+256       Set_View_Fields_Ng_Member  <SetVariable> [varViewFieldsOk]  runAfter: Get_View_Fields_Member(Failed/TimedOut)
+257       Filter_Missing_View_Fields_Member  <Query>  runAfter: Set_View_Fields_Ok_Member(Succeeded/Skipped),Set_View_Fields_Ng_Member(Succeeded/Skipped)
+258       Compose_View_Field_Body_Member  <Compose>  runAfter: Filter_Missing_View_Fields_Member(Succeeded)
+259       Foreach_View_Field_Member  <Foreach> [in: @body('Filter_Missing_View_Fields_Member')]  runAfter: Compose_View_Field_Body_Member(Succeeded)
+260         Set_Current_View_Field_Member  <SetVariable> [varCurrentFieldName]  runAfter: -
+261         Add_View_Field_Member  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Current_View_Field_Member(Succeeded)
+262         Append_View_Field_Error_Member  <AppendToArrayVariable> [varItemErrors]  runAfter: Add_View_Field_Member(Failed/TimedOut)
+263 Scope_06_GetMembers  <Scope>  runAfter: Scope_05_EnsureMemberList(Succeeded)
+264   Set_Stage_GetMembers  <SetVariable> [varStage]  runAfter: -
+265   Condition_Can_Get_Members  <If>  runAfter: Set_Stage_GetMembers(Succeeded)
+266     Teams_List_Channel_Members  <OpenApiConnection> [shared_teams/ListMembers]  runAfter: -
+267     Set_Connector_Source  <SetVariable> [varMemberSource]  runAfter: Teams_List_Channel_Members(Succeeded)
+268     Foreach_Append_Connector_Member  <Foreach> [in: @coalesce(body('Teams_List_Channel_Members')?['value'], json('[]'))]  runAfter: Set_Connector_Source(Succeeded)
+269       Append_Raw_Connector_Member  <AppendToArrayVariable> [varMembersRaw]  runAfter: -
+270     Set_Graph_Members_Source  <SetVariable> [varMemberSource]  runAfter: Teams_List_Channel_Members(Failed/Skipped/TimedOut)
+271     Set_Graph_Members_NextLink_First  <SetVariable> [varMembersNextLink]  runAfter: Set_Graph_Members_Source(Succeeded)
+272     Do_Until_Graph_Members_Paging  <Until> [until: @empty(variables('varMembersNextLink'))]  runAfter: Set_Graph_Members_NextLink_First(Succeeded)
+273       Get_Graph_Members_Page  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+274       Set_Graph_Members_Status  <SetVariable> [varLastStatusCode]  runAfter: Get_Graph_Members_Page(Succeeded/Failed)
+275       Foreach_Append_Graph_Members  <Foreach> [in: @coalesce(body('Get_Graph_Members_Page')?['value'], json('[]'))]  runAfter: Get_Graph_Members_Page(Succeeded)
+276         Append_Raw_Graph_Members  <AppendToArrayVariable> [varMembersRaw]  runAfter: -
+277       Set_Graph_Members_NextLink  <SetVariable> [varMembersNextLink]  runAfter: Foreach_Append_Graph_Members(Succeeded)
+278     Condition_Shared_Channel  <If>  runAfter: Foreach_Append_Connector_Member(Succeeded/Skipped),Do_Until_Graph_Members_Paging(Succeeded/Skipped)
+279       Set_AllMembers_Fetched  <SetVariable> [varAllMembersFetched]  runAfter: -
+280       Set_Graph_AllMembers_NextLink_First  <SetVariable> [varMembersNextLink]  runAfter: Set_AllMembers_Fetched(Succeeded)
+281       Do_Until_Graph_AllMembers_Paging  <Until> [until: @empty(variables('varMembersNextLink'))]  runAfter: Set_Graph_AllMembers_NextLink_First(Succeeded)
+282         Get_Graph_AllMembers_Page  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+283         Set_Graph_AllMembers_Status  <SetVariable> [varLastStatusCode]  runAfter: Get_Graph_AllMembers_Page(Succeeded/Failed)
+284         Foreach_Append_Graph_AllMembers  <Foreach> [in: @coalesce(body('Get_Graph_AllMembers_Page')?['value'], json('[]'))]  runAfter: Get_Graph_AllMembers_Page(Succeeded)
+285           Append_Raw_Graph_AllMembers  <AppendToArrayVariable> [varMembersRaw]  runAfter: -
+286         Set_Graph_AllMembers_NextLink  <SetVariable> [varMembersNextLink]  runAfter: Foreach_Append_Graph_AllMembers(Succeeded)
+287     Set_Members_Fetch_Complete  <SetVariable> [varMembersFetchComplete]  runAfter: Condition_Shared_Channel(Succeeded)
+288 Scope_07_NormalizeMembers  <Scope>  runAfter: Scope_06_GetMembers(Succeeded)
+289   Set_Stage_Normalize  <SetVariable> [varStage]  runAfter: -
+290   Condition_Can_Normalize  <If>  runAfter: Set_Stage_Normalize(Succeeded)
+291     Foreach_Raw_Member  <Foreach> [in: @variables('varMembersRaw')]  runAfter: -
+292       Compose_Raw_UserId  <Compose>  runAfter: -
+293       Compose_Raw_MembershipId  <Compose>  runAfter: Compose_Raw_UserId(Succeeded)
+294       Set_Current_Sync_Key  <SetVariable> [varCurrentSyncKey]  runAfter: Compose_Raw_MembershipId(Succeeded)
+295       Filter_Seen_Member_Key  <Query>  runAfter: Set_Current_Sync_Key(Succeeded)
+296       Condition_New_Member  <If>  runAfter: Filter_Seen_Member_Key(Succeeded)
+297         Compose_Member_Name_Raw  <Compose>  runAfter: -
+298         Compose_Member_Name_NoMarks  <Compose>  runAfter: Compose_Member_Name_Raw(Succeeded)
+299         Compose_Member_Name_NoParen  <Compose>  runAfter: Compose_Member_Name_NoMarks(Succeeded)
+300         Compose_Member_Full_Name  <Compose>  runAfter: Compose_Member_Name_NoParen(Succeeded)
+301         Compose_Member_Last_Name  <Compose>  runAfter: Compose_Member_Full_Name(Succeeded)
+302         Compose_Member_First_Name_Pos  <Compose>  runAfter: Compose_Member_Last_Name(Succeeded)
+303         Compose_Member_First_Name  <Compose>  runAfter: Compose_Member_First_Name_Pos(Succeeded)
+304         Compose_Member_UserId  <Compose>  runAfter: Compose_Member_First_Name(Succeeded)
+305         Compose_Member_MembershipId  <Compose>  runAfter: Compose_Member_UserId(Succeeded)
+306         Compose_Member_TenantId  <Compose>  runAfter: Compose_Member_MembershipId(Succeeded)
+307         Compose_Member_Roles  <Compose>  runAfter: Compose_Member_TenantId(Succeeded)
+308         Compose_Member_Kind  <Compose>  runAfter: Compose_Member_Roles(Succeeded)
+309         Compose_Member_IsExternal  <Compose>  runAfter: Compose_Member_Kind(Succeeded)
+310         Compose_Member_Email_Raw  <Compose>  runAfter: Compose_Member_IsExternal(Succeeded)
+311         Set_Resolved_Email_First  <SetVariable> [varResolvedEmail]  runAfter: Compose_Member_Email_Raw(Succeeded)
+312         Condition_Email_Empty  <If>  runAfter: Set_Resolved_Email_First(Succeeded)
+313           Get_User_Profile  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+314           Set_Resolved_Email_From_Graph  <SetVariable> [varResolvedEmail]  runAfter: Get_User_Profile(Succeeded)
+315           Increment_Email_Lookup_Failure  <IncrementVariable> [varEmailLookupFailures]  runAfter: Get_User_Profile(Failed/TimedOut)
+316         Append_Member_Key  <AppendToArrayVariable> [varMemberKeys]  runAfter: Condition_Email_Empty(Succeeded)
+317         Compose_Normalized_Member  <Compose>  runAfter: Append_Member_Key(Succeeded)
+318         Append_Normalized_Member  <AppendToArrayVariable> [varMembersNormalized]  runAfter: Compose_Normalized_Member(Succeeded)
+319     Set_Member_Count  <SetVariable> [varMemberCount]  runAfter: Foreach_Raw_Member(Succeeded)
+320 Scope_08_GetExistingItems  <Scope>  runAfter: Scope_07_NormalizeMembers(Succeeded)
+321   Set_Stage_GetExisting  <SetVariable> [varStage]  runAfter: -
+322   Condition_Can_Get_Existing  <If>  runAfter: Set_Stage_GetExisting(Succeeded)
+323     Compose_Existing_First_Uri  <Compose>  runAfter: -
+324     Set_Existing_Next_Uri_First  <SetVariable> [varExistingNextUri]  runAfter: Compose_Existing_First_Uri(Succeeded)
+325     Do_Until_Existing_Paging  <Until> [until: @empty(variables('varExistingNextUri'))]  runAfter: Set_Existing_Next_Uri_First(Succeeded)
+326       Get_Existing_Items_Page  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+327       Set_Existing_Page_Status  <SetVariable> [varLastStatusCode]  runAfter: Get_Existing_Items_Page(Succeeded/Failed)
+328       Foreach_Append_Existing_Item  <Foreach> [in: @coalesce(body('Get_Existing_Items_Page')?['value'], json('[]'))]  runAfter: Get_Existing_Items_Page(Succeeded)
+329         Append_Existing_Item  <AppendToArrayVariable> [varExistingItems]  runAfter: -
+330       Compose_Existing_Next_Raw  <Compose>  runAfter: Foreach_Append_Existing_Item(Succeeded)
+331       Set_Existing_Next_Uri  <SetVariable> [varExistingNextUri]  runAfter: Compose_Existing_Next_Raw(Succeeded)
+332     Set_Existing_Fetch_Complete  <SetVariable> [varExistingFetchComplete]  runAfter: Do_Until_Existing_Paging(Succeeded)
+333     Filter_Target_Existing_Items  <Query>  runAfter: Set_Existing_Fetch_Complete(Succeeded)
+334 Scope_09_SyncItems  <Scope>  runAfter: Scope_08_GetExistingItems(Succeeded)
+335   Set_Stage_SyncItems  <SetVariable> [varStage]  runAfter: -
+336   Condition_Can_Sync  <If>  runAfter: Set_Stage_SyncItems(Succeeded)
+337     Foreach_Member  <Foreach> [in: @variables('varMembersNormalized')]  runAfter: -
+338       Set_Current_Member_Key  <SetVariable> [varCurrentSyncKey]  runAfter: -
+339       Filter_Match_Existing  <Query>  runAfter: Set_Current_Member_Key(Succeeded)
+340       Condition_No_Match  <If>  runAfter: Filter_Match_Existing(Succeeded)
+341         Compose_Create_Item_Body  <Compose>  runAfter: -
+342         Create_Member_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Create_Item_Body(Succeeded)
+343         Increment_Created_Count  <IncrementVariable> [varCreatedCount]  runAfter: Create_Member_Item(Succeeded)
+344         Append_Create_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: Create_Member_Item(Failed/TimedOut)
+345         Increment_Error_Count_Create  <IncrementVariable> [varErrorCount]  runAfter: Append_Create_Error(Succeeded)
+346       Condition_Single_Match  <If>  runAfter: Condition_No_Match(Succeeded/Skipped)
+347         Compose_Needs_Update  <Compose>  runAfter: -
+348         Condition_Needs_Update  <If>  runAfter: Compose_Needs_Update(Succeeded)
+349           Compose_Update_Item_Body  <Compose>  runAfter: -
+350           Compose_Existing_Item_Id  <Compose>  runAfter: Compose_Update_Item_Body(Succeeded)
+351           Update_Member_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Existing_Item_Id(Succeeded)
+352           Increment_Updated_Count  <IncrementVariable> [varUpdatedCount]  runAfter: Update_Member_Item(Succeeded)
+353           Append_Update_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: Update_Member_Item(Failed/TimedOut)
+354           Increment_Error_Count_Update  <IncrementVariable> [varErrorCount]  runAfter: Append_Update_Error(Succeeded)
+            [else]
+355           Increment_Unchanged_Count  <IncrementVariable> [varUnchangedCount]  runAfter: -
+356       Condition_Duplicate_Match  <If>  runAfter: Condition_Single_Match(Succeeded/Skipped)
+357         Append_Duplicate_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: -
+358         Increment_Error_Count_Duplicate  <IncrementVariable> [varErrorCount]  runAfter: Append_Duplicate_Error(Succeeded)
+359 Scope_10_DeactivateLeft  <Scope>  runAfter: Scope_09_SyncItems(Succeeded)
+360   Set_Stage_Deactivate  <SetVariable> [varStage]  runAfter: -
+361   Compose_Can_Deactivate  <Compose>  runAfter: Set_Stage_Deactivate(Succeeded)
+362   Condition_Can_Deactivate  <If>  runAfter: Compose_Can_Deactivate(Succeeded)
+363     Filter_Left_Members  <Query>  runAfter: -
+364     Foreach_Left_Member  <Foreach> [in: @body('Filter_Left_Members')]  runAfter: Filter_Left_Members(Succeeded)
+365       Compose_Left_Item_Id  <Compose>  runAfter: -
+366       Compose_Deactivate_Body  <Compose>  runAfter: Compose_Left_Item_Id(Succeeded)
+367       Update_Left_Member_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Deactivate_Body(Succeeded)
+368       Increment_Deactivated_Count  <IncrementVariable> [varDeactivatedCount]  runAfter: Update_Left_Member_Item(Succeeded)
+369       Append_Deactivate_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: Update_Left_Member_Item(Failed/TimedOut)
+370       Increment_Error_Count_Deactivate  <IncrementVariable> [varErrorCount]  runAfter: Append_Deactivate_Error(Succeeded)
+371 Scope_11_SaveConfig  <Scope>  runAfter: Scope_10_DeactivateLeft(Succeeded)
+372   Set_Stage_SaveConfig  <SetVariable> [varStage]  runAfter: -
+373   Compose_All_Succeeded  <Compose>  runAfter: Set_Stage_SaveConfig(Succeeded)
+374   Condition_All_Succeeded  <If>  runAfter: Compose_All_Succeeded(Succeeded)
+375     Compose_Config_Key  <Compose>  runAfter: -
+376     Set_Config_Key  <SetVariable> [varConfigKey]  runAfter: Compose_Config_Key(Succeeded)
+377     Compose_Config_Title  <Compose>  runAfter: Set_Config_Key(Succeeded)
+378     Compose_Sync_Counts  <Compose>  runAfter: Compose_Config_Title(Succeeded)
+379     Compose_Config_Sync_Result  <Compose>  runAfter: Compose_Sync_Counts(Succeeded)
+380     Get_Config_Items  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Config_Sync_Result(Succeeded)
+381     Filter_Config_Match  <Query>  runAfter: Get_Config_Items(Succeeded)
+382     Condition_Config_New  <If>  runAfter: Filter_Config_Match(Succeeded)
+383       Compose_Create_Config_Body  <Compose>  runAfter: -
+384       Create_Config_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Create_Config_Body(Succeeded)
+385       Set_Config_Saved_Created  <SetVariable> [varConfigSaved]  runAfter: Create_Config_Item(Succeeded)
+386       Append_Config_Create_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: Create_Config_Item(Failed/TimedOut)
+387       Increment_Error_Config_Create  <IncrementVariable> [varErrorCount]  runAfter: Append_Config_Create_Error(Succeeded)
+388     Condition_Config_Single  <If>  runAfter: Condition_Config_New(Succeeded/Skipped)
+389       Compose_Config_Item_Id  <Compose>  runAfter: -
+390       Compose_Config_Next_Version  <Compose>  runAfter: Compose_Config_Item_Id(Succeeded)
+391       Compose_Update_Config_Body  <Compose>  runAfter: Compose_Config_Next_Version(Succeeded)
+392       Update_Config_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Update_Config_Body(Succeeded)
+393       Set_Config_Saved_Updated  <SetVariable> [varConfigSaved]  runAfter: Update_Config_Item(Succeeded)
+394       Append_Config_Update_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: Update_Config_Item(Failed/TimedOut)
+395       Increment_Error_Config_Update  <IncrementVariable> [varErrorCount]  runAfter: Append_Config_Update_Error(Succeeded)
+396     Condition_Config_Duplicate  <If>  runAfter: Condition_Config_Single(Succeeded/Skipped)
+397       Append_Config_Duplicate_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: -
+398       Increment_Error_Config_Duplicate  <IncrementVariable> [varErrorCount]  runAfter: Append_Config_Duplicate_Error(Succeeded)
+399     Condition_Disable_Others  <If>  runAfter: Condition_Config_Duplicate(Succeeded/Skipped)
+400       Filter_Other_Configs  <Query>  runAfter: -
+401       Foreach_Other_Config  <Foreach> [in: @body('Filter_Other_Configs')]  runAfter: Filter_Other_Configs(Succeeded)
+402         Compose_Other_Config_Id  <Compose>  runAfter: -
+403         Compose_Disable_Config_Body  <Compose>  runAfter: Compose_Other_Config_Id(Succeeded)
+404         Disable_Other_Config  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Disable_Config_Body(Succeeded)
+405         Append_Disable_Config_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: Disable_Other_Config(Failed/TimedOut)
+406 Scope_ErrorHandler  <Scope>  runAfter: Scope_11_SaveConfig(Failed/Skipped/TimedOut)
+407   Set_Handler_Invalid  <SetVariable> [varIsValid]  runAfter: -
+408   Compose_Handler_Error_Code  <Compose>  runAfter: Set_Handler_Invalid(Succeeded)
+409   Compose_Handler_Error_Message  <Compose>  runAfter: Compose_Handler_Error_Code(Succeeded)
+410   Set_Handler_ErrorCode  <SetVariable> [varErrorCode]  runAfter: Compose_Handler_Error_Message(Succeeded)
+411   Set_Handler_ErrorMessage  <SetVariable> [varErrorMessage]  runAfter: Set_Handler_ErrorCode(Succeeded)
+412   Compose_Handler_FailedStage  <Compose>  runAfter: Set_Handler_ErrorMessage(Succeeded)
+413   Set_Handler_FailedStage  <SetVariable> [varFailedStage]  runAfter: Compose_Handler_FailedStage(Succeeded)
+414 Scope_Finalize  <Scope>  runAfter: Scope_ErrorHandler(Succeeded/Failed/Skipped/TimedOut)
+415   Compose_Next_Action  <Compose>  runAfter: -
+416   Compose_Result_Summary  <Compose>  runAfter: Compose_Next_Action(Succeeded)
+--- total actions: 416 ---

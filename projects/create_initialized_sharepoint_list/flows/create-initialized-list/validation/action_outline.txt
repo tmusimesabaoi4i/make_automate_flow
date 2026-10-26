@@ -1,0 +1,185 @@
+=== v4 アクションアウトライン（実行順・ネスト・通し番号=定義上の全アクション） ===
+trigger: manual (Request/Button) inputs: SharePointUrl*/ListName*/ListDescription  ※*=必須
+  1 Initialize_Input_SharePointUrl  <InitializeVariable> [varInputSharePointUrl:string]  runAfter: -
+  2 Initialize_SiteUrl  <InitializeVariable> [varSiteUrl:string]  runAfter: Initialize_Input_SharePointUrl(Succeeded)
+  3 Initialize_SiteId  <InitializeVariable> [varSiteId:string]  runAfter: Initialize_SiteUrl(Succeeded)
+  4 Initialize_SiteTitle  <InitializeVariable> [varSiteTitle:string]  runAfter: Initialize_SiteId(Succeeded)
+  5 Initialize_VerifiedUrl  <InitializeVariable> [varVerifiedUrl:string]  runAfter: Initialize_SiteTitle(Succeeded)
+  6 Initialize_ListName  <InitializeVariable> [varListName:string]  runAfter: Initialize_VerifiedUrl(Succeeded)
+  7 Initialize_ListDescription  <InitializeVariable> [varListDescription:string]  runAfter: Initialize_ListName(Succeeded)
+  8 Initialize_ExistingLists  <InitializeVariable> [varExistingLists:array]  runAfter: Initialize_ListDescription(Succeeded)
+  9 Initialize_MatchedLists  <InitializeVariable> [varMatchedLists:array]  runAfter: Initialize_ExistingLists(Succeeded)
+ 10 Initialize_ListExists  <InitializeVariable> [varListExists:boolean]  runAfter: Initialize_MatchedLists(Succeeded)
+ 11 Initialize_CreatedListId  <InitializeVariable> [varCreatedListId:string]  runAfter: Initialize_ListExists(Succeeded)
+ 12 Initialize_CreatedListTitle  <InitializeVariable> [varCreatedListTitle:string]  runAfter: Initialize_CreatedListId(Succeeded)
+ 13 Initialize_CreatedListRootFolder  <InitializeVariable> [varCreatedListRootFolder:string]  runAfter: Initialize_CreatedListTitle(Succeeded)
+ 14 Initialize_CreatedInThisRun  <InitializeVariable> [varCreatedInThisRun:boolean]  runAfter: Initialize_CreatedListRootFolder(Succeeded)
+ 15 Initialize_DeletedFields  <InitializeVariable> [varDeletedFields:array]  runAfter: Initialize_CreatedInThisRun(Succeeded)
+ 16 Initialize_SkippedFields  <InitializeVariable> [varSkippedFields:array]  runAfter: Initialize_DeletedFields(Succeeded)
+ 17 Initialize_FieldDeleteErrors  <InitializeVariable> [varFieldDeleteErrors:array]  runAfter: Initialize_SkippedFields(Succeeded)
+ 18 Initialize_DefaultViewId  <InitializeVariable> [varDefaultViewId:string]  runAfter: Initialize_FieldDeleteErrors(Succeeded)
+ 19 Initialize_DefaultViewTitle  <InitializeVariable> [varDefaultViewTitle:string]  runAfter: Initialize_DefaultViewId(Succeeded)
+ 20 Initialize_FinalViewFields  <InitializeVariable> [varFinalViewFields:array]  runAfter: Initialize_DefaultViewTitle(Succeeded)
+ 21 Initialize_Status  <InitializeVariable> [varStatus:string]  runAfter: Initialize_FinalViewFields(Succeeded)
+ 22 Initialize_ResultObject  <InitializeVariable> [varResultObject:object]  runAfter: Initialize_Status(Succeeded)
+ 23 Initialize_ResultJson  <InitializeVariable> [varResultJson:string]  runAfter: Initialize_ResultObject(Succeeded)
+ 24 Initialize_ErrorMessages  <InitializeVariable> [varErrorMessages:array]  runAfter: Initialize_ResultJson(Succeeded)
+ 25 Initialize_IsValid  <InitializeVariable> [varIsValid:boolean]  runAfter: Initialize_ErrorMessages(Succeeded)
+ 26 Initialize_Stage  <InitializeVariable> [varStage:string]  runAfter: Initialize_IsValid(Succeeded)
+ 27 Initialize_ErrorCode  <InitializeVariable> [varErrorCode:string]  runAfter: Initialize_Stage(Succeeded)
+ 28 Initialize_ErrorMessage  <InitializeVariable> [varErrorMessage:string]  runAfter: Initialize_ErrorCode(Succeeded)
+ 29 Initialize_LastStatusCode  <InitializeVariable> [varLastStatusCode:string]  runAfter: Initialize_ErrorMessage(Succeeded)
+ 30 Initialize_RollbackPerformed  <InitializeVariable> [varRollbackPerformed:boolean]  runAfter: Initialize_LastStatusCode(Succeeded)
+ 31 Initialize_ItemCount  <InitializeVariable> [varItemCount:integer]  runAfter: Initialize_RollbackPerformed(Succeeded)
+ 32 Initialize_SampleRawCreated  <InitializeVariable> [varSampleRawCreated:boolean]  runAfter: Initialize_ItemCount(Succeeded)
+ 33 Initialize_ExistingListInfo  <InitializeVariable> [varExistingListInfo:object]  runAfter: Initialize_SampleRawCreated(Succeeded)
+ 34 Scope_Parse_And_Validate_Input  <Scope>  runAfter: Initialize_ExistingListInfo(Succeeded)
+ 35   Set_Stage_Parse_Input  <SetVariable> [varStage]  runAfter: -
+ 36   Compose_Url_Without_Fragment  <Compose>  runAfter: Set_Stage_Parse_Input(Succeeded)
+ 37   Compose_Url_Normalized_Layouts  <Compose>  runAfter: Compose_Url_Without_Fragment(Succeeded)
+ 38   Compose_Url_Before_Layouts  <Compose>  runAfter: Compose_Url_Normalized_Layouts(Succeeded)
+ 39   Parse_SiteUrl  <Compose>  runAfter: Compose_Url_Before_Layouts(Succeeded)
+ 40   Compose_Site_Host  <Compose>  runAfter: Parse_SiteUrl(Succeeded)
+ 41   Compose_ListName_Sanitized  <Compose>  runAfter: Compose_Site_Host(Succeeded)
+ 42   Validate_SiteUrl  <Compose>  runAfter: Compose_ListName_Sanitized(Succeeded)
+ 43   Validate_ListName  <Compose>  runAfter: Validate_SiteUrl(Succeeded)
+ 44   Compose_Input_Validation_Code  <Compose>  runAfter: Validate_ListName(Succeeded)
+ 45   Set_SiteUrl  <SetVariable> [varSiteUrl]  runAfter: Compose_Input_Validation_Code(Succeeded)
+ 46   Set_ErrorCode_From_Input_Validation  <SetVariable> [varErrorCode]  runAfter: Set_SiteUrl(Succeeded)
+ 47   Set_IsValid_From_Input_Validation  <SetVariable> [varIsValid]  runAfter: Set_ErrorCode_From_Input_Validation(Succeeded)
+ 48   Set_ErrorMessage_From_Input_Validation  <SetVariable> [varErrorMessage]  runAfter: Set_IsValid_From_Input_Validation(Succeeded)
+ 49   Condition_Has_Input_Error  <If>  runAfter: Set_ErrorMessage_From_Input_Validation(Succeeded)
+ 50     Append_Input_Error_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: -
+ 51 Scope_Verify_SharePoint_Site  <Scope>  runAfter: Scope_Parse_And_Validate_Input(Succeeded)
+ 52   Set_Stage_Verify_Site  <SetVariable> [varStage]  runAfter: -
+ 53   Condition_Input_Is_Valid  <If>  runAfter: Set_Stage_Verify_Site(Succeeded)
+ 54     Verify_SharePoint_Web  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+ 55     Set_Site_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Verify_SharePoint_Web(Succeeded/Failed)
+ 56     Store_Site_Id  <SetVariable> [varSiteId]  runAfter: Verify_SharePoint_Web(Succeeded)
+ 57     Store_Site_Title  <SetVariable> [varSiteTitle]  runAfter: Store_Site_Id(Succeeded)
+ 58     Store_Verified_Url  <SetVariable> [varVerifiedUrl]  runAfter: Store_Site_Title(Succeeded)
+ 59 Scope_Check_Existing_List  <Scope>  runAfter: Scope_Verify_SharePoint_Site(Succeeded)
+ 60   Set_Stage_Check_Existing  <SetVariable> [varStage]  runAfter: -
+ 61   Condition_Check_Guard  <If>  runAfter: Set_Stage_Check_Existing(Succeeded)
+ 62     Get_All_Lists  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+ 63     Store_Existing_Lists  <SetVariable> [varExistingLists]  runAfter: Get_All_Lists(Succeeded)
+ 64     Filter_Matching_List_Names  <Query>  runAfter: Store_Existing_Lists(Succeeded)
+ 65     Store_Matched_Lists  <SetVariable> [varMatchedLists]  runAfter: Filter_Matching_List_Names(Succeeded)
+ 66     Determine_List_Existence  <SetVariable> [varListExists]  runAfter: Store_Matched_Lists(Succeeded)
+ 67 Scope_Create_List  <Scope>  runAfter: Scope_Check_Existing_List(Succeeded)
+ 68   Set_Stage_Create_List  <SetVariable> [varStage]  runAfter: -
+ 69   Condition_List_Not_Exists  <If>  runAfter: Set_Stage_Create_List(Succeeded)
+ 70     Compose_Create_List_Body  <Compose>  runAfter: -
+ 71     Create_Generic_List  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Create_List_Body(Succeeded)
+ 72     Set_Create_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Create_Generic_List(Succeeded/Failed)
+ 73     Condition_Create_Succeeded  <If>  runAfter: Set_Create_Status_Code(Succeeded)
+ 74       Store_Created_List_Id  <SetVariable> [varCreatedListId]  runAfter: -
+ 75       Store_Created_List_Title  <SetVariable> [varCreatedListTitle]  runAfter: Store_Created_List_Id(Succeeded)
+ 76       Set_Created_In_This_Run  <SetVariable> [varCreatedInThisRun]  runAfter: Store_Created_List_Title(Succeeded)
+ 77       Get_Created_List_By_Id  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Created_In_This_Run(Succeeded)
+ 78       Store_Created_List_RootFolder  <SetVariable> [varCreatedListRootFolder]  runAfter: Get_Created_List_By_Id(Succeeded)
+ 79       Set_Status_Created_Pending  <SetVariable> [varStatus]  runAfter: Store_Created_List_RootFolder(Succeeded)
+        [else]
+ 80       Set_Status_Conflict  <SetVariable> [varStatus]  runAfter: -
+ 81       Set_ErrorCode_Conflict  <SetVariable> [varErrorCode]  runAfter: Set_Status_Conflict(Succeeded)
+ 82       Set_ErrorMessage_Conflict  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_Conflict(Succeeded)
+ 83       Set_IsValid_Conflict  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_Conflict(Succeeded)
+ 84       Append_Conflict_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_Conflict(Succeeded)
+ 85 Scope_Initialize_List  <Scope>  runAfter: Scope_Create_List(Succeeded)
+ 86   Set_Stage_Initialize_List  <SetVariable> [varStage]  runAfter: -
+ 87   Condition_Initialize_Guard  <If>  runAfter: Set_Stage_Initialize_List(Succeeded)
+ 88     Compose_Disable_Attachments_Body  <Compose>  runAfter: -
+ 89     Compose_Title_Not_Required_Body  <Compose>  runAfter: Compose_Disable_Attachments_Body(Succeeded)
+ 90     Verify_Empty_List  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Title_Not_Required_Body(Succeeded)
+ 91     Store_Item_Count  <SetVariable> [varItemCount]  runAfter: Verify_Empty_List(Succeeded)
+ 92     Condition_List_Is_Empty  <If>  runAfter: Store_Item_Count(Succeeded)
+ 93       Disable_Attachments  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+ 94       Deactivate_Title_Required  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Disable_Attachments(Succeeded)
+        [else]
+ 95       Set_ErrorCode_List_Not_Empty  <SetVariable> [varErrorCode]  runAfter: -
+ 96       Set_ErrorMessage_List_Not_Empty  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_List_Not_Empty(Succeeded)
+ 97       Set_IsValid_List_Not_Empty  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_List_Not_Empty(Succeeded)
+ 98       Append_List_Not_Empty_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_List_Not_Empty(Succeeded)
+ 99 Scope_Delete_Deletable_Fields  <Scope>  runAfter: Scope_Initialize_List(Succeeded)
+100   Set_Stage_Delete_Fields  <SetVariable> [varStage]  runAfter: -
+101   Condition_Delete_Fields_Guard  <If>  runAfter: Set_Stage_Delete_Fields(Succeeded)
+102     Get_All_List_Fields  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+103     Filter_Deletable_Fields  <Query>  runAfter: Get_All_List_Fields(Succeeded)
+104     Filter_System_Fields  <Query>  runAfter: Filter_Deletable_Fields(Succeeded)
+105     Apply_to_each_SystemField  <Foreach> [in: @body('Filter_System_Fields')]  runAfter: Filter_System_Fields(Succeeded)
+106       Append_Skipped_System_Field  <AppendToArrayVariable> [varSkippedFields]  runAfter: -
+107     Apply_to_each_DeleteField  <Foreach> [in: @body('Filter_Deletable_Fields')]  runAfter: Apply_to_each_SystemField(Succeeded)
+108       Delete_Deletable_Field  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+109       Append_Deleted_Field  <AppendToArrayVariable> [varDeletedFields]  runAfter: Delete_Deletable_Field(Succeeded)
+110       Append_Field_Delete_Error  <AppendToArrayVariable> [varFieldDeleteErrors]  runAfter: Delete_Deletable_Field(Failed/TimedOut)
+111 Scope_Create_SampleRaw_Field  <Scope>  runAfter: Scope_Delete_Deletable_Fields(Succeeded)
+112   Set_Stage_Create_SampleRaw  <SetVariable> [varStage]  runAfter: -
+113   Condition_Create_SampleRaw_Guard  <If>  runAfter: Set_Stage_Create_SampleRaw(Succeeded)
+114     Compose_SampleRaw_Field_Body  <Compose>  runAfter: -
+115     Create_SampleRaw_Field  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_SampleRaw_Field_Body(Succeeded)
+116     Verify_SampleRaw_Field  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Create_SampleRaw_Field(Succeeded)
+117     Compose_SampleRaw_Verification  <Compose>  runAfter: Verify_SampleRaw_Field(Succeeded)
+118     Condition_SampleRaw_Valid  <If>  runAfter: Compose_SampleRaw_Verification(Succeeded)
+119       Set_SampleRaw_Created  <SetVariable> [varSampleRawCreated]  runAfter: -
+        [else]
+120       Set_ErrorCode_SampleRaw_Invalid  <SetVariable> [varErrorCode]  runAfter: -
+121       Set_ErrorMessage_SampleRaw_Invalid  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_SampleRaw_Invalid(Succeeded)
+122       Set_IsValid_SampleRaw_Invalid  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_SampleRaw_Invalid(Succeeded)
+123       Append_SampleRaw_Invalid_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_SampleRaw_Invalid(Succeeded)
+124 Scope_Configure_Default_View  <Scope>  runAfter: Scope_Create_SampleRaw_Field(Succeeded)
+125   Set_Stage_Configure_View  <SetVariable> [varStage]  runAfter: -
+126   Condition_Configure_View_Guard  <If>  runAfter: Set_Stage_Configure_View(Succeeded)
+127     Compose_Add_View_Field_Body  <Compose>  runAfter: -
+128     Get_Default_View  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Add_View_Field_Body(Succeeded)
+129     Filter_Default_View  <Query>  runAfter: Get_Default_View(Succeeded)
+130     Store_Default_View_Id  <SetVariable> [varDefaultViewId]  runAfter: Filter_Default_View(Succeeded)
+131     Store_Default_View_Title  <SetVariable> [varDefaultViewTitle]  runAfter: Store_Default_View_Id(Succeeded)
+132     Condition_Default_View_Found  <If>  runAfter: Store_Default_View_Title(Succeeded)
+133       Remove_All_Default_View_Fields  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+134       Add_SampleRaw_To_Default_View  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Remove_All_Default_View_Fields(Succeeded)
+135       Verify_Default_View_Fields  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Add_SampleRaw_To_Default_View(Succeeded)
+136       Store_Final_View_Fields  <SetVariable> [varFinalViewFields]  runAfter: Verify_Default_View_Fields(Succeeded)
+        [else]
+137       Set_ErrorCode_View_Not_Found  <SetVariable> [varErrorCode]  runAfter: -
+138       Set_ErrorMessage_View_Not_Found  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_View_Not_Found(Succeeded)
+139       Set_IsValid_View_Not_Found  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_View_Not_Found(Succeeded)
+140       Append_View_Not_Found_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_View_Not_Found(Succeeded)
+141 Scope_Validate_Result  <Scope>  runAfter: Scope_Configure_Default_View(Succeeded)
+142   Set_Stage_Validate_Result  <SetVariable> [varStage]  runAfter: -
+143   Condition_Validate_Guard  <If>  runAfter: Set_Stage_Validate_Result(Succeeded)
+144     Compose_Final_Validation_Code  <Compose>  runAfter: -
+145     Compose_Final_Error_Code  <Compose>  runAfter: Compose_Final_Validation_Code(Succeeded)
+146     Set_Final_Error_Code  <SetVariable> [varErrorCode]  runAfter: Compose_Final_Error_Code(Succeeded)
+147     Set_Status_Final  <SetVariable> [varStatus]  runAfter: Set_Final_Error_Code(Succeeded)
+148 Scope_Handle_AlreadyExists  <Scope>  runAfter: Scope_Validate_Result(Succeeded)
+149   Set_Stage_Handle_AlreadyExists  <SetVariable> [varStage]  runAfter: -
+150   Condition_Already_Exists  <If>  runAfter: Set_Stage_Handle_AlreadyExists(Succeeded)
+151     Return_Already_Exists  <Compose>  runAfter: -
+152     Set_Existing_List_Info  <SetVariable> [varExistingListInfo]  runAfter: Return_Already_Exists(Succeeded)
+153     Set_Status_Already_Exists  <SetVariable> [varStatus]  runAfter: Set_Existing_List_Info(Succeeded)
+154 Scope_Handle_Error  <Scope>  runAfter: Scope_Handle_AlreadyExists(Failed/Skipped/TimedOut)
+155   Compose_Handler_Error_Code  <Compose>  runAfter: -
+156   Compose_Handler_Error_Message  <Compose>  runAfter: Compose_Handler_Error_Code(Succeeded)
+157   Handle_Error  <Compose>  runAfter: Compose_Handler_Error_Message(Succeeded)
+158   Set_Error_Code_From_Handler  <SetVariable> [varErrorCode]  runAfter: Handle_Error(Succeeded)
+159   Set_Error_Message_From_Handler  <SetVariable> [varErrorMessage]  runAfter: Set_Error_Code_From_Handler(Succeeded)
+160   Set_Error_Messages_From_Handler  <SetVariable> [varErrorMessages]  runAfter: Set_Error_Message_From_Handler(Succeeded)
+161   Set_Status_Failed  <SetVariable> [varStatus]  runAfter: Set_Error_Messages_From_Handler(Succeeded)
+162 Scope_Rollback_New_List  <Scope>  runAfter: Scope_Handle_Error(Succeeded/Failed/Skipped/TimedOut)
+163   Condition_Rollback_Allowed  <If>  runAfter: -
+164     Rollback_Newly_Created_List  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+165     Set_Rollback_Performed  <SetVariable> [varRollbackPerformed]  runAfter: Rollback_Newly_Created_List(Succeeded)
+166 Scope_Finalize  <Scope>  runAfter: Scope_Rollback_New_List(Succeeded/Failed/Skipped/TimedOut)
+167   Condition_Result_Is_AlreadyExists  <If>  runAfter: -
+168     Build_AlreadyExists_Result  <Compose>  runAfter: -
+169     Set_Result_Object_AlreadyExists  <SetVariable> [varResultObject]  runAfter: Build_AlreadyExists_Result(Succeeded)
+      [else]
+170     Condition_Result_Is_Created  <If>  runAfter: -
+171       Build_Result_Object  <Compose>  runAfter: -
+172       Set_Result_Object_Created  <SetVariable> [varResultObject]  runAfter: Build_Result_Object(Succeeded)
+        [else]
+173       Build_Error_Result  <Compose>  runAfter: -
+174       Set_Result_Object_Failed  <SetVariable> [varResultObject]  runAfter: Build_Error_Result(Succeeded)
+175   Serialize_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Condition_Result_Is_AlreadyExists(Succeeded)
+176   Compose_Flow_Output  <Compose>  runAfter: Serialize_Result_To_Json(Succeeded)
+--- total actions: 176 ---

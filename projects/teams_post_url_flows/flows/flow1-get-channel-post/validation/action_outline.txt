@@ -1,0 +1,71 @@
+=== v4 アクションアウトライン（実行順・ネスト・通し番号=定義上の全アクション） ===
+trigger: manual (Request/Button) inputs: TeamsPostUrl*  ※*=必須
+  1 Initialize_InputUrl  <InitializeVariable> [varInputUrl:string]  runAfter: -
+  2 Initialize_TenantId  <InitializeVariable> [varTenantId:string]  runAfter: Initialize_InputUrl(Succeeded)
+  3 Initialize_TeamId  <InitializeVariable> [varTeamId:string]  runAfter: Initialize_TenantId(Succeeded)
+  4 Initialize_ChannelId  <InitializeVariable> [varChannelId:string]  runAfter: Initialize_TeamId(Succeeded)
+  5 Initialize_UrlMessageId  <InitializeVariable> [varUrlMessageId:string]  runAfter: Initialize_ChannelId(Succeeded)
+  6 Initialize_ParentMessageId  <InitializeVariable> [varParentMessageId:string]  runAfter: Initialize_UrlMessageId(Succeeded)
+  7 Initialize_TargetMessageId  <InitializeVariable> [varTargetMessageId:string]  runAfter: Initialize_ParentMessageId(Succeeded)
+  8 Initialize_ResultObject  <InitializeVariable> [varResultObject:object]  runAfter: Initialize_TargetMessageId(Succeeded)
+  9 Initialize_ResultJson  <InitializeVariable> [varResultJson:string]  runAfter: Initialize_ResultObject(Succeeded)
+ 10 Initialize_ErrorMessages  <InitializeVariable> [varErrorMessages:array]  runAfter: Initialize_ResultJson(Succeeded)
+ 11 Initialize_IsValid  <InitializeVariable> [varIsValid:boolean]  runAfter: Initialize_ErrorMessages(Succeeded)
+ 12 Initialize_Stage  <InitializeVariable> [varStage:string]  runAfter: Initialize_IsValid(Succeeded)
+ 13 Initialize_ErrorCode  <InitializeVariable> [varErrorCode:string]  runAfter: Initialize_Stage(Succeeded)
+ 14 Initialize_ErrorMessage  <InitializeVariable> [varErrorMessage:string]  runAfter: Initialize_ErrorCode(Succeeded)
+ 15 Initialize_LastStatusCode  <InitializeVariable> [varLastStatusCode:string]  runAfter: Initialize_ErrorMessage(Succeeded)
+ 16 Scope_ParseUrl  <Scope>  runAfter: Initialize_LastStatusCode(Succeeded)
+ 17   Set_Stage_ParseUrl  <SetVariable> [varStage]  runAfter: -
+ 18   Compose_Url_Without_Fragment  <Compose>  runAfter: Set_Stage_ParseUrl(Succeeded)
+ 19   Compose_Url_Path_Raw  <Compose>  runAfter: Compose_Url_Without_Fragment(Succeeded)
+ 20   Compose_Url_Path_Part  <Compose>  runAfter: Compose_Url_Path_Raw(Succeeded)
+ 21   Compose_Url_Query_Part  <Compose>  runAfter: Compose_Url_Path_Part(Succeeded)
+ 22   Compose_Query_Normalized  <Compose>  runAfter: Compose_Url_Query_Part(Succeeded)
+ 23   Compose_Message_Path_Tail  <Compose>  runAfter: Compose_Query_Normalized(Succeeded)
+ 24   Parse_ChannelId_From_Path  <Compose>  runAfter: Compose_Message_Path_Tail(Succeeded)
+ 25   Parse_MessageId_From_Path  <Compose>  runAfter: Parse_ChannelId_From_Path(Succeeded)
+ 26   Parse_TenantId_From_Query  <Compose>  runAfter: Parse_MessageId_From_Path(Succeeded)
+ 27   Parse_TeamId_From_Query  <Compose>  runAfter: Parse_TenantId_From_Query(Succeeded)
+ 28   Parse_ParentMessageId_From_Query  <Compose>  runAfter: Parse_TeamId_From_Query(Succeeded)
+ 29   Set_ChannelId  <SetVariable> [varChannelId]  runAfter: Parse_ParentMessageId_From_Query(Succeeded)
+ 30   Set_UrlMessageId  <SetVariable> [varUrlMessageId]  runAfter: Set_ChannelId(Succeeded)
+ 31   Set_TenantId  <SetVariable> [varTenantId]  runAfter: Set_UrlMessageId(Succeeded)
+ 32   Set_TeamId  <SetVariable> [varTeamId]  runAfter: Set_TenantId(Succeeded)
+ 33   Set_ParentMessageId  <SetVariable> [varParentMessageId]  runAfter: Set_TeamId(Succeeded)
+ 34   Determine_TargetMessageId  <SetVariable> [varTargetMessageId]  runAfter: Set_ParentMessageId(Succeeded)
+ 35   Validate_ParsedIdentifiers  <Compose>  runAfter: Determine_TargetMessageId(Succeeded)
+ 36   Set_ErrorCode_From_Validation  <SetVariable> [varErrorCode]  runAfter: Validate_ParsedIdentifiers(Succeeded)
+ 37   Set_IsValid  <SetVariable> [varIsValid]  runAfter: Set_ErrorCode_From_Validation(Succeeded)
+ 38   Set_ErrorMessage_From_Validation  <SetVariable> [varErrorMessage]  runAfter: Set_IsValid(Succeeded)
+ 39   Condition_Has_Parse_Error  <If>  runAfter: Set_ErrorMessage_From_Validation(Succeeded)
+ 40     Append_Parse_Error_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: -
+ 41 Scope_GetTeamsData  <Scope>  runAfter: Scope_ParseUrl(Succeeded)
+ 42   Set_Stage_GetTeamsData  <SetVariable> [varStage]  runAfter: -
+ 43   Condition_Is_Valid  <If>  runAfter: Set_Stage_GetTeamsData(Succeeded)
+ 44     Get_Parent_Message  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+ 45     Set_LastStatusCode  <SetVariable> [varLastStatusCode]  runAfter: Get_Parent_Message(Succeeded/Failed)
+ 46     Condition_Message_Deleted  <If>  runAfter: Get_Parent_Message(Succeeded)
+ 47       Set_ErrorCode_Message_Deleted  <SetVariable> [varErrorCode]  runAfter: -
+ 48       Set_ErrorMessage_Message_Deleted  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_Message_Deleted(Succeeded)
+ 49       Set_IsValid_Message_Deleted  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_Message_Deleted(Succeeded)
+ 50       Append_Message_Deleted_Error  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_Message_Deleted(Succeeded)
+ 51 Scope_CreateResult  <Scope>  runAfter: Scope_GetTeamsData(Succeeded)
+ 52   Set_Stage_CreateResult  <SetVariable> [varStage]  runAfter: -
+ 53   Condition_Build_Result  <If>  runAfter: Set_Stage_CreateResult(Succeeded)
+ 54     Create_Result_Object  <Compose>  runAfter: -
+ 55     Set_ResultObject  <SetVariable> [varResultObject]  runAfter: Create_Result_Object(Succeeded)
+      [else]
+ 56     Create_Error_Result_Object  <Compose>  runAfter: -
+ 57     Set_ResultObject_Error  <SetVariable> [varResultObject]  runAfter: Create_Error_Result_Object(Succeeded)
+ 58   Serialize_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Condition_Build_Result(Succeeded)
+ 59 Scope_ErrorHandler  <Scope>  runAfter: Scope_CreateResult(Failed/Skipped/TimedOut)
+ 60   Compose_Handler_Error_Code  <Compose>  runAfter: -
+ 61   Compose_Handler_Error_Message  <Compose>  runAfter: Compose_Handler_Error_Code(Succeeded)
+ 62   Compose_Handler_Error_Details  <Compose>  runAfter: Compose_Handler_Error_Message(Succeeded)
+ 63   Handle_Error  <Compose>  runAfter: Compose_Handler_Error_Details(Succeeded)
+ 64   Set_ResultObject_Handler  <SetVariable> [varResultObject]  runAfter: Handle_Error(Succeeded)
+ 65   Serialize_Handler_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Set_ResultObject_Handler(Succeeded)
+ 66 Scope_Finalize  <Scope>  runAfter: Scope_ErrorHandler(Succeeded/Failed/Skipped/TimedOut)
+ 67   Compose_Flow_Output  <Compose>  runAfter: -
+--- total actions: 67 ---

@@ -1,0 +1,4258 @@
+====================================================================
+Power Automate フロー設計書（v10）
+表示名: Teams課内会議アーカイブ
+英語名（パッケージdisplayName）: PA_Migrate_Teams_Meeting_Archive_To_SPO
+====================================================================
+
+本書は下記2ファイルを正典として、フロー内の全アクションを実行順に記載した設計書である（v10全面改訂）。
+- 生成済みフロー定義（実値の正典。式・入力・runAfterはすべてここから転記）:
+  ../source/package/Microsoft.Flow/flows/fcca0e31-6d8b-40a8-8d63-2441c979a2c7/definition.json（v10）
+- アクションアウトライン（実行順・ネスト・operationIdの参照用骨子）:
+  ../validation/action_outline.txt（v10再生成版。総アクション148個、本書のNo.1〜148はこの通し番号と完全一致）
+アクション名・変数名・式は上記2ファイルからの転記のみで、創作した名称・式は無い。
+
+★修正: 旧版（v2改訂版と称していたが、実体はSet_ReplyNextLink_First分離済み・129アクションの版で、
+本書ではこれを便宜上「v3」と呼ぶ）にあった「action_outline.txt上でInitialize_DocHtmlPartsはScope_50直後に
+記載されているが、definition.jsonのrunAfterを辿ると実行順はInitialize_ErrorMessageの直後・Scope_10の
+直前が正しい」という注記は、v4でInitialize_DocHtmlParts自体とvarDocHtmlParts方式が完全に廃止されたため
+本書からは削除した（詳細は下記「v3→v7 改訂点」4.を参照）。v10のaction_outline.txtは全148アクションが
+definition.jsonのrunAfter連鎖と完全に一致する順序で機械生成されており、本書のNo.1〜148もこれと完全一致する
+（本書末尾の自己検証で突合済み）。
+v8での変更点はaction_outline.txtにInitialize_ListSiteAddressがNo.9として追加された1点のみで、
+それ以外のNo.はv7から玉突きで+1されている（詳細は下記「v7→v8 改訂点」を参照）。
+v9での変更点は、実環境の初実行で発覚したGet_Source_File_Contentの404エラーを修正するため
+Compose_Source_Site/Compose_Source_Pathを追加した点、およびScope_30_Save_Attachments
+（Scope）をCondition_Has_File_Attachments（If）へ置換した点（番号は旧No.60のまま不変）の2点で、
+それ以外のNo.は旧No.84（Get_Source_File_Content）以降が玉突きで+2されている（詳細は下記
+「v8→v9 改訂点」を参照）。
+v10での変更点は、v9実環境実行で全添付がStatus=Failedとなった事象への対処として、
+(1)Scope_05_Ensure_Destination_Folder（新No.30〜36。ルート・Initialize_ErrorMessage直後・Scope_10の前）を
+新設し保存先フォルダの事前作成・検証を行う、(2)Filter_File_Attachments/Scope_Save_File先頭の
+Compose_Source_Urlでエンコード済みURLを正規化する、(3)Get_Saved_File_Properties/
+Get_Saved_Archive_Properties（GetFileItem）を全廃し保存後URLをCompose_Saved_File_Url/Set_ArchiveUrlの
+決定的構築へ変更する、(4)台帳ErrorMessageを自己診断化する、(5)ファイル名サニタイズに#・%を追加する、
+の5点。総アクション139→148（Scope_05系+7、Compose_Source_Url/Compose_Saved_File_Url+2、
+サニタイズ2、GetFileItem2件削除の差引）。詳細は下記「v9→v10 改訂点」を参照。
+
+## v1→v2 改訂点（旧版からの改訂点。历史的経緯として保持）
+1. 変数 varFailedCount（整数, 初期値0）を追加（Initialize_FailedCount）。変数総数 26→27。
+2. Scope_30の添付保存ブランチを再構成し、「添付1件の保存失敗で会議処理・フロー全体を止めない」設計に変更。
+   Scope_Save_File（Get_Source_File_Content→Create_Attachment_File→Get_Saved_File_Propertiesの3つのみに縮小）
+   の実行結果をrunAfter分岐（Power Automateの「実行後の構成 / Configure run after」相当）で受け、
+   - 成功(Succeeded)時: Create_Ledger_Item(Status=Saved)→Append_Saved_Meeting_Attachment(status=Saved)→
+     Increment_SavedCount
+   - 失敗(Failed)またはタイムアウト(TimedOut)時: Append_Failed_Meeting_Attachment(status=Failed)→
+     Create_Ledger_Item_Failed(Status=Failed,ErrorMessage記録)→Increment_FailedCount
+   の2系統に分岐する。この2系統は互いに排他的（同一周回でどちらか一方のみ実行）。
+3. Scope_60にCondition_DryRun_Archiveを追加。DryRun=はい の場合は総括Word(.doc)ファイル自体を作成せず、
+   varArchiveUrlにプレースホルダ文言を設定する（Set_ArchiveUrl_DryRun）。DryRun=いいえ の場合のみ
+   従来どおりCreate_Archive_Document以下を実行する。
+4. Scope_50のCondition_Attachment_Savedの判定条件を、status=='Saved' から
+   length(coalesce(item()?['savedFileUrl'],''))>0 （＝保存後URLの有無）に変更。
+   URLが無い場合は、status=='Failed'なら「（保存失敗）」、それ以外（DryRunでスキップ等）なら
+   「（テスト実行のため未保存）」を表示するよう分岐した。
+5. Scope_70のCreate_Run_LogとScope_99のCompose_Finally_SummaryにFailedCountを追加。
+   MeetingArchiveRunLogの列一覧にFailedCount(数値)を追加。
+- 総アクション数（v2時点）: 129個（v1の123から+6）。
+
+## v3→v7 改訂点（本書はこのv7に合わせて全面改訂。総アクション129→132→136、変数27→27（v6で中身差替え・v7は変更なし））
+実働サンプルとの突合・Opus級設計監査を経て、v4（自己参照除去・堅牢化の土台）→v5（実働サンプル準拠の
+堅牢化）→v6（重大バグ修正＋任意推奨2件）→v7（実環境保存エラーの根本修正・最終版）の順で定義を改訂した。
+以下は本書に反映した差分の全リスト。
+
+### v4（SetVariable自己参照の全面除去、HTML連結方式の変更、LookbackDays安全化）
+1. 【LookbackDays安全化】ルート先頭に Compose_EffectiveLookbackDays（Compose）を追加。
+   式: @if(greater(int(coalesce(triggerBody()?['LookbackDays'], 0)), 0), int(coalesce(triggerBody()?['LookbackDays'], 7)), 7)
+   （null/未入力→7、0以下→7、正の整数のみ採用）。Initialize_LookbackDaysの値を
+   @outputs('Compose_EffectiveLookbackDays') に変更（旧: @int(coalesce(triggerBody()?['LookbackDays'], 7))）。
+   ルート初期化アクションは全体で1つ前にずれ、No.1〜28（旧No.1〜27）となった。
+2. 【自己参照SetVariableの除去・その1】Do_Until_Messages_Paging内の Set_MessagesArray
+   （union(varMessagesArray自身, 新ページ)というSetVariable自己参照。Power Automateの保存時に
+   WorkflowRunActionInputsInvalidPropertyエラーの原因になる）を削除。代替として
+   Process_Retrieved_Messages（Apply to each、入力=coalesce(body('Get_Channel_Messages')?['value'], json('[]'))、
+   並列オフ）を追加し、その内部に Append_Message_To_MessagesArray（配列変数に追加、varMessagesArray、
+   値=item()）を配置。Set_NextLink の runAfter は Get_Channel_Messages から Process_Retrieved_Messages に変更。
+3. 【自己参照SetVariableの除去・その2】Do_Until_Replies_Paging内の Set_RepliesArray（同型の自己参照）を削除。
+   代替として Process_Retrieved_Replies（Apply to each、入力=coalesce(body('Get_Message_Replies')?['value'], json('[]'))、
+   並列オフ）＋内部の Append_Reply_To_RepliesArray（配列変数に追加、varRepliesArray、値=item()）を追加。
+   Set_ReplyNextLink の runAfter は Get_Message_Replies から Process_Retrieved_Replies に変更。
+   ※Set_RepliesArray_Reset（varRepliesArray=json('[]')への代入）は自己参照ではないため存続。
+4. 【自己参照SetVariableの除去・その3】Process_Each_Reply内の Append_Reply_Attachment_Candidates
+   （名前はAppendだが実体はSetVariable+union自己参照）を削除。代替として Process_Each_Reply_Attachment
+   （Apply to each、入力=body('Select_Reply_Attachments')、並列オフ）＋内部の Append_Reply_Attachment_Candidate
+   （配列変数に追加、varAttachmentCandidates、値=item()）を追加。
+5. 【HTML連結方式の変更】varDocHtmlParts（配列）＋join()方式を全廃し、varDocumentHtml へ
+   AppendToStringVariable（文字列変数に追加）で直接連結する方式に変更。
+   Set_DocumentHtml_Header → Append_DocumentHtml_Header に改名（AppendToStringVariable化）。
+   Append_Page_Break / Append_Meeting_Header_Html / Append_Attachment_Html / Append_Attachment_Failed_Html /
+   Append_No_Attachments_Html / Append_DocumentHtml_Footer はすべて AppendToStringVariable（対象varDocumentHtml）
+   に変更。Set_DocumentHtml（join処理）と Initialize_DocHtmlParts は削除。変数からvarDocHtmlPartsが消え、
+   代わりにルート先頭のCompose追加により総アクション数は差し引き+2（v3の129→v4の131）。
+6. 【ネストForeach入力の明確化】Apply_To_Each_Saved_Attachment の入力を
+   coalesce(items('Apply_To_Each_Sorted_Meeting')?['attachments'], json('[]')) に変更
+   （外側ループ項目の明示参照。旧はcoalesce(item()?['attachments'], json('[]'))で、item()がどちらの
+   Foreachの現在項目を指すか曖昧だった）。
+
+### v5（実働サンプル準拠の堅牢化）
+7. 【Graph URLのuriComponent化】チャネルID（"19:...@thread.tacv2"のように':' '@'を含む）と親メッセージIDを
+   uriComponent()でエンコード。
+   Set_NextLink_First: @concat('https://graph.microsoft.com/v1.0/teams/', variables('varTeamId'), '/channels/',
+   uriComponent(variables('varChannelId')), '/messages?$top=50')
+   Set_ReplyNextLink_First: @concat('https://graph.microsoft.com/v1.0/teams/', variables('varTeamId'), '/channels/',
+   uriComponent(variables('varChannelId')), '/messages/', uriComponent(items('Process_Each_Parent_Message')?['id']),
+   '/replies?$top=50')
+   （teamIdはGUID形式のためuriComponent不要。@odata.nextLinkはGraphが返す完全URLをそのまま使用するため対象外）
+8. 【曜日式の堅牢化】Compose_Meeting_Header_Html内の曜日表示式を、
+   json('["日","月","火","水","木","金","土"]')[dayOfWeek(item()?['meetingDate'])]（計算インデックスでの
+   角括弧アクセス）から substring('日月火水木金土', dayOfWeek(item()?['meetingDate']), 1)（文字列切り出し）
+   に変更（Opus監査指摘。JSON配列の計算添字アクセスより堅牢な表現に置換）。
+9. 【runAfterの明示化】コンテナ起点4アクション（Get_Channel_Messages / Get_Message_Replies /
+   Select_Reply_Attachments / Get_Source_File_Content）に "runAfter": {} を明示（Power Automate標準の
+   エクスポート形式に合わせた記法上の変更。本書は元々これらを「runAfter={}＝各周回/コンテナ内で最初」と
+   記載済みのため実質的な記載変更は無い）。
+
+### v6（重大バグ修正＋任意推奨2件）
+10. 【重大】コネクタ出力参照の body/ パス欠落を5箇所で修正。OpenApiConnectionアクションの outputs('X') は
+    封筒 {statusCode, headers, body} を返すため、outputs('X')?['ItemId'] や outputs('X')?['{Link}'] のような
+    非body参照は常にnullになる（DryRun=trueが既定のため本番経路が実行されず今まで発覚しなかった潜在バグ）。
+    修正した5箇所（いずれも旧: outputs(...) → 新: body(...)）:
+    - Get_Saved_File_Properties の id = @body('Create_Attachment_File')?['ItemId']
+    - Create_Ledger_Item の item/SavedFileUrl = @body('Get_Saved_File_Properties')?['{Link}']
+    - Append_Saved_Meeting_Attachment の savedFileUrl = @body('Get_Saved_File_Properties')?['{Link}']
+    - Get_Saved_Archive_Properties の id = @body('Create_Archive_Document')?['ItemId']
+    - Set_ArchiveUrl の値 = @body('Get_Saved_Archive_Properties')?['{Link}']
+    修正しないと非DryRun本番実行で全添付がFailed化し、総括docのURL取得も失敗していた。
+11. 【RunLogリスト名の変数化】Initialize_RunLogList（varRunLogList、初期値定数"MeetingArchiveRunLog"）を
+    Initialize_LedgerList の直後（No.12）に追加。Create_Run_Log / Create_Error_Log の table パラメータを
+    "MeetingArchiveRunLog"定数直書きから @variables('varRunLogList') に変更（インポート後の再選択点を
+    varLedgerListと同様に一元化）。
+12. 【添付hrefのエスケープ】Append_Attachment_Html の href 内URLに
+    replace(coalesce(item()?['savedFileUrl'], ''), '&', '&amp;') を適用（旧はcoalesceのみでエスケープ無し。
+    SharePointファイルURLにクエリ文字列由来の&が含まれる場合のHTML不正を防止）。
+13. 【変数一覧・アクション総数の確定】変数 −varDocHtmlParts（v4で廃止）＋varRunLogList（v6で追加）＝
+    差引ゼロ、総変数27個（v3と同数だが中身は差し替え）。総アクション132個（v3の129から、v4で+2
+    [Compose_EffectiveLookbackDays追加、Set_DocumentHtml/Initialize_DocHtmlParts削除、Foreach×3＋Append×3
+    追加、SetVariable自己参照3件削除の差引]、v5で±0[式変更のみ]、v6で+1[Initialize_RunLogList追加]、
+    合計 129+2+0+1=132）。
+
+### v7（実環境保存エラーの根本修正。最終版）
+実環境でv6パッケージをインポートし保存した際、下記のエラーが発生した（Sonnet Web調査＋Opus監査で
+原因を確定・確度高）。
+エラー全文:
+「OpenApiOperationParameterValidationFailed: Input parameter 'item' validation failed in workflow
+operation 'Create_Run_Log': The API operation 'PostItem' is missing required property 'item'.」
+14. 【原因】SharePointコネクタのPostItemは必須の動的ボディitem（x-ms-dynamic-schema）を持つ。
+    dataset/tableが@variables(...)という式の場合、Power Automateの保存時検証がその場で列スキーマ
+    （どの列がitem配下に来るか）を静的に解決できず、フラット化されたitem/Title等のキーをitemオブジェクト
+    へ束ねられないため「item欠落」エラーとなる。実働サンプルのPostItemはdataset/tableとも静的リテラルでの
+    み保存実績があり、本フローのように両方を変数化していたことが根本原因だった。保存時検証は1件ずつしか
+    報告しないため、エラーメッセージにはCreate_Run_Logのみが表示されたが、同型のPostItem×4
+    （Create_Ledger_Item, Create_Ledger_Item_Failed, Create_Run_Log, Create_Error_Log）すべてが同じ理由で
+    該当する（Opus監査で確認）。
+15. 【置換方針】PostItem×4を、SharePointコネクタの「SharePoint に HTTP 要求を送信します」
+    （Send an HTTP request to SharePoint、operationId=HttpRequest）＋SharePoint REST APIへ置換した。
+    各PostItemの直前に、RESTボディとなるJSONオブジェクトを組み立てるComposeアクションを1つずつ新設した:
+    Compose_Ledger_Body（No.86。Create_Ledger_Itemの直前）、
+    Compose_LedgerFailed_Body（No.91。Create_Ledger_Item_Failedの直前）、
+    Compose_RunLog_Body（No.128。Create_Run_Logの直前）、
+    Compose_ErrorLog_Body（No.133。Create_Error_Logの直前）。
+    REST化した4アクションの共通仕様（雛形の実エクスポートでキー形式を確認済み）:
+    - dataset: 静的リテラル（サイトURL。雛形で保存実績のある唯一の形式。★サイト変更時は4アクション
+      個別の編集が必要。§8参照）
+    - parameters/method: "POST"
+    - parameters/uri: @concat('_api/web/lists/getbytitle(''', variables('varLedgerList'または
+      'varRunLogList'), ''')/items')（URIは動的スキーマ非対象の単純文字列のため、式のままでも保存時
+      検証を通過する。リスト名の変数化はそのまま維持）
+    - parameters/headers: {"Accept":"application/json;odata=nometadata",
+      "Content-Type":"application/json;odata=nometadata"}（nometadata両指定で__metadata不要の単純
+      JSONボディにできる。learn.microsoft.com記載の仕様で確認）
+    - parameters/body: @string(outputs('Compose_X_Body'))（Composeで組み立てたオブジェクトを文字列化）
+    アクション名は旧PostItemと同名を維持（Create_Ledger_Item等）としたため、後続アクションのrunAfter名前
+    参照はすべて不変。4アクションいずれも出力（応答）を参照する後続アクションは元から存在しないため、
+    応答参照側の変更もゼロ。
+16. 【影響範囲の再確認】他の9つのSharePoint/Teams/Content Conversion系OpenApiConnectionアクション
+    （Get_Ledger_Existing[GetItems], Create_Attachment_File[CreateFile], Get_Saved_File_Properties[GetFileItem],
+    Get_Source_File_Content[GetFileContentByPath], Create_Archive_Document[CreateFile],
+    Get_Saved_Archive_Properties[GetFileItem], Get_Channel_Messages[HttpRequest/Teams],
+    Get_Message_Replies[HttpRequest/Teams], Convert_Body_Html_To_Text[HtmlToText]）は必須の動的ボディを
+    持たないため、dataset/tableが式のままでも保存時検証を通過する（Opus監査で全13件のOpenApiConnection
+    アクションを一斉判定済み）。今回の修正対象はPostItemの4件のみ。
+17. 【検証】検証スクリプトに「PostItemが存在すればエラー」「SharePoint HttpRequestアクションの必須キー
+    （dataset/parameters.method/parameters.uri/parameters.body）検査」を恒久項目として追加した。
+- v7集計（機械検証済み・0エラー0警告）: 総アクション**136**（v6の132＋Compose×4）。変数27は不変。
+  operationIdはCreateFile/GetFileContentByPath/GetFileItem/GetItems/HtmlToText/HttpRequestの**6種**
+  （PostItem廃止）。SetVariable 13（自己参照0）／AppendToArrayVariable 8／AppendToStringVariable 7／
+  IncrementVariable 5／Foreach 8は不変。
+- 残存注意（実行時の論点。保存はブロックしない）:
+  (1) テナント設定によりRESTのPOSTで__metadata型指定を要求される可能性がある。その場合は
+      `_api/web/lists/getbytitle('リスト名')?$select=ListItemEntityTypeFullName` で型名を取得し、
+      ボディへ"__metadata":{"type":"SP.Data.xxxListItem"}を追加する対応が必要になる。
+  (2) SavedFileUrl/ArchiveUrl列が「ハイパーリンク」型の場合、RESTでは{"Url":...}オブジェクトが必要になる
+      ため、**単一行テキスト列で作成すること**（§8参照）。
+  (3) REST化した4アクションのdatasetは静的リテラルのため、サイト変更時は4アクションを個別に編集する
+      必要がある（varSiteAddressを直せば済む他のSharePointアクションとは異なる。§8参照）。
+
+- 総アクション数136は、action_outline.txt（v7再生成・機械カウント済み）および本書末尾の自己検証
+  （[No.X]ブロックのアクション表示名を出現順に抽出し136アクション名と完全一致確認）で裏付け済み。
+
+## v7→v8 改訂点（本書はこのv8に合わせて改訂。リスト操作サイトの分離。ユーザー決定 2026-07-17）
+台帳（MeetingArchiveLedger）・実行ログ（MeetingArchiveRunLog）の2リストを、ファイル保存先サイト
+（varSiteAddress＝mROOM_240600018）とは別のサイト **pjteam_220400119** に作成することがユーザー決定
+された（別パッケージのリスト自動作成フロー CreateMeetingArchiveLists の構築に伴う決定。../../provision-archive-lists/release/
+配下）。varSiteAddress（mROOM）は添付ファイル・総括docの保存先フォルダが実在するサイトであるため、
+ファイル保存系アクションはそのまま維持し、**リスト操作のみを新変数へ分離**した。
+18. 【新変数追加】varListSiteAddress（string、初期値定数
+    "https://metijapan.sharepoint.com/teams/pjteam_220400119"）を追加。Initialize_ListSiteAddress
+    （No.9）をInitialize_SiteAddress（No.8）の直後・Initialize_Library（旧No.9→新No.10）の直前に挿入した。
+    これに伴い、旧No.9以降の全アクション番号が玉突きで+1され、旧No.136（Scope_99_Finally内の
+    Compose_Finally_Summary）は新No.137となった。総アクション 136→**137**、内部変数 27→**28**。
+19. 【Get_Ledger_Existingのdataset変更】台帳の冪等性チェック（GetItems）のdatasetを
+    @variables('varSiteAddress') から @variables('varListSiteAddress') に変更した（台帳リスト自体が
+    pjteamサイトに作成されるため）。table（varLedgerList）は変更なし。
+20. 【REST4アクションの静的datasetをpjteamへ変更】Create_Ledger_Item / Create_Ledger_Item_Failed /
+    Create_Run_Log / Create_Error_Log（v7でPostItemからHTTP要求へ置換済みの4件）の静的リテラルdatasetを、
+    https://metijapan.sharepoint.com/sites/mROOM_240600018 から
+    https://metijapan.sharepoint.com/teams/pjteam_220400119 に変更した（4件とも静的リテラルのため、
+    サイト変更時はこの4アクションを個別編集する必要がある点はv7から変わらない。§8参照）。
+21. 【ファイル保存系は変更なし】Get_Source_File_Content / Create_Attachment_File / Get_Saved_File_Properties /
+    Create_Archive_Document / Get_Saved_Archive_Properties の5アクションはvarSiteAddress（mROOM）のまま
+    据え置き（添付・総括docの実保存先フォルダがmROOM側に実在するため）。
+- v8集計（機械検証済み・0エラー0警告）: 総アクション**137**（v7の136＋Initialize_ListSiteAddress）。
+  変数**28**（v7の27＋varListSiteAddress）。「初期化済みだが未参照の変数」検査を検証スクリプトへ
+  恒久追加し、初回ビルドではこの検査観点でGet_Ledger_Existingのdataset付け替え漏れ（varSiteAddressの
+  ままになっていた）を検出・修正した経緯がある。
+- サイトは2系統: ファイル保存＝varSiteAddress（mROOM_240600018）／リスト操作（台帳・実行ログ）＝
+  varListSiteAddress（pjteam_220400119）。§8の再設定ポイントもこの2系統を踏まえて確認すること。
+- 実環境インポート・保存は本書v8時点でも**未検証**（構造・JSON妥当性・機械検証0エラー0警告のみ確認済み。
+  「保存成功済み」を意味しない）。
+  ★v9追記: この記載の後、実際にv8パッケージが実環境でインポート・保存・実行され、
+  Get_Source_File_Contentが404エラーで失敗する事象が発生した。詳細・修正内容は下記「v8→v9 改訂点」を参照。
+
+## v8→v9 改訂点（本書はこのv9に合わせて改訂。実行時404の根本修正＋添付有無の明示分岐。2026-07-17）
+**実環境での初実行結果（重要な進展）**: v8パッケージは実環境でインポート・保存・実行され、
+MeetingArchiveRunLogへの書き込み（201応答、pjteamサイトのMeetingArchiveRunLogにId=1）まで到達したが、
+実行時にGet_Source_File_Contentが**404 File not found**で失敗した（ユーザー提供の実行出力3ファイルで
+確認）。
+
+**404の根本原因（実データで確定）**:
+- 実際の添付contentUrlは
+  `https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/…`のような形式
+  だった（Teamsチャネル添付の実体は**チームのサイト**のShared Documents配下にある。生URL＝%20等は
+  非エンコードのままGraphから返る）。
+- 旧実装（v8以前）: dataset=varSiteAddress（ファイル保存先のmROOMサイト）＋サイト接頭辞込みのpath
+  （旧: replace(uriPath(contentUrl), '%20', ' ')）という組み合わせのため、**mROOMサイトに対して
+  別サイト（チームのサイト）のパスを問い合わせる形になり404**となっていた。
+
+22. 【404の根本修正】contentUrlからサイト・パスを動的に導出するよう変更（設定不要・汎用）:
+    Scope_Save_File先頭に以下2つのComposeを追加した。
+    - Compose_Source_Site（新No.84）: `@substring(items('Process_Each_Attachment')?['attachment']?['contentUrl'],
+      0, indexOf(items('Process_Each_Attachment')?['attachment']?['contentUrl'], '/Shared Documents/'))`
+    - Compose_Source_Path（新No.85）: `@replace(substring(items('Process_Each_Attachment')?['attachment']?['contentUrl'],
+      indexOf(items('Process_Each_Attachment')?['attachment']?['contentUrl'], '/Shared Documents/')), '%20', ' ')`
+    Get_Source_File_Content（新No.86）のdataset/pathを、それぞれ@outputs('Compose_Source_Site') /
+    @outputs('Compose_Source_Path')に変更した（旧: dataset=@variables('varSiteAddress'),
+    path=@replace(uriPath(添付contentUrl), '%20', ' ')）。実contentUrlを用いた式のシミュレーション検証では、
+    dataset=チームサイトURL／path=/Shared Documents/以下のパスに正しく分割されることを確認済み
+    （実環境での再実行による404解消の確認はまだ行っていない）。
+23. 【Filter_File_Attachmentsの強化】Filter_File_Attachments（No.58）のwhereに
+    `contains(coalesce(item()?['attachment']?['contentUrl'], ''), '/Shared Documents/')`を追加した。
+    チームサイトのドキュメントライブラリに実在するファイル添付のみを候補として収集し、外部リンク・
+    タブ参照等（'/Shared Documents/'を含まない形式）を候補の時点で除外する（ユーザー提案の趣旨。
+    Compose_Source_SiteのindexOf()が常に一致することの保証にもなる）。
+24. 【添付有無の明示分岐（ユーザー提案）】Scope_30_Save_Attachments（Scope、旧No.60）を
+    **Condition_Has_File_Attachments（If: `greater(length(body('Filter_File_Attachments')), 0)`、
+    番号は旧No.60のまま不変）に置換**した。ファイル添付が1件以上ある場合のみ、then分岐として
+    Process_Each_Attachmentを実行する（elseブランチは無し。falseの場合は何も実行せずCompose_SortKeyへ
+    進む）。後続のCompose_SortKeyのrunAfterもCondition_Has_File_Attachmentsへ変更した。
+    ★設計上の重要な判断（ネスト深さ）: Scope_30_Save_Attachmentsをそのまま残し、その外側にIfを追加で
+    ラップする案では、Process_Each_Attachment以下の既存ネストがさらに1段深くなり、Power Automateの
+    ネスト深さ上限（8段）を超えてしまう。このため「既存のScopeの型自体をIfへ置き換える」構成
+    （ネスト段数を増やさない）を採用した。
+- v9集計（機械検証済み・0エラー0警告）: 総アクション**139**（v8の137＋Compose_Source_Site/
+  Compose_Source_Path。Scope→If置換は増減なし）。変数**28**は不変。実データ（返信9件中8件添付なし・
+  1件に6添付という構成）とも式レベルで整合することを確認した。
+- 残る確認事項: v8の実行が最終的に「全体失敗」（Scope_90_Catch発火）となった経路の詳細は、本書執筆時点
+  では特定できていない。Scope_Save_Fileの失敗自体は添付単位catchで吸収され処理が継続する設計のため、
+  Create_Ledger_Item_Failed等の後続アクションで別のエラーが発生した可能性が疑われるが、確定には実行履歴
+  （失敗アクション名）の確認が必要である。v9では404の発生源自体が無くなるため、再実行で解消される見込み。
+- ★重要: v9は404の原因を修正した**式レベルの変更**であり、**修正後の実環境再実行はまだ実施していない**。
+  実contentUrlを用いた式のシミュレーション検証のみを行った段階であり、「v9で404が解消され実環境で
+  動作確認済み」であることは意味しない（詳細は§1, §6-10, §8参照）。
+
+## v9→v10 改訂点（本書はこのv10に合わせて改訂。添付保存の全件失敗への対処。2026-07-18）
+**v9実環境実行の結果**: v9パッケージは実環境でインポート・保存・実行され、フローはエンドツーエンドで
+完走した（封じ込め・台帳Failed記録・エラーログ201書き込みが全て機能）。しかし**全添付がStatus=Failed**
+となった（例: ６Ｇと７Ｇ.pptx）。新実行証跡（run-evidence/Get_Channel_Messages.txt＝親50件）の分析で、
+失敗添付のcontentUrlは正しい形（pjteam/Shared Documents配下・生URL）であることを確認した。すなわちv9の
+サイト/パス導出（Compose_Source_Site/Compose_Source_Path）は正しい値を生成しており、**失敗は保存側**
+にあると推定した。原因の候補は2つ:
+(a) CreateFile（Create_Attachment_File）は中間フォルダを自動作成しない。mROOMの保存先が4階層の
+    フォルダ構造で、そのいずれかが未作成であれば全件失敗し得る。
+(b) **Get_Saved_File_Properties（GetFileItem）のtableパラメータに渡していた"Shared Documents"は
+    ライブラリのURLセグメントであり、ライブラリの表示名/GUIDではない**。日本語サイトのライブラリの
+    表示名は「ドキュメント」であることが多く、GetFileItemが表示名での名前解決を要求する場合は
+    "Shared Documents"という値では解決できず全件失敗し得る（最有力候補）。
+    ※この場合**ファイル自体は保存先に作成できている**可能性が高く、再実行時の同名409に注意（残骸
+    ファイルの確認を手順書に明記した）。
+また新証跡から、**Graphは%エンコード済みcontentUrlも返す**（.aspx実例で確認）ことが判明し、現行の
+Filter_File_Attachments/Compose_Source_Site/Compose_Source_Pathが非エンコード表記のみを前提としていたため、
+エンコード済みの添付が候補の時点で黙って除外される潜在バグも新たに発見した。
+
+**v10修正（4本柱＋2堅牢化）**:
+1. **Scope_05_Ensure_Destination_Folder 新設**（ルート・Initialize_ErrorMessage直後・Scope_10の前）:
+   Condition_Provision_Destination（DryRun=いいえのときのみtrue）> Create_Destination_Folder_L1〜L4
+   （REST POST _api/web/folders・SP.Folder・odata=verbose。各runAfter[Succeeded,Failed]で既存エラーを
+   許容して継続）> Verify_Destination_Folder（GET GetFolderByServerRelativeUrlで実在検証。失敗＝
+   保存先パス/権限の問題を実行の最も早い段階で明確な失敗にする→Scope_90_Catchへ）。
+   ServerRelativeUrlはフルサーバー相対（concat(uriPath(varSiteAddress),'/',varLibrary,
+   '/',join(take(split(varDestinationPath,'/'),N),'/'))）。保存先パスは最大4階層に対応（候補(a)への対処）。
+2. **エンコードURL正規化**: Filter_File_Attachmentsのwhereに'/Shared%20Documents/'含有をorで追加。
+   Scope_Save_File先頭にCompose_Source_Url（'/Shared%20Documents/'含有時のみdecodeUriComponentで正規化）
+   を追加し、Compose_Source_Site/Compose_Source_Pathの入力元をこの正規化済みURLへ変更した（新たに
+   発見したエンコード済みURL潜在バグへの対処）。
+3. **GetFileItem（{Link}）全廃**: Get_Saved_File_Properties/Get_Saved_Archive_Propertiesを削除し、
+   保存後URLを既知の値から決定的に構築するよう変更した:
+   savedFileUrl/varArchiveUrl = replace(concat(varSiteAddress,'/',varLibrary,'/',varDestinationPath,
+   '/',SavedName または ArchiveFileName), ' ', '%20')（CreateFile成功＝そのパス・名前で作成された、
+   という事実からの直接構築。候補(b)への対処。GetFileItem自体を無くすためライブラリ名前解決の問題が
+   構造的に発生し得なくなる）。Compose_Saved_File_Urlは添付保存用でScope_Save_Fileの**前**に配置
+   （失敗時も参照可能）。Set_ArchiveUrlは同一パターンでCreate_Archive_Documentの直後に配置。
+4. **自己診断エラーメッセージ**: Compose_LedgerFailed_BodyのErrorMessageに、元contentUrl（items()の
+   生参照。Compose失敗時もハンドラ自体が壊れないよう他のComposeの出力ではなく生値を直接埋め込む）と
+   保存先パスを埋め込んだ。再発時は台帳の1行で原因特定が可能になる。
+5. ファイル名サニタイズに**Replace_Invalid_Hash（#）/Replace_Invalid_Percent（%）**を追加した
+   （Compose_TrimTrailingの入力元もReplace_Invalid_Pipe→Replace_Invalid_Percentへ変更。決定的URL構築の
+   安全性を完全化）。
+6. 検証スクリプトに「GetFileItem存在→エラー」「{Link}残存→エラー」を恒久項目として追加した。
+
+**v10集計**: 総アクション**148**（v9の139 +Scope_05系7 +Compose_Source_Url +Compose_Saved_File_Url
++サニタイズ2 −GetFileItem2）。変数28は不変。ネスト深さ8を維持。operationIdは5種（GetFileItem廃止で
+6種→5種）。0エラー0警告（機械検証）。
+**実環境確認ポイント**: (1)Verify_Destination_Folderの成功 (2)台帳にSaved行とクリック可能な
+SavedFileUrlが記録されること (3)まだFailedが発生する場合はErrorMessageの「元URL=／保存先=」から
+一意に原因特定できること (4)初回実行前に保存先の残骸ファイル確認（同名409対策）。
+★重要: v10は推定原因への**静的な**対処であり、**修正後の実環境再実行はまだ実施していない**。
+「v10で全添付Failedが解消され実環境で動作確認済み」であることは意味しない（詳細は§1, §6-11, §8参照）。
+
+--------------------------------------------------------------------
+## 1. フロー概要
+--------------------------------------------------------------------
+- 表示名: Teams課内会議アーカイブ
+- 英語名（パッケージ内displayName）: PA_Migrate_Teams_Meeting_Archive_To_SPO
+- フローID（definition.json name。匿名の新規GUID）: 2fe554b1-6ba6-4ce0-962c-07bde4bdb6ee
+- 種別: インスタントクラウドフロー
+- トリガー: 手動（Button） / type=Request, kind=Button
+- フロー数: 1（子フロー・呼び出し先フローなし。単一フロー完結）
+- 使用コネクタ: 3種（Microsoft Teams / SharePoint / Content Conversion）
+- トリガー入力: 3種（LookbackDays, DryRun, ForceReprocess）
+- 使用operationId: 5種（HttpRequest, HtmlToText, GetItems, CreateFile,
+  GetFileContentByPath） ★v10でGetFileItemを廃止（6種→5種。Get_Saved_File_Properties/
+  Get_Saved_Archive_Propertiesを削除し、保存後URLは決定的構築に変更したため）。★v7でPostItemを廃止
+  （7種→6種）。SharePointの書き込み4件（Create_Ledger_Item, Create_Ledger_Item_Failed, Create_Run_Log,
+  Create_Error_Log）はoperationId=HttpRequest（Send an HTTP request to SharePoint）へ置換したため、
+  HttpRequestはshared_teams（Graph用）とshared_sharepointonline（REST用）の2コネクタで共用される
+  （同名だが別アクション）。
+- 内部変数: 28個（v6でvarDocHtmlParts廃止・varRunLogList新設、v8でvarListSiteAddress新設。
+  v7・v9・v10では変数構成に変更なし）。
+  すべてルート直下でInitializeVariable（Scope内では初期化不可のため）。
+- 総アクション数: 148個（definition.jsonの機械的な再帰カウントによる実測値。上記v3→v7改訂点・
+  v7→v8改訂点・v8→v9改訂点・v9→v10改訂点を参照）。
+- 全Foreach/Untilは並列オフ（runtimeConfiguration.concurrency.repetitions=1、Foreachのみ設定対象。
+  Untilは元来逐次実行のためconcurrency設定自体が存在しない仕様）。v6で新設されたProcess_Retrieved_Messages/
+  Process_Retrieved_Replies/Process_Each_Reply_Attachmentの3つのForeach（実体はv4新設）も同様に並列オフ。
+- エラーハンドリングは3階層（★v10でフロー起動直後の階層を追加）:
+  (0) 保存先フォルダの事前検証: Scope_05_Ensure_Destination_Folder内のVerify_Destination_Folderが
+      失敗するとScope_05自体がFailedとなり、以降が実行されずScope_70がSkippedとなりScope_90_Catchが
+      捕捉する（保存先パス・権限の問題を実行の最も早い段階で明確な失敗として検出。§6-11参照）。
+  (a) フロー全体: Scope_90_Catch が Scope_70_Write_Run_Log の Failed/Skipped/TimedOut を捕捉
+      （runAfter分岐。§4.0凡例参照）
+  (b) 添付1件単位: Condition_Has_File_Attachments[then]内でScope_Save_FileのFailed/TimedOutを
+      Append_Failed_Meeting_Attachment以下が捕捉し、当該添付をStatus=Failedとして記録した上で処理を
+      継続する（★v9でScope_30_Save_Attachments〔Scope〕をCondition_Has_File_Attachments〔If〕へ置換。
+      詳細§4.4, §6参照）
+- 認証: 全OpenApiConnectionアクションで共通の標準形。
+  value: "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']"
+  type: "Raw"
+  （雛形と同一の標準的な参照式。秘密情報の埋め込みではないため匿名化不要。v5での実働サンプル突合でも
+  この形式の維持が支持されている＝source=Invoker＋X-MS-APIM-Tokens参照式。v3の実環境インポート成功実績を
+  優先し、サンプルのsource=Embedded＋@parameters('$authentication')形式へは変更していない）
+- connectionReferences（匿名化済み・接続名はダミーGUID）:
+  - shared_teams: connectionName=a4d41dc235a94baabc21472cf2b9f1f6, apiName=teams
+  - shared_sharepointonline: connectionName=85cb934055e9451b87540f3057dac4f4, apiName=sharepointonline
+  - shared_conversionservice: connectionName=0c025702194947bdb1ba4db7b58b5d30, apiName=conversionservice
+- 実環境での実行状況（★v10追記。重要な進展）: v9パッケージは実環境でエンドツーエンド完走した
+  （封じ込め・台帳Failed記録・エラーログ201書き込みは全て機能）。しかし**全添付がStatus=Failedになる**
+  事象が発生した（詳細は本書冒頭「v9→v10 改訂点」参照）。新実行証跡の分析で、失敗添付のcontentUrl自体は
+  正しい形（保存先とは別のチームサイトのShared Documents配下・生URL）であることを確認しており、
+  失敗の原因は保存側（CreateFileの中間フォルダ未作成、またはGet_Saved_File_Properties〔GetFileItem〕の
+  ライブラリ名前解決失敗）にあると推定した。v10ではこの推定に基づき、保存先フォルダの事前作成・検証
+  （Scope_05）とGetFileItem全廃（決定的URL構築）の2本柱で対処したが、**v10修正後の実環境再実行はまだ
+  実施していない**（静的検証のみ済み。「v10で修正済みかつ実環境で動作確認済み」であることは意味しない）。
+  構造・JSON妥当性・ZIP再展開・機械検証（0エラー0警告）はv10についても確認済み（詳細は§8参照）。
+
+--------------------------------------------------------------------
+## 2. トリガー
+--------------------------------------------------------------------
+種別: 手動トリガー（Request / kind=Button）
+
+| 内部名(schema.properties キー) | 表示名(title) | 型 | 既定値 | 説明(description) |
+|---|---|---|---|---|
+| LookbackDays | 取得対象日数 | number | 7 | 実行日時から何日前までのTeams投稿を取得するか（7/30/365/730） |
+| DryRun | テスト実行 | boolean | true | はい=本番保存せずテスト |
+| ForceReprocess | 処理済みファイルを再処理する | boolean | false | はい=台帳を無視して再保存 |
+
+trigger.inputs.schema.required = []（すべて任意入力。未入力時は各Initializeアクションのcoalesceで既定値を補完）
+参照式: triggerBody()?['LookbackDays'] / triggerBody()?['DryRun'] / triggerBody()?['ForceReprocess']
+注記: 上記は手作業定義のため内部名＝この名称で確定している。Power Automate UIでボタントリガーの入力を
+GUIから追加し直した場合、内部名が自動採番（例: text_1, boolean_1 等）に変わる可能性がある点に注意
+（§8インポート後の再設定ポイント 7.）。
+
+★v6でのLookbackDaysの効果範囲（重要な変更点。v3にはこの安全化が無かった）:
+LookbackDaysは Compose_EffectiveLookbackDays（No.1）を経由してから varLookbackDays に反映される。
+式: @if(greater(int(coalesce(triggerBody()?['LookbackDays'], 0)), 0), int(coalesce(triggerBody()?['LookbackDays'], 7)), 7)
+未入力（null）の場合だけでなく、0以下の値が渡された場合も既定値7に丸められる（v3ではint(coalesce(...,7))の
+みで、0や負数がそのままvarLookbackDaysに入り得た）。730日超の上限チェックは設けていない（§6-6, §8参照）。
+
+DryRunの効果範囲（v2以降変化なし）:
+DryRun=はい（既定値）の場合、以下の両方が省略される。
+  (1) 添付ファイルの本番保存（Condition_DryRun。Condition_Has_File_Attachments[then]内）
+  (2) 総括Wordファイル(.doc)の作成（Condition_DryRun_Archive。Scope_60内）
+  （varArchiveUrlにはプレースホルダ文言が入る。§4 No.135、§6-7参照）
+
+開始日時/終了日時の算出:
+- 終了(UTC): utcNow()（Initialize_EndDateUtc）
+- 開始(UTC): addDays(variables('varEndDateUtc'), sub(0, variables('varLookbackDays')))（Initialize_StartDateUtc）
+
+--------------------------------------------------------------------
+## 3. 内部変数一覧（全28。すべてルート直下でInitializeVariable。v6でvarDocHtmlParts廃止・varRunLogList新設、v8でvarListSiteAddress新設。v10は変数の増減なし・既存変数の用途がScope_05/決定的URL構築へ拡張）
+--------------------------------------------------------------------
+書式: 変数名 / 型 / 初期値 / 用途 / 更新箇所 / 並列実行時の注意
+
+1. varRunId
+   型: string
+   初期値: @guid()
+   用途: 実行ごとの一意ID。台帳(MeetingArchiveLedger)・実行ログ(RunLog)の相関キー。
+   更新箇所: Initialize_RunId のみ（以降のアクションで再設定なし）。
+   並列実行時の注意: 全Foreach/Untilはrepetitions=1（逐次）のため同一実行内での競合更新は無い。
+   複数の実行インスタンスが同時に走った場合はそれぞれ別のguid()を持つため相互に区別可能。
+
+2. varLookbackDays
+   型: integer
+   初期値: @outputs('Compose_EffectiveLookbackDays')　★v6で変更（旧: @int(coalesce(triggerBody()?['LookbackDays'], 7))）
+   用途: 取得対象期間（日数）。既定7日。0以下・未入力は7に丸められる（Compose_EffectiveLookbackDaysで安全化）。
+   更新箇所: Initialize_LookbackDays のみ。
+   並列実行時の注意: 読み取り専用的に使用（Initialize_StartDateUtcの計算のみ）。競合なし。
+
+3. varEndDateUtc
+   型: string
+   初期値: @utcNow()
+   用途: 取得対象期間の終了日時（UTC）。Filter_Messages_By_Periodの上限に使用。
+   更新箇所: Initialize_EndDateUtc のみ。
+   並列実行時の注意: 以降読み取り専用。競合なし。
+
+4. varStartDateUtc
+   型: string
+   初期値: @addDays(variables('varEndDateUtc'), sub(0, variables('varLookbackDays')))
+   用途: 取得対象期間の開始日時（UTC）。Filter_Messages_By_Periodの下限に使用。
+   更新箇所: Initialize_StartDateUtc のみ。
+   並列実行時の注意: 以降読み取り専用。競合なし。
+
+5. varTeamId
+   型: string
+   初期値: 定数 "a7ac0c68-87ba-4613-8960-13660f0f5f56"
+   用途: 対象TeamsチームID。Graph URL組み立てに使用（GUID形式のためuriComponent不要）。
+   更新箇所: Initialize_TeamId のみ（要環境再設定。§8-3）。
+   並列実行時の注意: 読み取り専用。競合なし。
+
+6. varChannelId
+   型: string
+   初期値: 定数 "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+   用途: 対象チャネルID。Graph URL組み立てに使用。★v5でuriComponent(varChannelId)としてエンコードして
+   使用するよう変更（':' '@' を含むため）。
+   更新箇所: Initialize_ChannelId のみ（要環境再設定。§8-3）。
+   並列実行時の注意: 読み取り専用。競合なし。
+
+7. varSiteAddress
+   型: string
+   初期値: 定数 "https://metijapan.sharepoint.com/sites/mROOM_240600018"
+   用途: SharePointサイトURL（ファイル保存系専用。★v8でリスト操作系から分離）。
+   Create_Destination_Folder_L1〜L4/Verify_Destination_Folder（★v10新設のScope_05）/
+   Get_Source_File_Content/Create_Attachment_File/Create_Archive_Document/Compose_Saved_File_Url/
+   Set_ArchiveUrl（★v10でCompose_Saved_File_Url/Set_ArchiveUrlの決定的URL構築にも使用開始）の
+   dataset・URL組み立てに使用。★v10でGet_Saved_File_Properties/Get_Saved_Archive_Properties
+   （GetFileItem）は廃止されたため対象から外れた。台帳・実行ログのリスト操作は
+   varListSiteAddress（pjteam_220400119。下記8.参照）を使用する。
+   更新箇所: Initialize_SiteAddress のみ（要環境再設定。§8-2,3）。
+   並列実行時の注意: 読み取り専用。競合なし。
+
+8. varListSiteAddress　★v8新設
+   型: string
+   初期値: 定数 "https://metijapan.sharepoint.com/teams/pjteam_220400119"
+   用途: リスト操作（台帳MeetingArchiveLedger・実行ログMeetingArchiveRunLog）専用のSharePointサイトURL。
+   Get_Ledger_Existingのdatasetに使用（★v8でvarSiteAddressから分離）。台帳・実行ログのリストを
+   ファイル保存先（mROOM）とは別サイトに作成するというユーザー決定（リスト自動作成フロー
+   CreateMeetingArchiveListsの作成先に合わせたもの）に伴い新設。Create_Ledger_Item/
+   Create_Ledger_Item_Failed/Create_Run_Log/Create_Error_Log（REST4アクション）のdatasetは静的リテラルの
+   ため本変数を直接は参照しないが、値としては同一サイト（pjteam_220400119）を指すべきものであり、
+   サイト変更時は本変数とREST4アクションのdataset（4箇所）の両方を編集する必要がある（§8参照）。
+   更新箇所: Initialize_ListSiteAddress のみ（要環境再設定。§8-2,3）。
+   並列実行時の注意: 読み取り専用。競合なし。
+
+9. varLibrary
+   型: string
+   初期値: 定数 "Shared Documents"
+   用途: 保存先ドキュメントライブラリ名。folderPath組み立て、およびScope_05
+   （Create_Destination_Folder_L1〜L4/Verify_Destination_FolderのServerRelativeUrl組み立て。★v10新設）、
+   Compose_Saved_File_Url/Set_ArchiveUrl（★v10新設の決定的URL構築）に使用。
+   ★v10でGet_Saved_File_Properties/Get_Saved_Archive_Properties（GetFileItem）自体が廃止されたため、
+   GetFileItemのtableとしての用途は無くなった。
+   更新箇所: Initialize_Library のみ（要環境再設定。§8-2,3）。
+   並列実行時の注意: 読み取り専用。競合なし。
+
+10. varDestinationPath
+   型: string
+   初期値: 定数 "123_伝送システム/00_共用フォルダ/60_庶務担当/99_過去の課内会議"（'/'区切りで4階層）
+   用途: 保存先フォルダパス（ライブラリ配下）。folderPath組み立てに使用。★v10でScope_05
+   （Create_Destination_Folder_L1〜L4/Verify_Destination_Folder）のServerRelativeUrl組み立てにも使用。
+   Create_Destination_Folder_L1〜L4はsplit(varDestinationPath,'/')の先頭1〜4要素をjoinして各階層の
+   フォルダを作成するため、★varDestinationPathは'/'区切りで最大4階層までを前提とする（5階層以上を
+   設定した場合、L4より深い階層は自動作成されない。§8参照）。
+   更新箇所: Initialize_DestinationPath のみ（要環境再設定。§8-3）。
+   並列実行時の注意: 読み取り専用。競合なし。
+
+11. varLedgerList
+    型: string
+    初期値: 定数 "MeetingArchiveLedger"
+    用途: 処理台帳（冪等性チェック用SharePointリスト）名。Get_Ledger_ExistingのtableおよびCreate_Ledger_Item/Create_Ledger_Item_Failedのparameters/uri（★v7でtableから変更。§4.0凡例参照）に使用。
+    ★v8: このリスト自体はvarListSiteAddress（pjteam_220400119）サイトに作成される（varSiteAddress側では
+    ない）。Get_Ledger_Existingのdatasetがvariables('varListSiteAddress')に変更されたのはこのため。
+    更新箇所: Initialize_LedgerList のみ（要環境再設定。§8-2,3）。
+    並列実行時の注意: 読み取り専用。競合なし。
+
+12. varRunLogList　★v6新設
+    型: string
+    初期値: 定数 "MeetingArchiveRunLog"
+    用途: 実行ログ（MeetingArchiveRunLog）リスト名。Create_Run_Log/Create_Error_Logのparameters/uri
+    （★v7でtableから変更）をこのVar経由に統一（旧v3では"MeetingArchiveRunLog"を両アクションに定数直書き
+    しており、再選択点が分散していた）。★v8: このリストもvarListSiteAddress（pjteam_220400119）サイトに
+    作成される。
+    更新箇所: Initialize_RunLogList のみ（要環境再設定。§8-2,3）。
+    並列実行時の注意: 読み取り専用。競合なし。
+
+13. varMessagesArray
+    型: array
+    初期値: @json('[]')
+    用途: チャネルの親メッセージ全件（ページング集約先）。
+    更新箇所: Append_Message_To_MessagesArray（Do_Until_Messages_Paging内のProcess_Retrieved_Messages
+    〔Apply to each〕の内部で、取得ページ1件ずつをAppendToArrayVariableで追記）。★v6（実体はv4）で変更
+    （旧: Set_MessagesArrayによるunion自己参照。自己参照はPower Automate保存時にエラーとなるため廃止）。
+    並列実行時の注意: Do_Until_Messages_Paging・Process_Retrieved_Messagesとも常に逐次実行（Untilは
+    concurrency設定自体が無く、Foreachはrepetitions=1）のため、追記順序の競合は発生しない。
+
+14. varNextLink
+    型: string
+    初期値: ""
+    用途: メッセージ取得の次ページURL（Graph @odata.nextLink）。ループ終了条件 empty(varNextLink)。
+    更新箇所: Set_NextLink_First（初期URL設定。★v5でuriComponent(varChannelId)使用に変更）→
+    Set_NextLink（Do_Until_Messages_Paging内、Process_Retrieved_Messagesの成功後に毎ループ更新。
+    ★v4でrunAfterがGet_Channel_MessagesからProcess_Retrieved_Messagesに変更）。
+    並列実行時の注意: 逐次実行のため競合なし。
+
+15. varRepliesArray
+    型: array
+    初期値: @json('[]')
+    用途: 1会議（親メッセージ）分の返信全件（ページング集約先）。会議ごとにリセットされる。
+    更新箇所: Set_RepliesArray_Reset（会議ごとに空配列へ。変更なし）→
+    Append_Reply_To_RepliesArray（Do_Until_Replies_Paging内のProcess_Retrieved_Replies〔Apply to each〕の
+    内部で、取得ページ1件ずつをAppendToArrayVariableで追記）。★v6（実体はv4）で変更（旧: Set_RepliesArray
+    によるunion自己参照）。
+    並列実行時の注意: Process_Each_Parent_Message・Do_Until_Replies_Paging・Process_Retrieved_Repliesとも
+    repetitions=1または逐次実行のため、リセット漏れ・取り違え・追記競合は発生しない。
+
+16. varReplyNextLink
+    型: string
+    初期値: ""
+    用途: 返信取得の次ページURL。ループ終了条件 empty(varReplyNextLink)。
+    更新箇所: Set_ReplyNextLink_First（会議ごとに初期URL設定、Process_Each_Parent_Message直下。
+    ★v5でuriComponent(varChannelId)＋uriComponent(親メッセージid)使用に変更）→
+    Set_ReplyNextLink（Do_Until_Replies_Paging内、Process_Retrieved_Repliesの成功後に毎ループ更新。
+    ★v4でrunAfterがGet_Message_RepliesからProcess_Retrieved_Repliesに変更）。
+    並列実行時の注意: 逐次実行のため競合なし。
+
+17. varAttachmentCandidates
+    型: array
+    初期値: @json('[]')
+    用途: 親メッセージ＋全返信の添付候補一覧（sourceReplyId付き。ファイル以外の添付も含む段階）。
+    更新箇所: Set_AttachmentCandidates_Parent（親メッセージ分をセット）→
+    Append_Reply_Attachment_Candidate（Process_Each_Reply内のProcess_Each_Reply_Attachment〔Apply to each〕
+    の内部で、返信1件分のSelect結果を1要素ずつAppendToArrayVariableで追記）。★v6（実体はv4）で変更
+    （旧: Append_Reply_Attachment_Candidatesという名前のSetVariable+union自己参照アクション）。
+    並列実行時の注意: Process_Each_Reply・Process_Each_Reply_Attachmentともrepetitions=1のため競合なし。
+
+18. varMeetingAttachments
+    型: array
+    初期値: @json('[]')
+    用途: 1会議分の保存済み添付情報（originalName/savedName/savedFileUrl/status）。会議ごとにリセット。
+    更新箇所: Set_MeetingAttachments_Reset（会議ごとに空配列へ）→
+    Append_Existing_Meeting_Attachment（台帳既存・再利用）/ Append_DryRun_Meeting_Attachment（DryRun）/
+    Append_Saved_Meeting_Attachment（保存成功。★v6でsavedFileUrlの参照式をoutputs()→body()に修正）/
+    Append_Failed_Meeting_Attachment（保存失敗）のいずれか1つ（Process_Each_Attachment内、添付1件につき1回）。
+    並列実行時の注意: Process_Each_Attachmentがrepetitions=1のため添付を1件ずつ順次処理。競合なし。
+
+19. varMeetings
+    型: array
+    初期値: @json('[]')
+    用途: 正規化済み会議データの累積配列（最終的な会議一覧の元データ）。
+    更新箇所: Append_Normalized_Meeting（Process_Each_Parent_Message内、会議ごとに1件追記）。
+    並列実行時の注意: Process_Each_Parent_Messageがrepetitions=1のため会議を1件ずつ順次追記。競合なし。
+
+20. varSortedMeetings
+    型: array
+    初期値: @json('[]')
+    用途: sortKeyで昇順ソート済みの会議配列（最終出力・実行ログの件数集計に使用）。
+    更新箇所: Sort_Meetings（Scope_40、1回のみ）。
+    並列実行時の注意: 1回限りの一括代入のため競合なし。
+
+21. varDocumentHtml
+    型: string
+    初期値: ""
+    用途: 結合済みの最終HTML本文（アーカイブファイルのbodyに使用）。
+    更新箇所: ★v6（実体はv4）で方式変更。旧: varDocHtmlParts（配列）へAppendToArrayVariableで蓄積し、
+    最後にSet_DocumentHtmlでjoin()して本変数へ一括代入。新: Append_DocumentHtml_Header（ヘッダ）→
+    〔会議ごとに〕Append_Page_Break（改ページ）/Append_Meeting_Header_Html（見出し）/
+    Append_Attachment_Html（添付リンク。★v6でhrefを&エスケープ）/Append_Attachment_Failed_Html（未保存表示）/
+    Append_No_Attachments_Html（添付なし表示）→Append_DocumentHtml_Footer（フッタ）が、いずれも
+    AppendToStringVariableで本変数へ直接連結する（varDocHtmlParts・Set_DocumentHtmlは廃止）。
+    並列実行時の注意: 関連する全Foreach（Apply_To_Each_Sorted_Meeting, Apply_To_Each_Saved_Attachment）が
+    repetitions=1のため、Append順序が入力順（会議の日付順・添付の配列順）と一致することが保証される。
+
+22. varMeetingIndex
+    型: integer
+    初期値: 0
+    用途: 会議の処理順インデックス（0始まり）。2件目以降の改ページ判定に使用。
+    更新箇所: Increment_MeetingIndex（Apply_To_Each_Sorted_Meeting内、会議ごとに+1）。
+    並列実行時の注意: repetitions=1のため会議順に厳密にインクリメント。
+
+23. varSavedCount
+    型: integer
+    初期値: 0
+    用途: 実際にSharePointへ保存した添付件数の集計（実行ログ item/SavedCount）。
+    更新箇所: Increment_SavedCount（Scope_Save_Fileの成功後、Process_Each_Attachment内）。
+    並列実行時の注意: repetitions=1のため+1の欠落・二重カウントは発生しない。
+
+24. varSkippedCount
+    型: integer
+    初期値: 0
+    用途: スキップ（台帳既存/DryRun）した添付件数の集計（実行ログ item/SkippedCount）。
+    更新箇所: Increment_SkippedCount_Existing（台帳に既存Saved有りの場合）/
+    Increment_SkippedCount_DryRun（DryRun=trueの場合）。
+    並列実行時の注意: repetitions=1のため+1の欠落・二重カウントは発生しない。
+
+25. varFailedCount
+    型: integer
+    初期値: 0
+    用途: 添付の保存に失敗（Scope_Save_FileがFailed/TimedOut）した件数の集計（実行ログ item/FailedCount）。
+    更新箇所: Increment_FailedCount（Scope_Save_Fileの失敗/タイムアウト後、Process_Each_Attachment内）。
+    並列実行時の注意: repetitions=1のため+1の欠落・二重カウントは発生しない。0は「未失敗」の正しい初期値
+    であり「未設定」ではない（§7参照）。
+
+26. varArchiveUrl
+    型: string
+    初期値: ""
+    用途: 作成したアーカイブファイルのURL（DryRun=いいえの場合）。DryRun=はいの場合はプレースホルダ
+    文言が入る。
+    更新箇所: Set_ArchiveUrl（DryRun=いいえの場合、Scope_60内。★v10で値を決定的URL構築
+    replace(concat(varSiteAddress,varLibrary,varDestinationPath,Compose_ArchiveFileNameの出力),' ','%20')
+    に変更。旧: @body('Get_Saved_Archive_Properties')?['{Link}']。さらにその前のv6では
+    @outputs('Get_Saved_Archive_Properties')?['{Link}']から修正）/ Set_ArchiveUrl_DryRun
+    （DryRun=はいの場合）のいずれか一方。
+    並列実行時の注意: Condition_DryRun_Archiveの分岐によりどちらか一方のみ実行されるため競合なし。
+
+27. varRunStatus
+    型: string
+    初期値: "Failed"（フェイルセーフ初期値。何も更新されず終了した場合でも失敗扱いになるようにする設計）
+    用途: 実行結果ステータス（実行ログ item/Status）。
+    更新箇所: Set_RunStatus_Success（Scope_70で"Success"へ更新）/ Set_RunStatus_Failed（Scope_90で
+    改めて"Failed"へ更新。冪等な再設定）。
+    並列実行時の注意: Scope_70とScope_90は互いに排他的なrunAfter条件（Scope_90はScope_70の
+    Failed/Skipped/TimedOutでのみ実行）のため同時更新は起きない。
+
+28. varErrorMessage
+    型: string
+    初期値: ""
+    用途: エラー内容の要約メッセージ（実行ログ item/ErrorMessage）。
+    更新箇所: Set_ErrorMessage（Scope_90、1回のみ）。
+    並列実行時の注意: Scope_90自体がrepetitions設定不要の単一Scopeのため競合なし。
+    ※このvarErrorMessageはフロー全体catch用であり、添付単位の保存失敗メッセージ
+    （Compose_LedgerFailed_BodyのErrorMessage。★v7でCreate_Ledger_Item_Failedのitem/ErrorMessageから移動）とは別物（後者は台帳へ都度個別記録され、変数化されない）。
+
+★修正: 旧版（v3）にあった「27. varDocHtmlParts（配列。HTML文字列を分割保持し最後にjoinする方式）」は
+v4でこの方式自体が廃止されたため本書から削除した（varDocumentHtmlの直接AppendToStringVariable方式に
+統合。上記21.参照）。かわりに varRunLogList（v6新設。上記12.）を追加し、総変数数は27のまま変わらなかった（v6時点）。v8でvarListSiteAddress（上記8.）を新設したため、総変数数は27→**28**に変わった（リスト操作サイトの分離。詳細は本書冒頭「v7→v8 改訂点」参照）。
+
+--------------------------------------------------------------------
+## 4. アクション一覧（実行順。全148アクション。★v10でScope_05系7＋Compose_Source_Url＋Compose_Saved_File_Url
+＋サニタイズ2（Hash/Percent）を追加し、Get_Saved_File_Properties/Get_Saved_Archive_Propertiesの2を削除
+（139→148）。詳細は本書冒頭「v9→v10 改訂点」参照）
+--------------------------------------------------------------------
+
+### 4.0 凡例（全アクション共通事項。個々のエントリでは要点のみ再掲）
+- 認証(authentication): 全OpenApiConnectionアクションで共通。
+  value = "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']", type = "Raw"
+- 再試行の既定方針: OpenApiConnectionアクションはdefinition.json中にretryPolicyの上書き記述が無いため、
+  Power Automateプラットフォームの既定リトライポリシー（既定4回・指数バックオフ）に従う。
+  Compose/SetVariable/IncrementVariable/AppendToArrayVariable/AppendToStringVariable/Query/Select/If/
+  Foreach/Until/Scopeは外部呼び出しを伴わない制御・データ操作アクションのため再試行設定は対象外。
+- タイムアウトの既定方針: definition.json中に明示的なlimit（タイムアウト）指定があるのは
+  Do_Until_Messages_Paging と Do_Until_Replies_Paging のみ（各 limit.count=5000, limit.timeout=PT1H）。
+  それ以外のアクションはタイムアウトの明示設定なし（プラットフォーム既定に従う）。
+- runAfterの明記方針（★v5で定義上も明示化）: 各Scope/Foreach/Until/If分岐の先頭アクション（そのコンテナ内で
+  最初に実行されるアクション）は、definition.json上でも "runAfter": {}（空オブジェクト＝依存アクション無し）
+  が明示的にシリアライズされている（Get_Channel_Messages, Get_Message_Replies, Select_Reply_Attachments,
+  Get_Source_File_Content を含む全コンテナ起点アクションが対象）。本書はこれらを「実行条件: 〜内で最初
+  （runAfter={}）」と一貫して記載する。
+- エラー時の処理の既定方針（3階層。★v10で(0)を新設）:
+  (0) 保存先フォルダの事前検証（★v10新設）: ルート直後のScope_05_Ensure_Destination_Folder内、
+      Condition_Provision_Destination[then]の最終アクションVerify_Destination_Folderが失敗すると
+      Scope_05自体がFailedとなり、Scope_10以降が実行されずScope_70がSkippedとなって(a)のフロー全体catchに
+      委ねられる。DryRun=はいの場合はCondition_Provision_Destinationがfalseとなり、Scope_05は
+      何も実行せずSucceededで終了する（本階層自体が発火しない）。
+  (a) フロー全体のcatch: Scope_05〜Scope_70の各アクションに個別のtry/catch構成は無い。いずれかが失敗すると、
+      そのアクションを含むScope（および外側のScope）が異常終了し、runAfterの依存関係上
+      Scope_70_Write_Run_Log がSkipped（またはFailed/TimedOut）となる。これを Scope_90_Catch が
+      runAfter=["Failed","Skipped","TimedOut"] で捕捉し、varRunStatus="Failed"・varErrorMessage設定・
+      エラーログ記録を行う。最後に Scope_99_Finally が runAfter=["Succeeded","Skipped","Failed","TimedOut"]
+      で常に実行され、サマリをComposeする（詳細は §6 想定エラーと対処を参照）。
+  (b) 添付1件単位のcatch: Condition_Has_File_Attachments[then] > Process_Each_Attachment内の
+      Scope_Save_File（★v10でCompose_Source_Url→Compose_Source_Site→Compose_Source_Path→
+      Get_Source_File_Content→Create_Attachment_Fileの5アクション。Get_Saved_File_Properties
+      〔GetFileItem〕は廃止。旧v9は5アクション中の最後がGet_Saved_File_Propertiesだった点が異なる）
+      が失敗/タイムアウトした場合、Power Automateの「実行後の構成（Configure run after）」相当の
+      仕組みにより、Scope_Save_Fileに対してrunAfterで["Failed","TimedOut"]を指定した
+      Append_Failed_Meeting_Attachment以下が起動し、当該添付のみStatus=Failedとして記録した上で
+      Process_Each_Attachmentの当該周回自体は正常終了として扱われる（＝会議処理・フロー全体は止まらない）。
+      これはIfアクションによる分岐ではなく、後続アクションのrunAfter条件を「Succeeded」ではなく
+      「Failed」「TimedOut」に設定することで実現される、Power Automate/Logic Apps標準のエラー捕捉パターン
+      である。ただし、この(b)の対象はScope_Save_File内の5アクションのみであり、Compose_IdempotencyKey・
+      Get_Ledger_Existing・Create_Ledger_Item・Create_Ledger_Item_Failed自体の失敗は捕捉対象外
+      （その場合は(a)のフロー全体catchに委ねられる。§6参照）。
+- operationId（実在5種のみ。以下略号で参照。★v10でGetFileItem廃止・6種→5種。★v7でPostItem廃止・7種→6種）:
+  [Teams-HTTP]=HttpRequest（shared_teams） / [SPO-HTTP]=HttpRequest（shared_sharepointonline。★v7新設。
+  Teamsと同じoperationId名だが別コネクタ・別アクション。★v10でScope_05のフォルダ作成4本＋検証1本も
+  同operationIdで追加） / [Conv-Html]=HtmlToText（shared_conversionservice）/
+  [SPO-GetItems]=GetItems / [SPO-CreateFile]=CreateFile /
+  [SPO-GetFileContentByPath]=GetFileContentByPath（すべてshared_sharepointonline。旧[SPO-PostItem]=PostItem
+  はv7で廃止。旧[SPO-GetFileItem]=GetFileItemはv10で廃止（Get_Saved_File_Properties/
+  Get_Saved_Archive_Propertiesの2アクションを削除し、保存後URLは決定的構築に変更）。
+  Create_Ledger_Item/Create_Ledger_Item_Failed/Create_Run_Log/Create_Error_Logの4件が
+  [SPO-PostItem]から[SPO-HTTP]へ置換された）
+- コネクタ出力の参照方法（★v6で重要な統一ルールとして明記）: OpenApiConnectionアクションの出力は
+  {statusCode, headers, body} という封筒形式で格納される。したがって当該アクションの実際の戻り値
+  （SharePointのItemId・{Link}等）へアクセスする式は必ず body('アクション名')?['キー'] を用いる。
+  outputs('アクション名')?['キー']（bodyを経由しない直接参照）は常にnullを返すため、この形は使用しない
+  （v3にあった5箇所の誤用はv6で修正済み。§4.4, §4.7の該当エントリを参照。うち2箇所はv10でGetFileItem
+  自体の廃止に伴いエントリごと削除済み。§6-3参照）。なお、Compose アクションの
+  出力を参照する場合は封筒構造を持たないため引き続き outputs('Compose名') を用いる（変更なし）。
+
+### 4.1 ルート初期化アクション（No.1〜29、配置するScope＝ルート。★v6でNo.1にCompose追加・No.13にInitialize_RunLogListを追加。★v8でNo.9にInitialize_ListSiteAddressを追加）
+
+[No.1]　★v4新設
+アクション表示名: Compose_EffectiveLookbackDays
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: ルート
+入力値: トリガーのLookbackDaysが正の整数ならその値、そうでなければ（null/未入力/0以下）7を採用
+動的コンテンツ: トリガー（手動）の「取得対象日数」(LookbackDays)
+Power Automate式: @if(greater(int(coalesce(triggerBody()?['LookbackDays'], 0)), 0), int(coalesce(triggerBody()?['LookbackDays'], 7)), 7)
+出力型: integer
+後続の参照先: Initialize_LookbackDays（値としてそのまま採用）
+実行条件: フロー開始直後（runAfter={}、最初のアクション）
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v4新設の安全化アクション。旧版（v3）ではInitialize_LookbackDaysが
+int(coalesce(triggerBody()?['LookbackDays'], 7))を直接使用しており、0や負数がそのまま採用され得た。
+本アクションの追加により、0以下の値も既定値7へ丸められるようになった。
+
+[No.2]
+アクション表示名: Initialize_RunId
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varRunId, 種類=string, 値=guid()
+動的コンテンツ: なし（システム関数のみ）
+Power Automate式: @guid()
+出力型: string（変数varRunIdの値として保持。アクション自体の出力は通常参照しない）
+後続の参照先: Initialize_LookbackDays（runAfter）／以降、varRunIdはCompose_Ledger_Body,
+Compose_LedgerFailed_Body, Compose_RunLog_Body, Compose_ErrorLog_Body, Compose_Finally_Summary等で参照
+（★v7でCreate_Ledger_Item等のitem/RunIdから、直前のCompose_X_BodyのRunIdへ参照元が移動）
+実行条件: Compose_EffectiveLookbackDaysの成功後　★v6でrunAfter対象がルート先頭からCompose_EffectiveLookbackDaysに変更
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。本アクション自体が失敗する可能性は極めて低い（guid()生成のみ）。
+
+[No.3]
+アクション表示名: Initialize_LookbackDays
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varLookbackDays, 種類=integer, 値=outputs('Compose_EffectiveLookbackDays')
+動的コンテンツ: Compose_EffectiveLookbackDays の 出力
+Power Automate式: @outputs('Compose_EffectiveLookbackDays')　★v4で変更（旧: @int(coalesce(triggerBody()?['LookbackDays'], 7))）
+出力型: integer
+後続の参照先: Initialize_StartDateUtcの計算に使用
+実行条件: Initialize_RunIdの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。Compose_EffectiveLookbackDaysが既に型・範囲の安全化を行っているため、
+本アクション自体でのエラーは通常発生しない。
+
+[No.4]
+アクション表示名: Initialize_EndDateUtc
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varEndDateUtc, 種類=string, 値=utcNow()
+動的コンテンツ: なし（システム関数のみ）
+Power Automate式: @utcNow()
+出力型: string（ISO8601日時）
+後続の参照先: Initialize_StartDateUtc, Filter_Messages_By_Period
+実行条件: Initialize_LookbackDaysの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.5]
+アクション表示名: Initialize_StartDateUtc
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varStartDateUtc, 種類=string, 値=addDays(varEndDateUtc, sub(0, varLookbackDays))
+動的コンテンツ: なし（変数参照のみ：varEndDateUtc, varLookbackDays）
+Power Automate式: @addDays(variables('varEndDateUtc'), sub(0, variables('varLookbackDays')))
+出力型: string（ISO8601日時）
+後続の参照先: Filter_Messages_By_Period
+実行条件: Initialize_EndDateUtcの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.6]
+アクション表示名: Initialize_TeamId
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varTeamId, 種類=string, 値="a7ac0c68-87ba-4613-8960-13660f0f5f56"（定数）
+動的コンテンツ: なし
+Power Automate式: a7ac0c68-87ba-4613-8960-13660f0f5f56
+出力型: string
+後続の参照先: Set_NextLink_First, Set_ReplyNextLink_First（Graph URL組み立て）
+実行条件: Initialize_StartDateUtcの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※要環境再設定（§8-3）。GUID形式のためGraph URLへの組み込み時にuriComponentは
+不要（varChannelIdとの違いに注意。§4.3 No.38参照）。
+
+[No.7]
+アクション表示名: Initialize_ChannelId
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varChannelId, 種類=string, 値="19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"（定数）
+動的コンテンツ: なし
+Power Automate式: 19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2
+出力型: string
+後続の参照先: Set_NextLink_First, Set_ReplyNextLink_First（Graph URL組み立て。★v5よりuriComponent()で
+エンコードして使用）
+実行条件: Initialize_TeamIdの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※要環境再設定（§8-3）。':' '@' を含む値のためGraph URLへの組み込み時は
+uriComponent(variables('varChannelId'))でエンコードする（§4.3 No.38, §4.4 No.52参照）。
+
+[No.8]
+アクション表示名: Initialize_SiteAddress
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varSiteAddress, 種類=string, 値="https://metijapan.sharepoint.com/sites/mROOM_240600018"（定数）
+動的コンテンツ: なし
+Power Automate式: https://metijapan.sharepoint.com/sites/mROOM_240600018
+出力型: string
+後続の参照先: ファイル保存系SharePointアクション（Get_Source_File_Content, Create_Attachment_File,
+Get_Saved_File_Properties, Create_Archive_Document, Get_Saved_Archive_Properties）のdatasetパラメータ。
+★v8でリスト操作系（Get_Ledger_Existing）はvarListSiteAddress（次No.9）へ分離。
+実行条件: Initialize_ChannelIdの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※要環境再設定（§8-2,3）。
+
+[No.9]　★v8新設
+アクション表示名: Initialize_ListSiteAddress
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varListSiteAddress, 種類=string, 値="https://metijapan.sharepoint.com/teams/pjteam_220400119"（定数）
+動的コンテンツ: なし
+Power Automate式: https://metijapan.sharepoint.com/teams/pjteam_220400119
+出力型: string
+後続の参照先: Get_Ledger_Existingのdatasetパラメータ（★v8でvarSiteAddressから変更）
+実行条件: Initialize_SiteAddressの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v8新設：台帳・実行ログのリストをファイル保存先（varSiteAddress＝mROOM）とは
+別サイト（pjteam_220400119）に作成することがユーザー決定されたことに伴う追加（リスト自動作成フロー
+CreateMeetingArchiveListsの作成先に合わせたもの）。REST4アクション（Create_Ledger_Item,
+Create_Ledger_Item_Failed, Create_Run_Log, Create_Error_Log）のdatasetは静的リテラルのため本変数を
+直接は参照しないが、値としては同一サイトを指す（本書冒頭「v7→v8 改訂点」参照）。※要環境再設定（§8-2,3）。
+
+[No.10]
+アクション表示名: Initialize_Library
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varLibrary, 種類=string, 値="Shared Documents"（定数）
+動的コンテンツ: なし
+Power Automate式: Shared Documents
+出力型: string
+後続の参照先: Create_Attachment_File/Get_Saved_File_Properties/Create_Archive_Document/
+Get_Saved_Archive_Properties のfolderPath・table組み立て
+実行条件: Initialize_ListSiteAddressの成功後　★v8で変更（旧: Initialize_SiteAddressの成功後。
+Initialize_ListSiteAddress挿入に伴うrunAfterの玉突き変更）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※要環境再設定（§8-2,3）。
+
+[No.11]
+アクション表示名: Initialize_DestinationPath
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varDestinationPath, 種類=string,
+値="123_伝送システム/00_共用フォルダ/60_庶務担当/99_過去の課内会議"（定数）
+動的コンテンツ: なし
+Power Automate式: 123_伝送システム/00_共用フォルダ/60_庶務担当/99_過去の課内会議
+出力型: string
+後続の参照先: Create_Attachment_File, Create_Archive_Document のfolderPath組み立て
+実行条件: Initialize_Libraryの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※要環境再設定（§8-3）。
+
+[No.12]
+アクション表示名: Initialize_LedgerList
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varLedgerList, 種類=string, 値="MeetingArchiveLedger"（定数）
+動的コンテンツ: なし
+Power Automate式: MeetingArchiveLedger
+出力型: string
+後続の参照先: Get_Ledger_Existingのtableパラメータ、Create_Ledger_Item・Create_Ledger_Item_Failedのparameters/uri（★v7でtableから変更）
+実行条件: Initialize_DestinationPathの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※要環境再設定（§8-2,3）。
+
+[No.13]　★v6新設
+アクション表示名: Initialize_RunLogList
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varRunLogList, 種類=string, 値="MeetingArchiveRunLog"（定数）
+動的コンテンツ: なし
+Power Automate式: MeetingArchiveRunLog
+出力型: string
+後続の参照先: Create_Run_Log, Create_Error_Log のparameters/uri（★v7でtableから変更）
+実行条件: Initialize_LedgerListの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v6新設：旧版（v3）ではCreate_Run_Log/Create_Error_Logのtableに
+"MeetingArchiveRunLog"を定数直書きしており、リスト名変更時の再選択点がvarLedgerListとは別に散在していた。
+本変数化によりRunLogリスト名の再選択点をここ1箇所に一元化した。※要環境再設定（§8-2,3）。
+
+[No.14]
+アクション表示名: Initialize_MessagesArray
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varMessagesArray, 種類=array, 値=json('[]')
+動的コンテンツ: なし
+Power Automate式: @json('[]')
+出力型: array
+後続の参照先: Append_Message_To_MessagesArray（Scope_10内Process_Retrieved_Messages）, Filter_Messages_By_Period
+実行条件: Initialize_RunLogListの成功後　★v6でrunAfter対象がInitialize_LedgerListから変更
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.15]
+アクション表示名: Initialize_NextLink
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varNextLink, 種類=string, 値=""
+動的コンテンツ: なし
+Power Automate式: （空文字）
+出力型: string
+後続の参照先: Set_NextLink_First, Do_Until_Messages_Pagingの終了条件
+実行条件: Initialize_MessagesArrayの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.16]
+アクション表示名: Initialize_RepliesArray
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varRepliesArray, 種類=array, 値=json('[]')
+動的コンテンツ: なし
+Power Automate式: @json('[]')
+出力型: array
+後続の参照先: Set_RepliesArray_Reset, Process_Each_Reply
+実行条件: Initialize_NextLinkの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.17]
+アクション表示名: Initialize_ReplyNextLink
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varReplyNextLink, 種類=string, 値=""
+動的コンテンツ: なし
+Power Automate式: （空文字）
+出力型: string
+後続の参照先: Set_ReplyNextLink_First（初期設定）, Set_ReplyNextLink（ループ内更新）,
+Do_Until_Replies_Pagingの終了条件
+実行条件: Initialize_RepliesArrayの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.18]
+アクション表示名: Initialize_AttachmentCandidates
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varAttachmentCandidates, 種類=array, 値=json('[]')
+動的コンテンツ: なし
+Power Automate式: @json('[]')
+出力型: array
+後続の参照先: Set_AttachmentCandidates_Parent, Append_Reply_Attachment_Candidate, Filter_File_Attachments
+実行条件: Initialize_ReplyNextLinkの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.19]
+アクション表示名: Initialize_MeetingAttachments
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varMeetingAttachments, 種類=array, 値=json('[]')
+動的コンテンツ: なし
+Power Automate式: @json('[]')
+出力型: array
+後続の参照先: Set_MeetingAttachments_Reset, Append_Normalized_Meeting（attachmentsフィールド）
+実行条件: Initialize_AttachmentCandidatesの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.20]
+アクション表示名: Initialize_Meetings
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varMeetings, 種類=array, 値=json('[]')
+動的コンテンツ: なし
+Power Automate式: @json('[]')
+出力型: array
+後続の参照先: Append_Normalized_Meeting, Sort_Meetings
+実行条件: Initialize_MeetingAttachmentsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.21]
+アクション表示名: Initialize_SortedMeetings
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varSortedMeetings, 種類=array, 値=json('[]')
+動的コンテンツ: なし
+Power Automate式: @json('[]')
+出力型: array
+後続の参照先: Sort_Meetings, Apply_To_Each_Sorted_Meeting, Compose_RunLog_Body(MeetingCount),
+Compose_Finally_Summary(MeetingCount)
+実行条件: Initialize_Meetingsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.22]
+アクション表示名: Initialize_DocumentHtml
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varDocumentHtml, 種類=string, 値=""
+動的コンテンツ: なし
+Power Automate式: （空文字）
+出力型: string
+後続の参照先: Append_DocumentHtml_Header以下Scope_50内の全Append系アクション, Create_Archive_Document（body）
+実行条件: Initialize_SortedMeetingsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.23]
+アクション表示名: Initialize_MeetingIndex
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varMeetingIndex, 種類=integer, 値=0
+動的コンテンツ: なし
+Power Automate式: 0
+出力型: integer
+後続の参照先: Condition_Insert_Page_Break, Increment_MeetingIndex
+実行条件: Initialize_DocumentHtmlの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※0は「未設定」ではなく「1件目（0番目）」を表す正しい初期値（§7参照）。
+
+[No.24]
+アクション表示名: Initialize_SavedCount
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varSavedCount, 種類=integer, 値=0
+動的コンテンツ: なし
+Power Automate式: 0
+出力型: integer
+後続の参照先: Increment_SavedCount, Compose_RunLog_Body(SavedCount), Compose_Finally_Summary(SavedCount)
+実行条件: Initialize_MeetingIndexの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.25]
+アクション表示名: Initialize_SkippedCount
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varSkippedCount, 種類=integer, 値=0
+動的コンテンツ: なし
+Power Automate式: 0
+出力型: integer
+後続の参照先: Increment_SkippedCount_Existing, Increment_SkippedCount_DryRun, Compose_RunLog_Body(SkippedCount),
+Compose_Finally_Summary(SkippedCount)
+実行条件: Initialize_SavedCountの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.26]
+アクション表示名: Initialize_FailedCount
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varFailedCount, 種類=integer, 値=0
+動的コンテンツ: なし
+Power Automate式: 0
+出力型: integer
+後続の参照先: Increment_FailedCount, Compose_RunLog_Body(FailedCount), Compose_Finally_Summary(FailedCount)
+実行条件: Initialize_SkippedCountの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.27]
+アクション表示名: Initialize_ArchiveUrl
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varArchiveUrl, 種類=string, 値=""
+動的コンテンツ: なし
+Power Automate式: （空文字）
+出力型: string
+後続の参照先: Set_ArchiveUrl, Set_ArchiveUrl_DryRun, Compose_RunLog_Body(ArchiveUrl),
+Compose_Finally_Summary(ArchiveUrl)
+実行条件: Initialize_FailedCountの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.28]
+アクション表示名: Initialize_RunStatus
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varRunStatus, 種類=string, 値="Failed"（フェイルセーフ初期値）
+動的コンテンツ: なし
+Power Automate式: Failed
+出力型: string
+後続の参照先: Set_RunStatus_Success, Set_RunStatus_Failed, Compose_RunLog_Body(Status),
+Compose_Finally_Summary(Status)
+実行条件: Initialize_ArchiveUrlの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※初期値を"Failed"にすることで、途中終了時も安全側に倒れる設計。
+
+[No.29]
+アクション表示名: Initialize_ErrorMessage
+コネクタ: なし
+Power Automate上のアクション: 変数を初期化する（Initialize variable）
+配置するScope: ルート
+入力値: 名前=varErrorMessage, 種類=string, 値=""
+動的コンテンツ: なし
+Power Automate式: （空文字）
+出力型: string
+後続の参照先: Set_ErrorMessage, Compose_ErrorLog_Body(ErrorMessage)
+実行条件: Initialize_RunStatusの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+★修正: 旧版（v3）にあった「旧No.28 Initialize_DocHtmlParts」（varDocHtmlParts初期化。action_outline.txt上の
+記載位置と実行順の食い違いに関する長い注記付き）は、v4でvarDocHtmlParts方式自体が廃止されたため本書から
+完全に削除した。ルート初期化アクションはInitialize_ErrorMessage（No.29）で終わり、直後に★v10新設の
+Scope_05_Ensure_Destination_Folderが続く（下記4.2参照）。
+
+### 4.2 Scope_05_Ensure_Destination_Folder（No.30〜36。★v10新設。v9実環境実行での全添付Failed事象への
+対処。詳細は本書冒頭「v9→v10 改訂点」参照）
+
+[No.30]　★v10新設
+アクション表示名: Scope_05_Ensure_Destination_Folder
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート
+入力値: なし（子: Condition_Provision_Destination）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし
+後続の参照先: Scope_10_Get_Channel_Messages（runAfter）
+実行条件: Initialize_ErrorMessageの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照(0)]。★v10新設：v9実環境実行で全添付がStatus=Failedとなった事象
+（新実行証跡の分析で失敗添付のcontentUrlは正しい形と確認済み→保存側に原因があると推定。詳細は本書冒頭
+「v9→v10 改訂点」参照）への対処として、保存先フォルダの存在をフロー実行の最も早い段階で保証・検証する
+Scopeを新設した。DryRun=いいえの場合のみ内部でフォルダ作成REST×4＋検証GETを実行する（DryRun=はいの
+場合はCondition_Provision_Destinationの条件がfalseとなり、何も実行せずSucceededで終了する。本番保存先を
+DryRun実行で汚さない設計）。
+
+[No.31]
+アクション表示名: Condition_Provision_Destination
+コネクタ: なし
+Power Automate上のアクション: 条件（Condition / If）
+配置するScope: Scope_05_Ensure_Destination_Folder
+入力値: トリガーのDryRunがtrueでない場合（＝DryRun=いいえの本番実行時のみ）にtrue
+動的コンテンツ: トリガー DryRun
+Power Automate式（expression。構造化条件）:
+  {
+    "and": [
+      { "not": { "equals": ["@coalesce(triggerBody()?['DryRun'], true)", true] } }
+    ]
+  }
+出力型: なし（分岐制御）
+後続の参照先: [then]Create_Destination_Folder_L1以下。elseブランチは無し（DryRun=はいの場合は
+何も実行せずScope_05自体がSucceededで終了する）
+実行条件: Scope_05内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10新設：DryRun時に本番の保存先フォルダへ書き込み（フォルダ作成REST）を
+行わないための条件分岐。Condition_DryRun（添付保存側の分岐。§4.4参照）とは別アクションだが、同じ
+coalesce(triggerBody()?['DryRun'], true)の否定という同一パターンの式を用いる。
+
+[No.32]
+アクション表示名: Create_Destination_Folder_L1
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（UI表示名の目安：「SharePoint に HTTP 要求を送信
+します」/ Send an HTTP request to SharePoint。REST APIで_api/web/foldersへPOST）
+配置するScope: Scope_05_Ensure_Destination_Folder > Condition_Provision_Destination [then]
+入力値: dataset=varSiteAddress, parameters/method="POST", parameters/uri="_api/web/folders",
+parameters/headers（Accept, Content-Typeとも application/json;odata=verbose）,
+parameters/body={"__metadata":{"type":"SP.Folder"}, "ServerRelativeUrl": フルサーバー相対パスの1階層目
+（varDestinationPathを'/'で分割し先頭1要素のみをjoinしたパス）}
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath
+Power Automate式:
+  dataset: @variables('varSiteAddress')
+  parameters/method: POST
+  parameters/uri: _api/web/folders
+  parameters/headers: {"Accept":"application/json;odata=verbose","Content-Type":"application/json;odata=verbose"}
+  parameters/body: {"__metadata": {"type": "SP.Folder"}, "ServerRelativeUrl": "@{concat(uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', join(take(split(variables('varDestinationPath'), '/'), 1), '/'))}"}
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest
+出力型: オブジェクト（封筒{statusCode,headers,body}。本アクションの出力自体は後続で参照されない）
+後続の参照先: Create_Destination_Folder_L2（Succeeded/Failedいずれでも続行）
+実行条件: then分岐内で最初（runAfter={}）
+再試行: 既定ポリシー（コネクタ呼び出し）
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照(0)]。★v10新設：SharePointの_api/web/foldersは既存フォルダに対してPOSTすると
+エラー（既に存在する旨。相当409）になるが、本アクションの後続runAfterは[Succeeded,Failed]の両方を
+指定しているため、「既にフォルダが存在する」ことによるエラーは無視して次階層の作成に進む
+（意図的な既存エラー許容。§8参照）。ServerRelativeUrlはuriPath(varSiteAddress)（サイトのサーバー
+相対部分）＋varLibrary＋varDestinationPathの先頭1階層をjoin/take/splitで組み立てたフルサーバー相対パス。
+
+[No.33]
+アクション表示名: Create_Destination_Folder_L2
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（REST APIで_api/web/foldersへPOST）
+配置するScope: Scope_05_Ensure_Destination_Folder > Condition_Provision_Destination [then]
+入力値: Create_Destination_Folder_L1と同型。ServerRelativeUrlはvarDestinationPathの先頭2階層をjoin
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath
+Power Automate式:
+  dataset: @variables('varSiteAddress')
+  parameters/method: POST
+  parameters/uri: _api/web/folders
+  parameters/headers: {"Accept":"application/json;odata=verbose","Content-Type":"application/json;odata=verbose"}
+  parameters/body: {"__metadata": {"type": "SP.Folder"}, "ServerRelativeUrl": "@{concat(uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', join(take(split(variables('varDestinationPath'), '/'), 2), '/'))}"}
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest
+出力型: オブジェクト（封筒{statusCode,headers,body}。参照されない）
+後続の参照先: Create_Destination_Folder_L3（Succeeded/Failedいずれでも続行）
+実行条件: Create_Destination_Folder_L1のSucceeded/Failedいずれの後でも実行
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照(0)]。L1と同じ既存エラー許容の設計（§8参照）。
+
+[No.34]
+アクション表示名: Create_Destination_Folder_L3
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（REST APIで_api/web/foldersへPOST）
+配置するScope: Scope_05_Ensure_Destination_Folder > Condition_Provision_Destination [then]
+入力値: Create_Destination_Folder_L1と同型。ServerRelativeUrlはvarDestinationPathの先頭3階層をjoin
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath
+Power Automate式:
+  dataset: @variables('varSiteAddress')
+  parameters/method: POST
+  parameters/uri: _api/web/folders
+  parameters/headers: {"Accept":"application/json;odata=verbose","Content-Type":"application/json;odata=verbose"}
+  parameters/body: {"__metadata": {"type": "SP.Folder"}, "ServerRelativeUrl": "@{concat(uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', join(take(split(variables('varDestinationPath'), '/'), 3), '/'))}"}
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest
+出力型: オブジェクト（封筒{statusCode,headers,body}。参照されない）
+後続の参照先: Create_Destination_Folder_L4（Succeeded/Failedいずれでも続行）
+実行条件: Create_Destination_Folder_L2のSucceeded/Failedいずれの後でも実行
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照(0)]。L1と同じ既存エラー許容の設計（§8参照）。
+
+[No.35]
+アクション表示名: Create_Destination_Folder_L4
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（REST APIで_api/web/foldersへPOST）
+配置するScope: Scope_05_Ensure_Destination_Folder > Condition_Provision_Destination [then]
+入力値: Create_Destination_Folder_L1と同型。ServerRelativeUrlはvarDestinationPathの先頭4階層
+（全階層）をjoin
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath
+Power Automate式:
+  dataset: @variables('varSiteAddress')
+  parameters/method: POST
+  parameters/uri: _api/web/folders
+  parameters/headers: {"Accept":"application/json;odata=verbose","Content-Type":"application/json;odata=verbose"}
+  parameters/body: {"__metadata": {"type": "SP.Folder"}, "ServerRelativeUrl": "@{concat(uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', join(take(split(variables('varDestinationPath'), '/'), 4), '/'))}"}
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest
+出力型: オブジェクト（封筒{statusCode,headers,body}。参照されない）
+後続の参照先: Verify_Destination_Folder（Succeeded/Failedいずれでも続行）
+実行条件: Create_Destination_Folder_L3のSucceeded/Failedいずれの後でも実行
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照(0)]。L1と同じ既存エラー許容の設計。★varDestinationPathが'/'区切りで
+4階層を超える場合、5階層目以降はこのL1〜L4では作成されない点に注意（§8参照。保存先パスは最大4階層を
+前提とする設計）。
+
+[No.36]
+アクション表示名: Verify_Destination_Folder
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（REST APIで_api/web/GetFolderByServerRelativeUrl
+へGET）
+配置するScope: Scope_05_Ensure_Destination_Folder > Condition_Provision_Destination [then]
+入力値: dataset=varSiteAddress, parameters/method="GET",
+parameters/uri="_api/web/GetFolderByServerRelativeUrl('フルサーバー相対パス')",
+parameters/headers（Accept=application/json;odata=nometadata）
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath
+Power Automate式:
+  dataset: @variables('varSiteAddress')
+  parameters/method: GET
+  parameters/uri: @concat('_api/web/GetFolderByServerRelativeUrl(''', uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', variables('varDestinationPath'), ''')')
+  parameters/headers: {"Accept":"application/json;odata=nometadata"}
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest
+出力型: オブジェクト（封筒{statusCode,headers,body}。GETが200で返れば保存先フォルダが実在することの証明）
+後続の参照先: Scope_10_Get_Channel_Messages（Scope_05終了後）
+実行条件: Create_Destination_Folder_L4のSucceeded/Failedいずれの後でも実行
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照(0)]。★v10新設：L1〜L4のフォルダ作成が（既存エラー許容込みで）進んだ後、
+最終階層のフォルダが実際に存在するかをGETで検証する。本アクション自体が失敗した場合はScope_05が
+Failedとなり、以降のScope_10以降が実行されずScope_70がSkippedとなってScope_90_Catchが捕捉する
+（§4.0凡例(0)(a)）。これにより、保存先パス・権限に問題がある場合はフロー実行の最も早い段階で
+明確な失敗として検出でき、v9で発生した「全添付が黙々とFailedになる」事象を未然に防ぐ（詳細は
+本書冒頭「v9→v10 改訂点」参照）。
+
+### 4.3 Scope_10_Get_Channel_Messages（No.37〜43。★v4でSet_MessagesArrayをProcess_Retrieved_Messages＋Append_Message_To_MessagesArrayに置換）
+
+[No.37]
+アクション表示名: Scope_10_Get_Channel_Messages
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート（このScope自身が子アクションの入れ物）
+入力値: なし（単なるグルーピング。子: Set_NextLink_First, Do_Until_Messages_Paging）
+動的コンテンツ: なし
+Power Automate式: （式なし。type="Scope"）
+出力型: なし（子アクションの成否を集約したScope自体のステータスのみ）
+後続の参照先: Scope_20_Process_Meetings（runAfter）
+実行条件: Initialize_ErrorMessageの成功後
+再試行: 対象外
+タイムアウト: 対象外（子のDo_Until側にPT1H上限あり）
+エラー時の処理: [凡例参照]。子アクションが失敗するとこのScope自体もFailedとなり後続へ伝播。
+
+[No.38]
+アクション表示名: Set_NextLink_First
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_10_Get_Channel_Messages
+入力値: 名前=varNextLink, 値=Graph API 初回URL（$top=50でチャネルメッセージ一覧を取得するURL。
+チャネルIDはuriComponent()でエンコード）
+動的コンテンツ: varTeamId, varChannelId
+Power Automate式: @concat('https://graph.microsoft.com/v1.0/teams/', variables('varTeamId'), '/channels/', uriComponent(variables('varChannelId')), '/messages?$top=50')　★v5で変更（旧: variables('varChannelId')をエンコードせず直接連結）
+出力型: string（varNextLinkの値）
+後続の参照先: Do_Until_Messages_Paging（1回目のGet_Channel_MessagesのUri）
+実行条件: Scope_10内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v5修正点：varChannelIdは"19:...@thread.tacv2"のように':' '@'を含むため、
+未エンコードのままURLに連結するとGraph API呼び出し時に解析エラーとなり得た（実働サンプルとの突合で判明）。
+uriComponent()でエンコードすることで解消。varTeamIdはGUID形式のためエンコード不要（変更なし）。
+
+[No.39]
+アクション表示名: Do_Until_Messages_Paging
+コネクタ: なし
+Power Automate上のアクション: Do until
+配置するScope: Scope_10_Get_Channel_Messages
+入力値: 終了条件式（下記）、limit.count=5000, limit.timeout=PT1H
+動的コンテンツ: varNextLink
+Power Automate式（終了条件）: @empty(variables('varNextLink'))
+出力型: なし（制御アクション。子：Get_Channel_Messages, Process_Retrieved_Messages, Set_NextLinkの結果を集約）
+後続の参照先: Scope_10終了後、Scope_20_Process_Meetings
+実行条件: Set_NextLink_Firstの成功後
+再試行: 対象外（Untilはconcurrency設定自体が無く常に逐次。1周ごとに終了条件を再評価）
+タイムアウト: limit.count=5000回 かつ limit.timeout=PT1H（どちらか先に達した時点で打ち切り）
+エラー時の処理: [凡例参照]。ループ内アクションが失敗するとDo_Until自体がFailedとなり、
+Scope_10, Scope_20以降が実行されずScope_70がSkippedになりScope_90が捕捉。
+
+[No.40]
+アクション表示名: Get_Channel_Messages
+コネクタ: Microsoft Teams（shared_teams）
+Power Automate上のアクション: [Teams-HTTP] HttpRequest（Graphへの生HTTP要求送信。UI表示名の目安：
+「HTTP要求の送信」/ Teams Graphリクエスト）
+配置するScope: Scope_10_Get_Channel_Messages > Do_Until_Messages_Paging
+入力値: Uri=varNextLink（初回はチャネルの/messages?$top=50、2回目以降は@odata.nextLink）,
+Method=GET, ContentType=application/json
+動的コンテンツ: varNextLink
+Power Automate式: parameters.Uri="@variables('varNextLink')", parameters.Method="GET",
+parameters.ContentType="application/json"
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_teams, connectionName=shared_teams,
+operationId=HttpRequest
+出力型: オブジェクト（body: { value: [メッセージ配列], "@odata.nextLink"?: string }、headers、statusCode）
+後続の参照先: Process_Retrieved_Messages（foreach対象=coalesce(body('Get_Channel_Messages')?['value'], json('[]'))）,
+Set_NextLink（body('Get_Channel_Messages')?['@odata.nextLink']）
+実行条件: Do_Until_Messages_Paging内、各周回の最初（runAfter={}）
+再試行: 既定ポリシー（コネクタ呼び出し。retryPolicy上書きなし）
+タイムアウト: 明示設定なし（プラットフォーム既定）
+エラー時の処理: [凡例参照]。Graph側エラー（権限不足・チームID/チャネルID誤り等）でHTTP4xx/5xxの
+場合、既定リトライ後もエラーならDo_Until全体がFailed。
+
+[No.41]　★v4新設（旧Set_MessagesArrayの置換先）
+アクション表示名: Process_Retrieved_Messages
+コネクタ: なし
+Power Automate上のアクション: Apply to each
+配置するScope: Scope_10_Get_Channel_Messages > Do_Until_Messages_Paging
+入力値: foreach対象=coalesce(Get_Channel_Messagesのvalue, [])
+動的コンテンツ: Get_Channel_Messages の 本文(value)
+Power Automate式（foreach）: @coalesce(body('Get_Channel_Messages')?['value'], json('[]'))
+出力型: なし（制御アクション。内部でAppend_Message_To_MessagesArrayを1周回=取得メッセージ1件ずつ実行）
+後続の参照先: Set_NextLink（Process_Retrieved_Messagesの成功後）
+実行条件: Get_Channel_Messagesの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。runtimeConfiguration.concurrency.repetitions=1（並列オフ。次のAppendの
+追記順序保証のため必須）。★v4新設：旧版（v3）のSet_MessagesArray（union(varMessagesArray自身, 新ページ)と
+いうSetVariableでの自己参照）は、Power Automateの保存時にWorkflowRunActionInputsInvalidPropertyエラーの
+原因となることが実環境インポートで判明したため、本アクション＋内部のAppend_Message_To_MessagesArray
+（No.42）の組み合わせに置き換えた。
+
+[No.42]　★v4新設
+アクション表示名: Append_Message_To_MessagesArray
+コネクタ: なし
+Power Automate上のアクション: 配列変数に追加（Append to array variable）
+配置するScope: Scope_10_Get_Channel_Messages > Do_Until_Messages_Paging > Process_Retrieved_Messages
+入力値: varMessagesArrayへ現在の取得メッセージ1件（item()）を追加
+動的コンテンツ: Process_Retrieved_Messages の 現在項目
+Power Automate式: @item()
+出力型: なし（varMessagesArrayへの副作用のみ）
+後続の参照先: Filter_Messages_By_Period（Scope_20、全周回・全ページ分の蓄積後に参照）
+実行条件: Process_Retrieved_Messages内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v4新設：自己参照union方式を廃止し、Foreach＋AppendToArrayVariableという
+Power Automate標準の「配列への逐次追記」パターンに置き換えたことで、保存時のバリデーションエラーを解消しつつ
+同等の蓄積結果を得ている。
+
+[No.43]
+アクション表示名: Set_NextLink
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_10_Get_Channel_Messages > Do_Until_Messages_Paging
+入力値: 名前=varNextLink, 値=coalesce(Get_Channel_Messagesの@odata.nextLink, '')
+動的コンテンツ: Get_Channel_Messages の 本文(@odata.nextLink)
+Power Automate式: @coalesce(body('Get_Channel_Messages')?['@odata.nextLink'], '')
+出力型: string
+後続の参照先: Do_Until_Messages_Pagingの終了判定（次周回 or ループ終了）
+実行条件: Process_Retrieved_Messagesの成功後　★v4でrunAfter対象がGet_Channel_MessagesからProcess_Retrieved_Messagesに変更
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。@odata.nextLinkが無い（最終ページ）場合coalesceで''となりループ終了。
+
+### 4.4 Scope_20_Process_Meetings（No.44〜108。★v4でSet_RepliesArray→Process_Retrieved_Replies＋Append_Reply_To_RepliesArray、
+Append_Reply_Attachment_Candidates→Process_Each_Reply_Attachment＋Append_Reply_Attachment_Candidateに置換。
+★v6でGet_Saved_File_Properties/Create_Ledger_Item/Append_Saved_Meeting_Attachmentのbody/参照を修正。
+★v9でFilter_File_Attachmentsのwhereに'/Shared Documents/'判定を追加、Scope_30_Save_Attachments〔Scope〕を
+Condition_Has_File_Attachments〔If〕へ置換、Scope_Save_File先頭にCompose_Source_Site/Compose_Source_Pathを
+追加してGet_Source_File_Contentのdataset/pathを変更。詳細は本書冒頭「v8→v9 改訂点」参照。★v10で
+Filter_File_Attachmentsに'/Shared%20Documents/'判定を追加、Scope_Save_File先頭にCompose_Source_Urlを追加、
+サニタイズにReplace_Invalid_Hash/Percentを追加、Get_Saved_File_Properties〔GetFileItem〕を削除し
+Compose_Saved_File_Url（決定的URL構築）へ変更。詳細は本書冒頭「v9→v10 改訂点」参照）
+
+[No.44]
+アクション表示名: Scope_20_Process_Meetings
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート
+入力値: なし（子: Filter_Messages_By_Period, Process_Each_Parent_Message）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし
+後続の参照先: Scope_40_Sort_Meetings（runAfter）
+実行条件: Scope_10_Get_Channel_Messagesの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.45]
+アクション表示名: Filter_Messages_By_Period
+コネクタ: なし
+Power Automate上のアクション: フィルター配列（Query / Filter array）
+配置するScope: Scope_20_Process_Meetings
+入力値: from=varMessagesArray, where=期間内(varStartDateUtc〜varEndDateUtc)のmessageType='message'のみ
+動的コンテンツ: varMessagesArray, varStartDateUtc, varEndDateUtc
+Power Automate式:
+  from: @variables('varMessagesArray')
+  where: @and(equals(item()?['messageType'], 'message'), and(greaterOrEquals(item()?['createdDateTime'], variables('varStartDateUtc')), lessOrEquals(item()?['createdDateTime'], variables('varEndDateUtc'))))
+出力型: array（絞り込み後の親メッセージ配列）
+後続の参照先: Process_Each_Parent_Message（foreach対象）
+実行条件: Scope_20内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。messageType/createdDateTimeがnullの投稿（システムイベント等）は
+equals/greaterOrEquals条件がfalseとなり自然に除外される。
+
+[No.46]
+アクション表示名: Process_Each_Parent_Message
+コネクタ: なし
+Power Automate上のアクション: Apply to each
+配置するScope: Scope_20_Process_Meetings
+入力値: foreach対象=body('Filter_Messages_By_Period')
+動的コンテンツ: Filter_Messages_By_Period の 本文
+Power Automate式（foreach）: @body('Filter_Messages_By_Period')
+出力型: なし（制御アクション。ループごとにitems('Process_Each_Parent_Message')で現在項目参照）
+後続の参照先: Scope_20終了 → Scope_40_Sort_Meetings
+実行条件: Filter_Messages_By_Periodの成功後
+再試行: 対象外
+タイムアウト: 対象外（並列オフのため会議数に比例して時間がかかる。§8-7参照）
+エラー時の処理: [凡例参照]。runtimeConfiguration.concurrency.repetitions=1（並列オフ）。
+
+[No.47]
+アクション表示名: Compose_Author
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: 現在項目のfrom.user.displayNameをtrim・空なら'不明'
+動的コンテンツ: Process_Each_Parent_Message の 現在項目 → from.user.displayName
+Power Automate式: @if(empty(trim(coalesce(items('Process_Each_Parent_Message')?['from']?['user']?['displayName'], ''))), '不明', trim(coalesce(items('Process_Each_Parent_Message')?['from']?['user']?['displayName'], '')))
+出力型: string
+後続の参照先: Append_Normalized_Meeting（author）
+実行条件: ループ内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。coalesceでnull→''化してからtrimしているため型不一致（null非対応関数への
+直接渡し）は発生しない。
+
+[No.48]
+アクション表示名: Compose_Organizer
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: 固定文字列 "不明"
+動的コンテンツ: なし
+Power Automate式: 不明
+出力型: string
+後続の参照先: Append_Normalized_Meeting（organizer）
+実行条件: Compose_Authorの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※投稿者(Compose_Author)を無条件に主催者へ流用していない。現時点では
+会議情報（Graph Calendar/Online Meeting等）からの主催者取得は未実装のため定数"不明"。
+実データが取得可能な場合は本アクションを差し替える運用注記（事実シート§10.3対応）。
+
+[No.49]
+アクション表示名: Compose_MeetingDate
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: 現在項目のcreatedDateTimeをJST変換してyyyy-MM-dd化
+動的コンテンツ: Process_Each_Parent_Message の 現在項目 → createdDateTime
+Power Automate式: @formatDateTime(convertFromUtc(items('Process_Each_Parent_Message')?['createdDateTime'], 'Tokyo Standard Time'), 'yyyy-MM-dd')
+出力型: string（yyyy-MM-dd）
+後続の参照先: Append_Normalized_Meeting（meetingDate）, Compose_Meeting_Header_Html（日付見出し）
+実行条件: Compose_Organizerの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。createdDateTimeがnullの投稿はconvertFromUtcでエラーとなり得るが、
+Filter_Messages_By_Periodの時点でcreatedDateTime存在前提の絞り込みを行っているため実質発生しない想定。
+
+[No.50]
+アクション表示名: Compose_PostedDateTimeJst
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: 現在項目のcreatedDateTimeをJST変換してISO風文字列+'+09:00'を付与
+動的コンテンツ: Process_Each_Parent_Message の 現在項目 → createdDateTime
+Power Automate式: @concat(formatDateTime(convertFromUtc(items('Process_Each_Parent_Message')?['createdDateTime'], 'Tokyo Standard Time'), 'yyyy-MM-ddTHH:mm:ss'), '+09:00')
+出力型: string
+後続の参照先: Append_Normalized_Meeting（postedDateTimeJst）, Compose_Meeting_Header_Html（投稿日時表示）
+実行条件: Compose_MeetingDateの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.51]
+アクション表示名: Convert_Body_Html_To_Text
+コネクタ: Content Conversion（shared_conversionservice）
+Power Automate上のアクション: [Conv-Html] HtmlToText（UI表示名の目安：「HTMLからテキストに変換」）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: Content=現在項目のbody.content（HTML本文）
+動的コンテンツ: Process_Each_Parent_Message の 現在項目 → body.content
+Power Automate式: parameters.Content="@coalesce(items('Process_Each_Parent_Message')?['body']?['content'], '')"
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_conversionservice,
+connectionName=shared_conversionservice, operationId=HtmlToText
+出力型: string（body: 変換後プレーンテキスト）
+後続の参照先: Append_Normalized_Meeting（bodyText）, Escape_Ampersand（Scope_50でのHTMLエスケープ元）
+実行条件: Compose_PostedDateTimeJstの成功後
+再試行: 既定ポリシー（コネクタ呼び出し）
+タイムアウト: 明示設定なし（プラットフォーム既定）
+エラー時の処理: [凡例参照]。body.contentがnullの場合はcoalesceで''となりHtmlToTextには空文字が渡る
+（エラーにはならない想定）。
+
+[No.52]　★v5で式変更（uriComponent化）
+アクション表示名: Set_ReplyNextLink_First
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message（Do_Until_Replies_Pagingの外側、
+会議ごとの初期化）
+入力値: 名前=varReplyNextLink, 値=Graph API 返信一覧の初回URL（$top=50。チャネルID・親メッセージIDとも
+uriComponent()でエンコード）
+動的コンテンツ: varTeamId, varChannelId, Process_Each_Parent_Message の 現在項目 → id
+Power Automate式: @concat('https://graph.microsoft.com/v1.0/teams/', variables('varTeamId'), '/channels/', uriComponent(variables('varChannelId')), '/messages/', uriComponent(items('Process_Each_Parent_Message')?['id']), '/replies?$top=50')　★v5で変更（旧: varChannelId・メッセージidともエンコード無しで直接連結）
+出力型: string
+後続の参照先: Do_Until_Replies_Paging（1回目のGet_Message_RepliesのUri）
+実行条件: Convert_Body_Html_To_Textの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v5修正点：varChannelId（':' '@'を含む）とメッセージid双方をuriComponent()で
+エンコードすることで、Graph API呼び出し時のURL解析エラーを防止する（実働サンプルとの突合で判明。
+teamIdはGUID形式のためエンコード対象外）。
+
+[No.53]
+アクション表示名: Set_RepliesArray_Reset
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: 名前=varRepliesArray, 値=json('[]')（会議ごとに空配列へリセット）
+動的コンテンツ: なし
+Power Automate式: @json('[]')
+出力型: array
+後続の参照先: Do_Until_Replies_Paging（累積先）
+実行条件: Set_ReplyNextLink_Firstの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※本アクションは自己参照ではなく単純な初期化代入のため、v4の
+自己参照SetVariable除去（Set_MessagesArray/Set_RepliesArray/Append_Reply_Attachment_Candidates）の
+対象外であり存続している。
+
+[No.54]
+アクション表示名: Do_Until_Replies_Paging
+コネクタ: なし
+Power Automate上のアクション: Do until
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: 終了条件式（下記）、limit.count=5000, limit.timeout=PT1H
+動的コンテンツ: varReplyNextLink
+Power Automate式（終了条件）: @empty(variables('varReplyNextLink'))
+出力型: なし（制御アクション。子：Get_Message_Replies, Process_Retrieved_Replies, Set_ReplyNextLinkの結果を集約）
+後続の参照先: Select_Parent_Attachments
+実行条件: Set_RepliesArray_Resetの成功後
+再試行: 対象外（Untilは常に逐次）
+タイムアウト: limit.count=5000回 かつ limit.timeout=PT1H（会議1件あたりの返信ページング上限。§6-6参照）
+エラー時の処理: [凡例参照]。
+
+[No.55]
+アクション表示名: Get_Message_Replies
+コネクタ: Microsoft Teams（shared_teams）
+Power Automate上のアクション: [Teams-HTTP] HttpRequest
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Do_Until_Replies_Paging
+入力値: Uri=varReplyNextLink, Method=GET, ContentType=application/json
+動的コンテンツ: varReplyNextLink
+Power Automate式: parameters.Uri="@variables('varReplyNextLink')", parameters.Method="GET",
+parameters.ContentType="application/json"
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_teams, connectionName=shared_teams,
+operationId=HttpRequest
+出力型: オブジェクト（body: { value: [返信配列], "@odata.nextLink"?: string }）
+後続の参照先: Process_Retrieved_Replies（foreach対象=coalesce(body('Get_Message_Replies')?['value'], json('[]'))）,
+Set_ReplyNextLink（ループ内更新）
+実行条件: Do_Until_Replies_Paging内、各周回の最初（runAfter={}）
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照]。
+
+[No.56]　★v4新設（旧Set_RepliesArrayの置換先）
+アクション表示名: Process_Retrieved_Replies
+コネクタ: なし
+Power Automate上のアクション: Apply to each
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Do_Until_Replies_Paging
+入力値: foreach対象=coalesce(Get_Message_Repliesのvalue, [])
+動的コンテンツ: Get_Message_Replies の 本文(value)
+Power Automate式（foreach）: @coalesce(body('Get_Message_Replies')?['value'], json('[]'))
+出力型: なし（制御アクション。内部でAppend_Reply_To_RepliesArrayを1周回=取得返信1件ずつ実行）
+後続の参照先: Set_ReplyNextLink（Process_Retrieved_Repliesの成功後）
+実行条件: Get_Message_Repliesの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。runtimeConfiguration.concurrency.repetitions=1（並列オフ）。★v4新設：
+旧版（v3）のSet_RepliesArray（union(varRepliesArray自身, 新ページ)というSetVariableでの自己参照）を
+Set_MessagesArrayと同じ理由（保存時のWorkflowRunActionInputsInvalidPropertyエラー回避）で置き換えた。
+
+[No.57]　★v4新設
+アクション表示名: Append_Reply_To_RepliesArray
+コネクタ: なし
+Power Automate上のアクション: 配列変数に追加（Append to array variable）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Do_Until_Replies_Paging >
+Process_Retrieved_Replies
+入力値: varRepliesArrayへ現在の取得返信1件（item()）を追加
+動的コンテンツ: Process_Retrieved_Replies の 現在項目
+Power Automate式: @item()
+出力型: なし（varRepliesArrayへの副作用のみ）
+後続の参照先: Select_Parent_Attachments, Process_Each_Reply（Do_Until_Replies_Paging終了後、全周回・
+全ページ分の蓄積後に参照）
+実行条件: Process_Retrieved_Replies内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.58]
+アクション表示名: Set_ReplyNextLink
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Do_Until_Replies_Paging
+（初期設定側のSet_ReplyNextLink_First（No.52）とは別のアクション。初期設定=Set_ReplyNextLink_First、
+ループ内更新=Set_ReplyNextLinkという、アクション名がフロー全体で一意な2つの別アクションである）
+入力値: 名前=varReplyNextLink, 値=coalesce(Get_Message_Repliesの@odata.nextLink, '')
+動的コンテンツ: Get_Message_Replies の 本文(@odata.nextLink)
+Power Automate式: @coalesce(body('Get_Message_Replies')?['@odata.nextLink'], '')
+出力型: string
+後続の参照先: Do_Until_Replies_Pagingの終了判定
+実行条件: Process_Retrieved_Repliesの成功後　★v4でrunAfter対象がGet_Message_RepliesからProcess_Retrieved_Repliesに変更
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.59]
+アクション表示名: Select_Parent_Attachments
+コネクタ: なし
+Power Automate上のアクション: 選択（Select）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: from=現在項目のattachments（無ければ空配列）,
+select={attachment: 現在項目, sourceReplyId: ""}
+動的コンテンツ: Process_Each_Parent_Message の 現在項目 → attachments
+Power Automate式:
+  from: @coalesce(items('Process_Each_Parent_Message')?['attachments'], json('[]'))
+  select.attachment: @item()
+  select.sourceReplyId: （空文字。親メッセージ由来のため返信IDなし）
+出力型: array（{attachment, sourceReplyId}の配列）
+後続の参照先: Set_AttachmentCandidates_Parent
+実行条件: Do_Until_Replies_Pagingの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.60]
+アクション表示名: Set_AttachmentCandidates_Parent
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: 名前=varAttachmentCandidates, 値=body('Select_Parent_Attachments')
+動的コンテンツ: Select_Parent_Attachments の 本文
+Power Automate式: @body('Select_Parent_Attachments')
+出力型: array
+後続の参照先: Process_Each_Reply（追記していく起点）
+実行条件: Select_Parent_Attachmentsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※本アクションはSetVariableだが更新対象(varAttachmentCandidates)の入力式に
+自身を参照していない（Select_Parent_Attachmentsの出力を代入するのみ）ため自己参照には該当せず、v4の
+除去対象ではない。Do_Until_Replies_Paging後・Process_Each_Reply前という配置により、会議ごとのリセットが
+正しく機能する（v6設計監査でも支持済み）。
+
+[No.61]
+アクション表示名: Process_Each_Reply
+コネクタ: なし
+Power Automate上のアクション: Apply to each
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: foreach対象=varRepliesArray
+動的コンテンツ: varRepliesArray
+Power Automate式（foreach）: @variables('varRepliesArray')
+出力型: なし
+後続の参照先: Filter_File_Attachments
+実行条件: Set_AttachmentCandidates_Parentの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。runtimeConfiguration.concurrency.repetitions=1（並列オフ）。
+
+[No.62]
+アクション表示名: Select_Reply_Attachments
+コネクタ: なし
+Power Automate上のアクション: 選択（Select）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Process_Each_Reply
+入力値: from=現在返信のattachments（無ければ空配列）,
+select={attachment: 現在項目, sourceReplyId: 現在返信のid}
+動的コンテンツ: Process_Each_Reply の 現在項目 → attachments, id
+Power Automate式:
+  from: @coalesce(items('Process_Each_Reply')?['attachments'], json('[]'))
+  select.attachment: @item()
+  select.sourceReplyId: @items('Process_Each_Reply')?['id']
+出力型: array
+後続の参照先: Process_Each_Reply_Attachment（foreach対象=body('Select_Reply_Attachments')）
+実行条件: Process_Each_Reply内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.63]　★v4新設（旧Append_Reply_Attachment_Candidatesの置換先）
+アクション表示名: Process_Each_Reply_Attachment
+コネクタ: なし
+Power Automate上のアクション: Apply to each
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Process_Each_Reply
+入力値: foreach対象=body('Select_Reply_Attachments')
+動的コンテンツ: Select_Reply_Attachments の 本文
+Power Automate式（foreach）: @body('Select_Reply_Attachments')
+出力型: なし（制御アクション。内部でAppend_Reply_Attachment_Candidateを1周回=候補1件ずつ実行）
+後続の参照先: Filter_File_Attachments（Process_Each_Reply終了後、全返信・全候補蓄積後に参照）
+実行条件: Select_Reply_Attachmentsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。runtimeConfiguration.concurrency.repetitions=1（並列オフ）。★v4新設：
+旧版（v3）のAppend_Reply_Attachment_Candidates（名前はAppendだが実体はunion(varAttachmentCandidates自身,
+Select_Reply_Attachmentsの本文全体)というSetVariableでの自己参照）を、Set_MessagesArray/Set_RepliesArrayと
+同じ理由で置き換えた。
+
+[No.64]　★v4新設
+アクション表示名: Append_Reply_Attachment_Candidate
+コネクタ: なし
+Power Automate上のアクション: 配列変数に追加（Append to array variable）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Process_Each_Reply >
+Process_Each_Reply_Attachment
+入力値: varAttachmentCandidatesへ現在の候補1件（item()）を追加
+動的コンテンツ: Process_Each_Reply_Attachment の 現在項目
+Power Automate式: @item()
+出力型: なし（varAttachmentCandidatesへの副作用のみ）
+後続の参照先: Filter_File_Attachments
+実行条件: Process_Each_Reply_Attachment内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.65]　★v9でwhere条件を追加
+アクション表示名: Filter_File_Attachments
+コネクタ: なし
+Power Automate上のアクション: フィルター配列（Query / Filter array）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: from=varAttachmentCandidates,
+where=attachment.contentType='reference' かつ attachment.contentUrlが空でない かつ
+attachment.contentUrlが'/Shared Documents/'を含む（★v9追加）
+動的コンテンツ: varAttachmentCandidates
+Power Automate式:
+  from: @variables('varAttachmentCandidates')
+  where: @and(and(equals(item()?['attachment']?['contentType'], 'reference'), not(empty(coalesce(item()?['attachment']?['contentUrl'], '')))), contains(coalesce(item()?['attachment']?['contentUrl'], ''), '/Shared Documents/'))
+出力型: array（ファイル添付のみに絞った候補配列）
+後続の参照先: Set_MeetingAttachments_Reset, Process_Each_Attachment（Condition_Has_File_Attachments[then]のforeach対象）
+実行条件: Process_Each_Reply_Attachmentの成功後　★v4でrunAfter対象がProcess_Each_ReplyからProcess_Each_Reply_Attachmentの
+外側であるProcess_Each_Reply（の成功）に変わらず維持（Process_Each_Reply自体の成功後という条件は不変）。
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※contentUrlがnull/空の添付候補はここで確実に除外されるため、
+後段のGet_Source_File_Contentへnullのpathが渡ることはない設計（§7参照）。
+★v9追加分の背景: 実環境の初実行でGet_Source_File_Contentが404 File not foundで失敗した（詳細は本書冒頭
+「v8→v9 改訂点」参照）。原因調査で、Teamsチャネル添付のcontentUrlは常に「チームのサイトのURL＋
+'/Shared Documents/'＋パス」という形式であることが確認できたため、contains(...,'/Shared Documents/')を
+whereに追加し、この形式に合致しない添付（外部リンク・タブ参照等、実体がSharePointライブラリのファイルで
+ない添付）を候補の時点で除外するようにした。これにより後段のCompose_Source_Site（No.95）の
+indexOf(contentUrl, '/Shared Documents/')が常に一致する（-1にならない）ことが保証される。
+
+[No.66]
+アクション表示名: Set_MeetingAttachments_Reset
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: 名前=varMeetingAttachments, 値=json('[]')（会議ごとにリセット）
+動的コンテンツ: なし
+Power Automate式: @json('[]')
+出力型: array
+後続の参照先: Condition_Has_File_Attachments[then]内の各Append系アクション
+実行条件: Filter_File_Attachmentsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.67]　★v9で全面置換（旧: Scope_30_Save_Attachments〔Scope〕→ Condition_Has_File_Attachments〔If〕）
+アクション表示名: Condition_Has_File_Attachments
+コネクタ: なし
+Power Automate上のアクション: 条件（Condition / If）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: Filter_File_Attachmentsの結果件数が1件以上（＝ファイル添付が1件でも存在する）場合にtrue
+動的コンテンツ: Filter_File_Attachments の 本文
+Power Automate式（expression。構造化条件）:
+  {
+    "and": [
+      { "greater": ["@length(body('Filter_File_Attachments'))", 0] }
+    ]
+  }
+出力型: なし（分岐制御）
+後続の参照先: [then]Process_Each_Attachment（添付処理一式）。elseブランチは無し（falseの場合は
+何も実行せず、そのままCompose_SortKeyへ進む）
+実行条件: Set_MeetingAttachments_Resetの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v9で全面置換：旧版（v8以前）ではこの位置は無条件のScope
+（Scope_30_Save_Attachments）であり、添付が0件の会議でもProcess_Each_Attachmentコンテナに毎回入っていた
+（実害は無い。foreach対象が空配列なら0回周回するのみ）。ユーザー提案により、ファイル添付が実際に
+1件以上ある場合のみProcess_Each_Attachmentへ入る明示的な条件分岐に変更した。
+★設計上の重要な注記（ネスト深さ）: 当初案では、Scope_30_Save_Attachmentsをそのまま残し、その外側に
+If（本アクション）を新規追加してラップする構成も検討された。しかしその場合、Process_Each_Attachment以下の
+既存ネスト構造がさらに1段深くなり、Power Automateのネスト深さ上限（8段）を超える経路が生じてしまう。
+このため「既存のScopeを、型そのものをIfへ置き換える」構成（ネスト段数を増やさずScope→If）を採用した。
+Scope_30_Save_Attachmentsという名前・Scopeという型は無くなったが、Process_Each_Attachment以下の子アクション
+構成・実行順序・ネスト深さそのものは変更していない（詳細は本書冒頭「v8→v9 改訂点」参照）。
+
+[No.68]　★v9で配置Scope変更（旧: Scope_30_Save_Attachments直下 → Condition_Has_File_Attachments[then]直下）
+アクション表示名: Process_Each_Attachment
+コネクタ: なし
+Power Automate上のアクション: Apply to each
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Condition_Has_File_Attachments [then]
+入力値: foreach対象=body('Filter_File_Attachments')
+動的コンテンツ: Filter_File_Attachments の 本文
+Power Automate式（foreach）: @body('Filter_File_Attachments')
+出力型: なし
+後続の参照先: Compose_SortKey（Condition_Has_File_Attachments終了後）
+実行条件: Condition_Has_File_Attachments[then]内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。runtimeConfiguration.concurrency.repetitions=1（並列オフ）。
+
+[No.69]
+アクション表示名: Compose_IdempotencyKey
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message > Condition_Has_File_Attachments [then] >
+Process_Each_Attachment　★v9で変更（旧: Scope_30_Save_Attachments > Process_Each_Attachment）
+入力値: sourceReplyIdが空なら"{messageId}_{attachmentId}"、そうでなければ
+"{messageId}_{sourceReplyId}_{attachmentId}"
+動的コンテンツ: Process_Each_Parent_Message の 現在項目 → id、
+Process_Each_Attachment の 現在項目 → sourceReplyId, attachment.id
+Power Automate式: @if(empty(trim(coalesce(items('Process_Each_Attachment')?['sourceReplyId'], ''))), concat(items('Process_Each_Parent_Message')?['id'], '_', items('Process_Each_Attachment')?['attachment']?['id']), concat(items('Process_Each_Parent_Message')?['id'], '_', items('Process_Each_Attachment')?['sourceReplyId'], '_', items('Process_Each_Attachment')?['attachment']?['id']))
+出力型: string（冪等キー）
+後続の参照先: Get_Ledger_Existing（$filter）, Compose_Ledger_Body（Title, IdempotencyKey）,
+Compose_LedgerFailed_Body（Title, IdempotencyKey）
+実行条件: Process_Each_Attachment内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.70]
+アクション表示名: Get_Ledger_Existing
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-GetItems] GetItems（UI表示名の目安：「複数の項目を取得します」）
+配置するScope: 同上（Process_Each_Attachment直下）
+入力値: dataset=varListSiteAddress（★v8で変更。旧: varSiteAddress）, table=varLedgerList,
+$filter="IdempotencyKey eq '{Compose_IdempotencyKeyの値}' and Status eq 'Saved'", $top=1
+動的コンテンツ: varListSiteAddress, varLedgerList, Compose_IdempotencyKey の 出力
+Power Automate式:
+  dataset: @variables('varListSiteAddress')　★v8で変更（旧: @variables('varSiteAddress')。台帳リストが
+  pjteamサイトに作成されるため）
+  table: @variables('varLedgerList')
+  $filter: @concat('IdempotencyKey eq ''', outputs('Compose_IdempotencyKey'), ''' and Status eq ''Saved''')
+  $top: 1
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=GetItems
+出力型: オブジェクト（body.value[]: 条件一致した台帳行の配列。0件 or 1件）
+後続の参照先: Condition_Already_Saved（body('Get_Ledger_Existing')?['value']の件数判定・先頭要素参照）
+実行条件: Compose_IdempotencyKeyの成功後
+再試行: 既定ポリシー（コネクタ呼び出し）
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照]。※このアクションはScope_Save_Fileの外側にあるため、添付単位catch
+（§4.0凡例(b)）の対象外。失敗した場合はフロー全体catch（(a)）に委ねられる。
+varLedgerListが実リストとして選択されていない状態、またはvarListSiteAddressが実サイト（pjteam）を
+指していない状態でインポート後に実行するとここで失敗する（★v8でdatasetをvarListSiteAddressへ変更。§8-2）。
+
+[No.71]
+アクション表示名: Condition_Already_Saved
+コネクタ: なし
+Power Automate上のアクション: 条件（Condition / If）
+配置するScope: 同上（Process_Each_Attachment直下）
+入力値: 台帳に既存Saved行が1件以上 かつ ForceReprocessがtrueでない場合にtrue
+動的コンテンツ: Get_Ledger_Existing の 本文(value), トリガー ForceReprocess
+Power Automate式（expression。構造化条件）:
+  {
+    "and": [
+      { "greater": ["@length(coalesce(body('Get_Ledger_Existing')?['value'], json('[]')))", 0] },
+      { "not": { "equals": ["@coalesce(triggerBody()?['ForceReprocess'], false)", true] } }
+    ]
+  }
+出力型: なし（分岐制御）
+後続の参照先: [then]Append_Existing_Meeting_Attachment→Increment_SkippedCount_Existing /
+[else]Compose_Extension以下〜Condition_DryRun
+実行条件: Get_Ledger_Existingの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※length()の対象はcoalesceで配列(json('[]'))を保証してからのため、
+value自体がnullでもlengthはエラーにならない。
+
+[No.72]（Condition_Already_Saved の then分岐）
+アクション表示名: Append_Existing_Meeting_Attachment
+コネクタ: なし
+Power Automate上のアクション: 配列変数に追加（Append to array variable）
+配置するScope: 同上 > Condition_Already_Saved [then]
+入力値: varMeetingAttachmentsへ {originalName, savedName, savedFileUrl, status:"Skipped"} を追加
+動的コンテンツ: Process_Each_Attachment の 現在項目 → attachment.name、
+Get_Ledger_Existing の 本文(value)先頭要素 → SavedFileName, SavedFileUrl
+Power Automate式:
+  originalName: @coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')
+  savedName: @first(body('Get_Ledger_Existing')?['value'])?['SavedFileName']
+  savedFileUrl: @first(body('Get_Ledger_Existing')?['value'])?['SavedFileUrl']
+  status: Skipped
+出力型: なし（変数への副作用のみ）
+後続の参照先: Increment_SkippedCount_Existing
+実行条件: then分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※本アクションのsavedName/savedFileUrlはGet_Ledger_Existing（GetItems、SharePoint
+リストの列を直接取得）が対象であり、Get_Saved_File_Properties（GetFileItem、OpenApiConnectionの封筒形出力）
+とは取得元が異なるため、body/outputsの参照ルール（§4.0凡例）はここには適用されない（SharePointリストの
+列値はbody('Get_Ledger_Existing')?['value']から取得しており、これ自体が既にbody/経由）。
+
+[No.73]（Condition_Already_Saved の then分岐）
+アクション表示名: Increment_SkippedCount_Existing
+コネクタ: なし
+Power Automate上のアクション: 1ずつ増分（Increment variable）
+配置するScope: 同上 > Condition_Already_Saved [then]
+入力値: 名前=varSkippedCount, 値=1
+動的コンテンツ: なし
+Power Automate式: 1
+出力型: integer（更新後のvarSkippedCount）
+後続の参照先: Compose_RunLog_Body(SkippedCount), Compose_Finally_Summary(SkippedCount)
+実行条件: Append_Existing_Meeting_Attachmentの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.74]（Condition_Already_Saved の else分岐）
+アクション表示名: Compose_Extension
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: 添付名に"."が含まれる場合は最後の"."以降を".拡張子"として抽出、無ければ空文字
+動的コンテンツ: Process_Each_Attachment の 現在項目 → attachment.name
+Power Automate式: @if(contains(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'), '.'), concat('.', last(split(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'), '.'))), '')
+出力型: string
+後続の参照先: Compose_BaseName, Compose_SavedName
+実行条件: else分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.75]（Condition_Already_Saved の else分岐）
+アクション表示名: Compose_BaseName
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: 添付名から拡張子部分を除いた本体名（"."が無ければ名前全体）
+動的コンテンツ: Process_Each_Attachment の 現在項目 → attachment.name、Compose_Extension の 出力
+Power Automate式: @if(contains(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'), '.'), substring(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'), 0, sub(length(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')), length(outputs('Compose_Extension')))), coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'))
+出力型: string
+後続の参照先: Replace_Invalid_Quote
+実行条件: Compose_Extensionの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.76]（Condition_Already_Saved の else分岐、禁止文字置換の1段目）
+アクション表示名: Replace_Invalid_Quote
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Compose_BaseNameの結果中の " を _ に置換
+動的コンテンツ: Compose_BaseName の 出力
+Power Automate式: @replace(outputs('Compose_BaseName'), '"', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Star
+実行条件: Compose_BaseNameの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.77]
+アクション表示名: Replace_Invalid_Star
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Quoteの結果中の * を _ に置換
+動的コンテンツ: Replace_Invalid_Quote の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Quote'), '*', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Colon
+実行条件: Replace_Invalid_Quoteの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.78]
+アクション表示名: Replace_Invalid_Colon
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Starの結果中の : を _ に置換
+動的コンテンツ: Replace_Invalid_Star の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Star'), ':', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Lt
+実行条件: Replace_Invalid_Starの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.79]
+アクション表示名: Replace_Invalid_Lt
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Colonの結果中の < を _ に置換
+動的コンテンツ: Replace_Invalid_Colon の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Colon'), '<', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Gt
+実行条件: Replace_Invalid_Colonの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.80]
+アクション表示名: Replace_Invalid_Gt
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Ltの結果中の > を _ に置換
+動的コンテンツ: Replace_Invalid_Lt の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Lt'), '>', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Question
+実行条件: Replace_Invalid_Ltの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.81]
+アクション表示名: Replace_Invalid_Question
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Gtの結果中の ? を _ に置換
+動的コンテンツ: Replace_Invalid_Gt の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Gt'), '?', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Slash
+実行条件: Replace_Invalid_Gtの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.82]
+アクション表示名: Replace_Invalid_Slash
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Questionの結果中の / を _ に置換
+動的コンテンツ: Replace_Invalid_Question の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Question'), '/', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Backslash
+実行条件: Replace_Invalid_Questionの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.83]
+アクション表示名: Replace_Invalid_Backslash
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Slashの結果中の \ を _ に置換
+動的コンテンツ: Replace_Invalid_Slash の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Slash'), '\', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Pipe
+実行条件: Replace_Invalid_Slashの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.84]
+アクション表示名: Replace_Invalid_Pipe
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Backslashの結果中の | を _ に置換
+動的コンテンツ: Replace_Invalid_Backslash の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Backslash'), '|', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Hash　★v10で変更（旧: Compose_TrimTrailing）
+実行条件: Replace_Invalid_Backslashの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※禁止文字置換は " * : < > ? / \ | # % の順に11段（Quote→Star→Colon→Lt→Gt→
+Question→Slash→Backslash→Pipe→Hash→Percent）で行われ、Windowsファイル名禁止文字およびSharePoint/URL上
+問題を起こし得る文字（#・%。★v10追加）を網羅している。
+
+[No.85]　★v10新設
+アクション表示名: Replace_Invalid_Hash
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Pipeの結果中の # を _ に置換
+動的コンテンツ: Replace_Invalid_Pipe の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Pipe'), '#', '_')
+出力型: string
+後続の参照先: Replace_Invalid_Percent
+実行条件: Replace_Invalid_Pipeの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10新設：#はSharePointのURL・OneDriveリンクで特殊な意味を持ち得る文字
+（フラグメント識別子）のため、決定的URL構築（Compose_Saved_File_Url）が生成するURLの安全性を高める
+目的で追加した（詳細は本書冒頭「v9→v10 改訂点」参照）。
+
+[No.86]　★v10新設
+アクション表示名: Replace_Invalid_Percent
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: Replace_Invalid_Hashの結果中の % を _ に置換
+動的コンテンツ: Replace_Invalid_Hash の 出力
+Power Automate式: @replace(outputs('Replace_Invalid_Hash'), '%', '_')
+出力型: string
+後続の参照先: Compose_TrimTrailing
+実行条件: Replace_Invalid_Hashの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10新設：%はURLエンコードの特殊文字であり、保存ファイル名にそのまま含まれると
+Compose_Saved_File_Url等のreplace(' ', '%20')によるURL構築時に意図しないエンコード解釈を招き得るため、
+事前に置換して除去する（詳細は本書冒頭「v9→v10 改訂点」参照）。
+
+[No.87]　★v10で入力元を変更
+アクション表示名: Compose_TrimTrailing
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: 置換後文字列の前後空白をtrimし、末尾がピリオドなら1文字除去して再度trim
+動的コンテンツ: Replace_Invalid_Percent の 出力
+Power Automate式: @if(endsWith(trim(outputs('Replace_Invalid_Percent')), '.'), trim(substring(trim(outputs('Replace_Invalid_Percent')), 0, sub(length(trim(outputs('Replace_Invalid_Percent'))), 1))), trim(outputs('Replace_Invalid_Percent')))　★v10で変更（旧: outputs('Replace_Invalid_Pipe')を参照）
+出力型: string
+後続の参照先: Compose_SavedName
+実行条件: Replace_Invalid_Percentの成功後　★v10で変更（旧: Replace_Invalid_Pipeの成功後）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10追記：入力元がReplace_Invalid_PipeからReplace_Invalid_Hash/
+Replace_Invalid_Percentの2段を経由したReplace_Invalid_Percentの出力へ変更された（サニタイズ段数の
+増加に伴う玉突き）。
+
+[No.88]
+アクション表示名: Compose_SavedName
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: "yyyyMMdd_元名（100文字超は先頭100文字に短縮）+拡張子" の形式で保存ファイル名を生成
+動的コンテンツ: Process_Each_Parent_Message の 現在項目 → createdDateTime、
+Compose_TrimTrailing の 出力、Compose_Extension の 出力
+Power Automate式: @concat(formatDateTime(items('Process_Each_Parent_Message')?['createdDateTime'], 'yyyyMMdd'), '_', if(greater(length(outputs('Compose_TrimTrailing')), 100), substring(outputs('Compose_TrimTrailing'), 0, 100), outputs('Compose_TrimTrailing')), outputs('Compose_Extension'))
+出力型: string（保存ファイル名）
+後続の参照先: Condition_DryRun、Compose_Saved_File_Url（★v10で新設。決定的URL構築の一部）、
+Create_Attachment_File(name)、Append_DryRun_Meeting_Attachment/Append_Saved_Meeting_Attachment(savedName)、
+Compose_LedgerFailed_Body(ErrorMessage内)
+実行条件: Compose_TrimTrailingの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10追記：v9まではGet_Saved_File_Properties経由でCompose_Ledger_Body
+(SavedFileName)へ渡っていたが、v10ではGet_Saved_File_Properties廃止に伴いCompose_Saved_File_Url経由
+（決定的URL構築の一部としてSavedNameを連結）に変わった。
+
+[No.89]
+アクション表示名: Condition_DryRun
+コネクタ: なし
+Power Automate上のアクション: 条件（Condition / If）
+配置するScope: 同上 > Condition_Already_Saved [else]
+入力値: トリガーのDryRunがtrueなら実保存をスキップ
+動的コンテンツ: トリガー DryRun
+Power Automate式（expression。構造化条件）:
+  {
+    "and": [
+      { "equals": ["@coalesce(triggerBody()?['DryRun'], true)", true] }
+    ]
+  }
+出力型: なし（分岐制御）
+後続の参照先: [then]Append_DryRun_Meeting_Attachment→Increment_SkippedCount_DryRun /
+[else]Scope_Save_File以下（成功/失敗の2系統）
+実行条件: Compose_SavedNameの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※既定値はtrue（安全側＝DryRunオン）。
+
+[No.90]（Condition_DryRun の then分岐）
+アクション表示名: Append_DryRun_Meeting_Attachment
+コネクタ: なし
+Power Automate上のアクション: 配列変数に追加（Append to array variable）
+配置するScope: 同上 > Condition_DryRun [then]
+入力値: varMeetingAttachmentsへ {originalName, savedName:"", savedFileUrl:"", status:"Skipped"} を追加
+動的コンテンツ: Process_Each_Attachment の 現在項目 → attachment.name
+Power Automate式:
+  originalName: @coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')
+  savedName: （空文字）
+  savedFileUrl: （空文字）
+  status: Skipped
+出力型: なし
+後続の参照先: Increment_SkippedCount_DryRun
+実行条件: then分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.91]（Condition_DryRun の then分岐）
+アクション表示名: Increment_SkippedCount_DryRun
+コネクタ: なし
+Power Automate上のアクション: 1ずつ増分（Increment variable）
+配置するScope: 同上 > Condition_DryRun [then]
+入力値: 名前=varSkippedCount, 値=1
+動的コンテンツ: なし
+Power Automate式: 1
+出力型: integer
+後続の参照先: Compose_RunLog_Body(SkippedCount), Compose_Finally_Summary(SkippedCount)
+実行条件: Append_DryRun_Meeting_Attachmentの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.92]（Condition_DryRun の else分岐）★v10新設（v9→v10改訂・添付保存全件失敗への対処）
+アクション表示名: Compose_Saved_File_Url
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_DryRun [else]（Scope_Save_Fileの直前）
+入力値: サイトURL＋ライブラリ＋保存先パス＋保存ファイル名を連結し、空白を%20へ置換した決定的URLを生成
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath, Compose_SavedName の 出力
+Power Automate式: @replace(concat(variables('varSiteAddress'), '/', variables('varLibrary'), '/', variables('varDestinationPath'), '/', outputs('Compose_SavedName')), ' ', '%20')
+出力型: string（保存後ファイルURL。例:
+https://metijapan.sharepoint.com/sites/mROOM_240600018/Shared Documents/123_伝送システム/00_共用フォルダ/
+60_庶務担当/99_過去の課内会議/20260716_資料.pptx の空白%20置換版）
+後続の参照先: Scope_Save_File（runAfter）, Compose_Ledger_Body(SavedFileUrl),
+Append_Saved_Meeting_Attachment(savedFileUrl), Compose_LedgerFailed_Body（Scope_Save_File失敗時も
+Compose_SavedNameが既に確定していれば併せて参照可能）
+実行条件: else分岐内で最初（runAfter={}）★v10でScope_Save_Fileより前に新設
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10新設：v9まではsavedFileUrlをGet_Saved_File_Properties（GetFileItem、
+OpenApiConnectionの封筒形出力{Link}）から取得していたが、v10ではCreateFile（Create_Attachment_File）が
+指定どおりのfolderPath・nameでファイルを作成したという事実から、既知の値のみでURLを決定的に構築する
+方式へ変更した。CreateFileが成功した時点で、そのフォルダパス・ファイル名でファイルが存在することは
+保証されるため、追加のGetFileItem呼び出し無しに正しいURLを得られる。本アクションをScope_Save_Fileの
+**前**に配置しているため、Scope_Save_Fileが失敗した場合でもCompose_LedgerFailed_BodyのErrorMessage等
+から保存予定だったパス情報を参照できる（自己診断の一部。詳細は本書冒頭「v9→v10 改訂点」参照）。
+※varSiteAddress/varLibrary/varDestinationPathは総括ドキュメント側のSet_ArchiveUrlと同一の組み立て
+パターン（サイト+ライブラリ+パス+ファイル名の連結、空白のみ%20置換）を用いており、Create_Attachment_File
+のfolderPath/nameの組み立てと一致することを§7で確認済み。
+
+[No.93]（Condition_DryRun の else分岐）★v10で実行条件・子アクション構成を変更
+アクション表示名: Scope_Save_File
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: 同上 > Condition_DryRun [else]
+入力値: なし（子: Compose_Source_Url, Compose_Source_Site, Compose_Source_Path, Get_Source_File_Content,
+Create_Attachment_Fileの5つ。★v10でGet_Saved_File_Properties〔GetFileItem〕を削除しCompose_Source_Urlを
+新設。子の総数は5のまま）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし（子5アクションの成否を集約したScope自体のステータス。Succeeded/Failed/TimedOutのいずれか）
+後続の参照先: [Succeeded]Compose_Ledger_Body / [Failed,TimedOut]Append_Failed_Meeting_Attachment
+（§4.0凡例(b)参照）
+実行条件: Compose_Saved_File_Urlの成功後　★v10で変更（旧: else分岐内で最初〔runAfter={}〕。
+Compose_Saved_File_Urlの新設に伴い、else分岐内の実行順が1つ後ろにずれた）
+再試行: 対象外（Scope自体は非コネクタ。内部の5アクションは各々既定リトライに従う）
+タイムアウト: 対象外（Scope自体に明示limitなし。内部アクションは既定タイムアウトに従う）
+エラー時の処理: [凡例参照(b)]。このScopeがFailedまたはTimedOutになっても、以降のNo.103-106
+（Append_Failed_Meeting_Attachment→Compose_LedgerFailed_Body→Create_Ledger_Item_Failed→Increment_FailedCount）が
+runAfterで["Failed","TimedOut"]を指定して待ち受けており、そちらが実行されて正常終了扱いとなるため、
+Process_Each_Attachmentの当該周回・会議処理・フロー全体は停止しない。★v10追記: v9実環境実行では、
+本Scope内の旧Get_Saved_File_Properties（GetFileItem。tableにライブラリのURLセグメント
+"Shared Documents"を渡していたが、日本語サイトの表示名は「ドキュメント」であり名前解決に失敗していた
+可能性が最有力候補）が原因と疑われ、全添付がStatus=Failedになる事象が発生した（詳細は本書冒頭
+「v9→v10 改訂点」参照）。v10ではGet_Saved_File_Properties自体を削除し、保存後URLは
+Compose_Saved_File_Url（本Scopeの前段。決定的URL構築）で得るよう変更した。あわせてフロー冒頭に
+Scope_05_Ensure_Destination_Folder（No.30〜36）を新設し、保存先フォルダの事前作成・検証を行うことで、
+CreateFileが中間フォルダを自動作成しないことに起因する失敗も未然に防ぐ構成とした。★v10修正後の
+実環境再実行はまだ実施していない（静的検証のみ済み）。
+
+[No.94]　★v10新設（v9→v10改訂・添付保存全件失敗への対処）
+アクション表示名: Compose_Source_Url
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Scope_Save_File
+入力値: 添付attachment.contentUrlが'/Shared%20Documents/'（%20エンコード済み）を含む場合のみ
+decodeUriComponent()で正規化し、それ以外はcontentUrlをそのまま採用する
+動的コンテンツ: Process_Each_Attachment の 現在項目 → attachment.contentUrl
+Power Automate式: @if(contains(coalesce(items('Process_Each_Attachment')?['attachment']?['contentUrl'], ''), '/Shared%20Documents/'), decodeUriComponent(items('Process_Each_Attachment')?['attachment']?['contentUrl']), items('Process_Each_Attachment')?['attachment']?['contentUrl'])
+出力型: string（正規化済みcontentUrl。'/Shared Documents/'表記に統一される）
+後続の参照先: Compose_Source_Site, Compose_Source_Path
+実行条件: Scope_Save_File内で最初（runAfter={}）★v10でScope_Save_File内の先頭アクションが
+Compose_Source_SiteからCompose_Source_Urlに変わった
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照(b)]。★v10新設：新実行証跡の分析で、Graphが添付contentUrlを
+%エンコード済み（'/Shared%20Documents/'。.aspx実例で確認）で返す場合があることが判明した。
+Compose_Source_Site/Compose_Source_Path（旧v9実装）はいずれも非エンコードの'/Shared Documents/'を
+前提にindexOf()で分割していたため、エンコード済みURLだとindexOf()が-1になり分割に失敗し、
+当該添付が黙って処理から外れる潜在バグが新たに見つかった。本アクションは'/Shared%20Documents/'を
+含む場合のみdecodeUriComponent()でデコードし、含まない場合（非エンコードの生contentUrl）は
+何もせずそのまま通す条件分岐のため、既存の非エンコードURLの経路には影響しない
+（条件を限定することで誤デコードが発火しないことを担保。§7参照）。
+
+[No.95]　★v9新設（404エラー修正）。★v10で入力元をCompose_Source_Urlの出力へ変更
+アクション表示名: Compose_Source_Site
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Scope_Save_File
+入力値: Compose_Source_Urlの出力のうち '/Shared Documents/' より前の部分を切り出す
+（＝当該添付ファイルが実在するSharePointサイトのURL）
+動的コンテンツ: Compose_Source_Url の 出力
+Power Automate式: @substring(outputs('Compose_Source_Url'), 0, indexOf(outputs('Compose_Source_Url'), '/Shared Documents/'))　★v10で変更（旧: items('Process_Each_Attachment')?['attachment']?['contentUrl']を直接参照）
+出力型: string（添付ファイルが実在するSharePointサイトのURL。例:
+https://metijapan.sharepoint.com/teams/pjteam_220400119）
+後続の参照先: Get_Source_File_Content（dataset）
+実行条件: Compose_Source_Urlの成功後　★v10で変更（旧: Scope_Save_File内で最初〔runAfter={}〕。
+Compose_Source_Urlの新設に伴い、本アクションはScope_Save_File内で2番目の実行となった）
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照(b)]。★v9新設：実環境の初実行でGet_Source_File_Contentが404 File not foundで
+失敗した根本原因への対応。実データのcontentUrlは
+「https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/…」のように
+Teamsチャネル添付が実在する**チームのサイト**のURLであり、旧実装のdataset=varSiteAddress（保存先の
+mROOMサイト）は別サイトを指していたため404になっていた。本アクションはcontentUrl自体からサイトURLを
+導出するため、サイトの設定値に依存せず汎用的に動作する。indexOf()が-1（'/Shared Documents/'が
+見つからない）の場合はsubstringの第3引数が負値になりエラーとなり得るが、Filter_File_Attachments（No.65）
+で本文字列を含む添付のみに絞り込み済みのため、この経路に到達する添付は必ず'/Shared Documents/'を含む
+（§7参照）。★v10追記：入力元をCompose_Source_Urlの出力（%エンコード正規化済み）へ変更したことで、
+Graphが%エンコード済みcontentUrlを返す場合でも'/Shared Documents/'（非エンコード表記）でのindexOf()判定が
+一致するようになった。実contentUrlを用いた式のシミュレーション検証は済んでいるが、実環境での
+再実行は未実施。
+
+[No.96]　★v9新設（404エラー修正）。★v10で入力元をCompose_Source_Urlの出力へ変更
+アクション表示名: Compose_Source_Path
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Scope_Save_File
+入力値: Compose_Source_Urlの出力のうち '/Shared Documents/' 以降の部分を切り出し、%20をスペースへ置換する
+（＝GetFileContentByPathへ渡すサイト相対パス）
+動的コンテンツ: Compose_Source_Url の 出力
+Power Automate式: @replace(substring(outputs('Compose_Source_Url'), indexOf(outputs('Compose_Source_Url'), '/Shared Documents/')), '%20', ' ')　★v10で変更（旧: items('Process_Each_Attachment')?['attachment']?['contentUrl']を直接参照）
+出力型: string（'/Shared Documents/'以降のパス。%20はスペースに置換済み。例:
+/Shared Documents/03_課内会議/ファイル名.xlsx）
+後続の参照先: Get_Source_File_Content（path）
+実行条件: Compose_Source_Siteの成功後
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照(b)]。★v9新設：Compose_Source_Siteと対になるパス側の抽出。旧実装は
+uriPath(contentUrl)でcontentUrl全体（サイト部分込み）をパスとして渡していたため、dataset（サイト）と
+pathの組み合わせが二重にサイト部分を含む・または別サイトを指す不整合を起こしていた。新実装は
+'/Shared Documents/'を境界にdataset（サイト）とpath（サイト配下の相対パス）を明確に分離する。
+%20→スペースの置換は旧実装から維持（挙動を変えていない）。★v10追記：入力元がCompose_Source_Urlの
+出力（%エンコード正規化済み）に変わった点はCompose_Source_Siteと同じ。
+
+[No.97]　★v9で式変更（404エラー修正。詳細は本書冒頭「v8→v9 改訂点」参照）
+アクション表示名: Get_Source_File_Content
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-GetFileContentByPath] GetFileContentByPath（UI表示名の目安：
+「パスを指定してファイルの内容を取得します」）
+配置するScope: 同上 > Scope_Save_File
+入力値: dataset=Compose_Source_Siteの出力, path=Compose_Source_Pathの出力,
+inferContentType=true　★v9で変更（旧: dataset=varSiteAddress,
+path=replace(uriPath(添付contentUrl), '%20', ' ')）
+動的コンテンツ: Compose_Source_Site の 出力, Compose_Source_Path の 出力
+Power Automate式:
+  dataset: @outputs('Compose_Source_Site')　★v9で変更（旧: @variables('varSiteAddress')）
+  path: @outputs('Compose_Source_Path')　★v9で変更（旧: @replace(uriPath(items('Process_Each_Attachment')?['attachment']?['contentUrl']), '%20', ' ')）
+  inferContentType: true
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=GetFileContentByPath
+出力型: バイナリ（body: ファイルコンテンツ）
+後続の参照先: Create_Attachment_File（body）
+実行条件: Compose_Source_Pathの成功後　★v9で変更（旧: Scope_Save_File内で最初〔runAfter={}〕）。
+★v10追記：Compose_Source_Urlの新設に伴い、本アクションはScope_Save_File内で4番目の実行となった
+（Compose_Source_Url→Compose_Source_Site→Compose_Source_Path→本アクション→Create_Attachment_File）
+再試行: 既定ポリシー（コネクタ呼び出し）
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照(b)]。★v9の根本修正の背景: 実環境の初実行で本アクションが404 File not foundで
+失敗した（ユーザー提供の実行出力で確認。フロー自体はインポート・保存・実行・RunLog書き込み〔201〕までは
+到達していた）。原因は、Teamsチャネル添付の実体が保存先のvarSiteAddress（mROOMサイト）ではなく
+**チームのサイト**のShared Documents配下にあり、旧実装（dataset=varSiteAddress固定＋サイト接頭辞付きの
+uriPath(contentUrl)）が別サイトを指してしまっていたこと。v9でdataset/pathともcontentUrlから動的に
+導出する方式に変更し、この404の発生源自体を無くした。※contentUrlの形式が想定と異なる場合
+（例：Filter_File_Attachmentsの絞り込みをすり抜けた形式相違）は本アクションでなお失敗し得るが、
+Scope_Save_File単位でNo.103以下に捕捉されるため、当該添付がStatus=Failedとして記録されるのみで処理は
+継続する（§6-2, §6-10, §6-11, §8参照）。★v9修正後の実環境再実行はまだ実施していない（式のシミュレーション
+検証のみ済み）。★v10でCompose_Source_Site/Compose_Source_Pathの入力元がCompose_Source_Url経由になった
+（%エンコード済みcontentUrl対応）が、本アクション自体のdataset/path参照式は不変。
+
+[No.98]
+アクション表示名: Create_Attachment_File
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-CreateFile] CreateFile（UI表示名の目安：「ファイルの作成」）
+配置するScope: 同上 > Scope_Save_File
+入力値: dataset=varSiteAddress, folderPath="/"+varLibrary+"/"+varDestinationPath,
+name=Compose_SavedNameの出力, body=Get_Source_File_Contentの本文
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath, Compose_SavedName の 出力,
+Get_Source_File_Content の 本文
+Power Automate式:
+  dataset: @variables('varSiteAddress')
+  folderPath: @concat('/', variables('varLibrary'), '/', variables('varDestinationPath'))
+  name: @outputs('Compose_SavedName')
+  body: @body('Get_Source_File_Content')
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=CreateFile
+出力型: オブジェクト（ItemId, Id, Name, Path 等の作成結果。OpenApiConnectionの封筒{statusCode,headers,body}
+形式で格納される。★v10注記：ItemIdを参照する後続アクションはもう存在しない。下記参照）
+後続の参照先: Scope_Save_File終了 → [Succeeded]Compose_Ledger_Body / [Failed,TimedOut側は
+Scope_Save_File自体の失敗としてAppend_Failed_Meeting_Attachmentが起動]。★v10でGet_Saved_File_Properties
+（GetFileItem）を廃止したため、本アクションがScope_Save_File内の最終アクションになった。
+実行条件: Get_Source_File_Contentの成功後
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照(b)]。※folderPath配下のライブラリ/フォルダがインポート後に実環境で
+存在しない場合はここで失敗し得るが、Scope_Save_File単位でNo.113以下に捕捉され処理は継続する
+（§8参照）。★v10追記：v9実環境実行では、本アクション成功後の添付が軒並みStatus=Failedとなる事象が
+発生し、原因調査でGet_Saved_File_Properties（旧No.88、GetFileItem。tableパラメータにライブラリの
+URLセグメント"Shared Documents"を渡していたが、これは日本語サイトの表示名「ドキュメント」とは
+一致しないため名前解決に失敗していた可能性が最有力候補）が疑われた（詳細は本書冒頭
+「v9→v10 改訂点」参照）。v10ではGet_Saved_File_Properties自体を削除し、本アクション成功の事実
+（＝指定folderPath・nameでファイルが作成された）からCompose_Saved_File_Urlで保存後URLを決定的に
+構築する方式へ変更した。★保存先フォルダ自体が実在しない場合、本アクションはCreateFileの中間フォルダ
+自動作成非対応という制約により失敗し得るが、v10で新設したScope_05_Ensure_Destination_Folder
+（No.37〜43）がフロー冒頭で保存先フォルダの作成・検証を済ませているため、この経路での失敗は
+大幅に減る見込み（§6-11参照）。
+
+[No.99]　★v7新設（実環境保存エラー対応。詳細は本書冒頭「v3→v7 改訂点」のv7項参照）
+アクション表示名: Compose_Ledger_Body
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_DryRun [else]（Scope_Save_Fileの兄弟。直後のCreate_Ledger_Itemへ渡す
+RESTボディをここで組み立てる）
+入力値: 台帳登録用オブジェクト
+{Title, IdempotencyKey, RunId, MessageId, ReplyId, AttachmentId, OriginalFileName, SavedFileName,
+SavedFileUrl, Status="Saved", ErrorMessage="", ProcessedDateTimeUtc} を作成（列名はitem/接頭辞なし。
+旧PostItem時代のitem/フィールドと同じキー名をそのままJSONオブジェクトのプロパティ名として使用）
+動的コンテンツ: Compose_IdempotencyKey の 出力, varRunId, Process_Each_Parent_Message の 現在項目 → id,
+Process_Each_Attachment の 現在項目 → sourceReplyId, attachment.id, attachment.name,
+Compose_SavedName の 出力, Compose_Saved_File_Url の 出力
+Power Automate式:
+  Title: @outputs('Compose_IdempotencyKey')
+  IdempotencyKey: @outputs('Compose_IdempotencyKey')
+  RunId: @variables('varRunId')
+  MessageId: @items('Process_Each_Parent_Message')?['id']
+  ReplyId: @coalesce(items('Process_Each_Attachment')?['sourceReplyId'], '')
+  AttachmentId: @items('Process_Each_Attachment')?['attachment']?['id']
+  OriginalFileName: @coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')
+  SavedFileName: @outputs('Compose_SavedName')
+  SavedFileUrl: @outputs('Compose_Saved_File_Url')　★v10で変更（旧: @body('Get_Saved_File_Properties')?['{Link}']）
+  Status: Saved
+  ErrorMessage: （空文字）
+  ProcessedDateTimeUtc: @utcNow()
+出力型: オブジェクト（12プロパティすべてstring値のJSONオブジェクト。後続でstring()化してRESTボディにする）
+後続の参照先: Create_Ledger_Item（parameters/body=@string(outputs('Compose_Ledger_Body'))）
+実行条件: Scope_Save_Fileの成功(Succeeded)後（旧v6のCreate_Ledger_Itemと同一のrunAfter条件を引き継ぐ）
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v7新設：後続のCreate_Ledger_ItemをPostItemからSharePoint「HTTP要求を
+送信します」（operationId=HttpRequest）へ置換したことに伴い追加。PostItemは動的スキーマの必須ボディitem
+を持つためdataset/tableが式だと保存時検証で失敗したが（詳細は本書冒頭の変更履歴「v7」参照）、本アクション
+で先にプレーンなJSONオブジェクトをCompose（動的スキーマの制約を受けない）してから、Create_Ledger_Item側
+でstring()化して単純文字列としてRESTボディに渡すことでこの制約を回避する。★v10追記：SavedFileUrlの
+参照元をGet_Saved_File_Properties（GetFileItem、v10で廃止）からCompose_Saved_File_Url（決定的URL構築）
+へ変更した（詳細は本書冒頭「v9→v10 改訂点」参照）。
+
+[No.100]　★v7で全面置換（PostItem→HTTP要求。詳細は本書冒頭「v3→v7 改訂点」のv7項参照）
+アクション表示名: Create_Ledger_Item
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（UI表示名の目安：「SharePoint に HTTP 要求を送信
+します」/ Send an HTTP request to SharePoint）★v7で変更（旧: [SPO-PostItem] PostItem。UI表示名の目安：
+「項目の作成」）
+配置するScope: 同上 > Condition_DryRun [else]（Scope_Save_Fileの兄弟。Compose_Ledger_Bodyの直後）
+入力値: dataset=SharePointサイトURL（★v7で静的リテラルに変更。旧: @variables('varSiteAddress')。
+★v8でpjteamサイトへ変更）, parameters/method="POST", parameters/uri=varLedgerListのリストへの
+_api/web/lists/getbytitle(...)/itemsエンドポイントURL, parameters/headers（Accept, Content-Typeとも
+application/json;odata=nometadata）, parameters/body=Compose_Ledger_Bodyの出力をstring()化したもの
+動的コンテンツ: varLedgerList, Compose_Ledger_Body の 出力
+Power Automate式:
+  dataset: https://metijapan.sharepoint.com/teams/pjteam_220400119　★v8で変更（旧: mROOM_240600018。
+  静的リテラルである理由は下記エラー時の処理参照）
+  parameters/method: POST
+  parameters/uri: @concat('_api/web/lists/getbytitle(''', variables('varLedgerList'), ''')/items')
+  parameters/headers: {"Accept":"application/json;odata=nometadata","Content-Type":"application/json;odata=nometadata"}
+  parameters/body: @string(outputs('Compose_Ledger_Body'))
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest　★v7で変更（旧: operationId=PostItem）
+出力型: オブジェクト（封筒{statusCode,headers,body}。bodyはSharePoint REST APIのnometadata形式JSON応答）
+後続の参照先: Append_Saved_Meeting_Attachment（本アクションの出力自体は参照されない。応答参照の変更ゼロ）
+実行条件: Compose_Ledger_Bodyの成功後
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照]。★v7の根本修正（実環境で発生した保存エラーへの対応。エラー全文・原因は本書冒頭
+「v3→v7 改訂点」のv7項参照）：旧PostItemは動的スキーマの必須ボディitemを持ち、dataset/tableが
+@variables('varSiteAddress')/@variables('varLedgerList')という式だった場合、列スキーマを解決できず
+保存時検証で「item欠落」エラーとなった。本アクションではdatasetを静的リテラル（雛形で保存実績のある
+唯一の形）に固定し、tableに相当するリスト名指定はparameters/uriの@concat式内でvariables('varLedgerList')
+を維持（URIは動的スキーマ非対象の単純文字列のため式でも保存時検証を通過する）ことでこの制約を回避した。
+アクション名・後続runAfterの名前参照は変更していない。
+※サイトを変更する場合、本アクションを含む4アクション（Create_Ledger_Item, Create_Ledger_Item_Failed,
+Create_Run_Log, Create_Error_Log）のdataset（いずれも静的リテラル）を個別に編集する必要がある（§8参照）。
+
+[No.101]　★v10で式変更（旧: v6でのbody/欠落バグ修正。v10でGet_Saved_File_Properties自体を廃止）
+アクション表示名: Append_Saved_Meeting_Attachment
+コネクタ: なし
+Power Automate上のアクション: 配列変数に追加（Append to array variable）
+配置するScope: 同上 > Condition_DryRun [else]（Create_Ledger_Itemの兄弟）
+入力値: varMeetingAttachmentsへ {originalName, savedName, savedFileUrl, status:"Saved"} を追加
+動的コンテンツ: Process_Each_Attachment の 現在項目 → attachment.name,
+Compose_SavedName の 出力, Compose_Saved_File_Url の 出力
+Power Automate式:
+  originalName: @coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')
+  savedName: @outputs('Compose_SavedName')
+  savedFileUrl: @outputs('Compose_Saved_File_Url')　★v10で変更（旧: @body('Get_Saved_File_Properties')?['{Link}']）
+  status: Saved
+出力型: なし
+後続の参照先: Increment_SavedCount
+実行条件: Create_Ledger_Itemの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10で変更：savedFileUrlの参照元をGet_Saved_File_Properties（GetFileItem、
+OpenApiConnectionの封筒形出力{Link}）から、Compose_Saved_File_Url（Scope_Save_Fileの前に配置した
+決定的URL構築のCompose）へ変更した。CreateFile（Create_Attachment_File）が指定どおりのfolderPath・
+nameで成功した以上、そのURLは既知の値から一意に決まるため、追加のGetFileItem呼び出しやその出力の
+{Link}キーが環境要因で空になるかどうかを気にする必要が無くなった（v6時点ではoutputs()→body()の
+参照経路修正だったが、v10ではその参照先アクション自体を消した点が異なる。旧v6修正の経緯・v3での
+潜在バグの詳細は本書冒頭「v3→v7 改訂点」のv6項参照）。このsavedFileUrlが最終的にScope_50の
+ドキュメント本文へ挿入される添付リンクであり、Teams添付の元URLではなく保存後のSPOファイルURLである
+（§7参照）。
+
+[No.102]
+アクション表示名: Increment_SavedCount
+コネクタ: なし
+Power Automate上のアクション: 1ずつ増分（Increment variable）
+配置するScope: 同上 > Condition_DryRun [else]（Append_Saved_Meeting_Attachmentの兄弟）
+入力値: 名前=varSavedCount, 値=1
+動的コンテンツ: なし
+Power Automate式: 1
+出力型: integer
+後続の参照先: Compose_RunLog_Body(SavedCount), Compose_Finally_Summary(SavedCount)
+実行条件: Append_Saved_Meeting_Attachmentの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.103]
+アクション表示名: Append_Failed_Meeting_Attachment
+コネクタ: なし
+Power Automate上のアクション: 配列変数に追加（Append to array variable）
+配置するScope: 同上 > Condition_DryRun [else]（Scope_Save_Fileの兄弟。Create_Ledger_Item等とは別の
+runAfter分岐で起動する並行ブランチ）
+入力値: varMeetingAttachmentsへ {originalName, savedName:"", savedFileUrl:"", status:"Failed"} を追加
+動的コンテンツ: Process_Each_Attachment の 現在項目 → attachment.name
+Power Automate式:
+  originalName: @coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')
+  savedName: （空文字）
+  savedFileUrl: （空文字）
+  status: Failed
+出力型: なし
+後続の参照先: Compose_LedgerFailed_Body
+実行条件: Scope_Save_Fileの失敗(Failed)またはタイムアウト(TimedOut)後
+（runAfter: Scope_Save_File=["Failed","TimedOut"]。Scope_Save_FileがSucceededの場合は本アクションは
+スキップされ、代わりにNo.99-100 Compose_Ledger_Body→Create_Ledger_Itemの系統が実行される。両系統は排他的）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照(b)]。本アクション自体が添付単位catchの入口であり、これが成功する限り
+Process_Each_Attachmentの当該周回は正常終了として扱われ、次の添付・次の会議へ処理が続く。
+
+[No.104]　★v7新設（実環境保存エラー対応）。★v10でErrorMessageを自己診断化
+アクション表示名: Compose_LedgerFailed_Body
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: 同上 > Condition_DryRun [else]（Append_Failed_Meeting_Attachmentの兄弟。直後の
+Create_Ledger_Item_Failedへ渡すRESTボディをここで組み立てる）
+入力値: 台帳登録用オブジェクト（失敗記録）
+{Title, IdempotencyKey, RunId, MessageId, ReplyId, AttachmentId, OriginalFileName, SavedFileName="",
+SavedFileUrl="", Status="Failed",
+ErrorMessage="添付の保存に失敗しました: {SavedName} 元URL={元contentUrl（無ければ'(なし)'）}
+保存先=/{varLibrary}/{varDestinationPath}"（★v10で自己診断化）, ProcessedDateTimeUtc} を作成
+動的コンテンツ: Compose_IdempotencyKey の 出力, varRunId, Process_Each_Parent_Message の 現在項目 → id,
+Process_Each_Attachment の 現在項目 → sourceReplyId, attachment.id, attachment.name, attachment.contentUrl,
+Compose_SavedName の 出力, varLibrary, varDestinationPath
+Power Automate式:
+  Title: @outputs('Compose_IdempotencyKey')
+  IdempotencyKey: @outputs('Compose_IdempotencyKey')
+  RunId: @variables('varRunId')
+  MessageId: @items('Process_Each_Parent_Message')?['id']
+  ReplyId: @coalesce(items('Process_Each_Attachment')?['sourceReplyId'], '')
+  AttachmentId: @items('Process_Each_Attachment')?['attachment']?['id']
+  OriginalFileName: @coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')
+  SavedFileName: （空文字）
+  SavedFileUrl: （空文字）
+  Status: Failed
+  ErrorMessage: @concat('添付の保存に失敗しました: ', outputs('Compose_SavedName'), ' 元URL=', coalesce(items('Process_Each_Attachment')?['attachment']?['contentUrl'], '(なし)'), ' 保存先=/', variables('varLibrary'), '/', variables('varDestinationPath'))　★v10で変更（旧: @concat('添付の保存に失敗しました: ', outputs('Compose_SavedName'))）
+  ProcessedDateTimeUtc: @utcNow()
+出力型: オブジェクト（12プロパティすべてstring値のJSONオブジェクト）
+後続の参照先: Create_Ledger_Item_Failed（parameters/body=@string(outputs('Compose_LedgerFailed_Body'))）
+実行条件: Append_Failed_Meeting_Attachmentの成功後（旧v6のCreate_Ledger_Item_Failedと同一のrunAfter条件を
+引き継ぐ）
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10追記：ErrorMessageに元contentUrl（items()による生参照。Compose失敗時も
+ハンドラ自体が壊れないよう、他のCompose出力[outputs()]ではなくitems()の生値を直接埋め込む設計）と
+保存先パスを追加し、台帳の1行を見るだけで「どのファイルを」「どこへ保存しようとして」失敗したかを
+特定できるようにした（自己診断化。詳細は本書冒頭「v9→v10 改訂点」参照）。★v7新設：Compose_Ledger_Bodyと同じ理由（PostItem→HTTP要求置換に伴うRESTボディ
+組み立て）で追加。
+
+[No.105]　★v7で全面置換（PostItem→HTTP要求）
+アクション表示名: Create_Ledger_Item_Failed
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（UI表示名の目安：「SharePoint に HTTP 要求を送信
+します」/ Send an HTTP request to SharePoint）★v7で変更（旧: [SPO-PostItem] PostItem）
+配置するScope: 同上 > Condition_DryRun [else]（Compose_LedgerFailed_Bodyの直後）
+入力値: dataset=SharePointサイトURL（★v7で静的リテラルに変更。★v8でpjteamサイトへ変更）,
+parameters/method="POST", parameters/uri=varLedgerListのリストへの_api/web/lists/getbytitle(...)/items
+エンドポイントURL, parameters/headers（Accept, Content-Typeともapplication/json;odata=nometadata）,
+parameters/body=Compose_LedgerFailed_Bodyの出力をstring()化したもの
+動的コンテンツ: varLedgerList, Compose_LedgerFailed_Body の 出力
+Power Automate式:
+  dataset: https://metijapan.sharepoint.com/teams/pjteam_220400119　★v8で変更（旧: mROOM_240600018）
+  parameters/method: POST
+  parameters/uri: @concat('_api/web/lists/getbytitle(''', variables('varLedgerList'), ''')/items')
+  parameters/headers: {"Accept":"application/json;odata=nometadata","Content-Type":"application/json;odata=nometadata"}
+  parameters/body: @string(outputs('Compose_LedgerFailed_Body'))
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest　★v7で変更（旧: operationId=PostItem）
+出力型: オブジェクト（封筒{statusCode,headers,body}。bodyはSharePoint REST APIのnometadata形式JSON応答）
+後続の参照先: Increment_FailedCount（本アクションの出力自体は参照されない）
+実行条件: Compose_LedgerFailed_Bodyの成功後
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照]。★v7の根本修正：Create_Ledger_Itemと同一理由（本書冒頭「v3→v7 改訂点」のv7項
+参照）。※本アクション自体が失敗した場合（SharePoint書き込みエラー等）は、添付単位catchでさらに捕捉する
+仕組みはなく、フロー全体catch（(a)）に委ねられる（残存する限界。§6参照。この点はv6以前から変更なし）。
+※ErrorMessageはCompose_SavedName（生成予定だった保存ファイル名）を含む簡易メッセージであり、実際の失敗
+理由（HTTPステータスや例外内容）そのものは記録しない簡易実装である（v6以前から変更なし）。
+※サイトを変更する場合、本アクションを含む4アクション（Create_Ledger_Item, Create_Ledger_Item_Failed,
+Create_Run_Log, Create_Error_Log）のdataset（いずれも静的リテラル）を個別に編集する必要がある（§8参照）。
+
+[No.106]
+アクション表示名: Increment_FailedCount
+コネクタ: なし
+Power Automate上のアクション: 1ずつ増分（Increment variable）
+配置するScope: 同上 > Condition_DryRun [else]（Create_Ledger_Item_Failedの兄弟）
+入力値: 名前=varFailedCount, 値=1
+動的コンテンツ: なし
+Power Automate式: 1
+出力型: integer
+後続の参照先: Compose_RunLog_Body(FailedCount), Compose_Finally_Summary(FailedCount)
+実行条件: Create_Ledger_Item_Failedの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.107]　★v9で配置Scope変更（旧: Scope_30_Save_Attachmentsの直後 → Condition_Has_File_Attachmentsの直後）
+アクション表示名: Compose_SortKey
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+（Condition_Has_File_Attachmentsの直後、Process_Each_Parent_Message直下の子として実行）
+入力値: JST変換したcreatedDateTimeをyyyyMMddHHmmss化し、"_"+messageIdを連結
+動的コンテンツ: Process_Each_Parent_Message の 現在項目 → createdDateTime, id
+Power Automate式: @concat(formatDateTime(convertFromUtc(items('Process_Each_Parent_Message')?['createdDateTime'], 'Tokyo Standard Time'), 'yyyyMMddHHmmss'), '_', items('Process_Each_Parent_Message')?['id'])
+出力型: string（ソートキー。辞書順＝時系列順になる形式）
+後続の参照先: Append_Normalized_Meeting（sortKey）, Sort_Meetings（sortでの並び替えキー）
+実行条件: Condition_Has_File_Attachmentsの成功後。添付が1件でも失敗しても、それはNo.103-106の系統で
+「捕捉済み」の正常終了として扱われるため、Process_Each_Attachment（延いてはCondition_Has_File_Attachments全体）は
+Succeededとなり、本アクションは通常どおり実行される。★v9追記: 添付が1件も無い会議の場合、
+Condition_Has_File_Attachmentsはfalse側（elseブランチ無し＝何も実行しない）のままSucceededで終了するため、
+この場合も本アクションは通常どおり実行される（旧Scope_30_Save_Attachmentsの時点でも、foreach対象が
+空配列であれば0回周回して同様にSucceededで終了しており、この点の実質的な挙動は変わっていない）。
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.108]
+アクション表示名: Append_Normalized_Meeting
+コネクタ: なし
+Power Automate上のアクション: 配列変数に追加（Append to array variable）
+配置するScope: Scope_20_Process_Meetings > Process_Each_Parent_Message
+入力値: varMeetingsへ会議1件分のオブジェクト（meetingDate, postedDateTimeJst, messageId, author,
+organizer, bodyText, teamsMessageUrl, attachments, sortKey）を追加
+動的コンテンツ: Compose_MeetingDate/Compose_PostedDateTimeJst/Compose_Author/Compose_Organizer/
+Compose_SortKey の各出力、Process_Each_Parent_Message の 現在項目 → id, webUrl、
+Convert_Body_Html_To_Text の 本文、varMeetingAttachments
+Power Automate式:
+  meetingDate: @outputs('Compose_MeetingDate')
+  postedDateTimeJst: @outputs('Compose_PostedDateTimeJst')
+  messageId: @items('Process_Each_Parent_Message')?['id']
+  author: @outputs('Compose_Author')
+  organizer: @outputs('Compose_Organizer')
+  bodyText: @body('Convert_Body_Html_To_Text')
+  teamsMessageUrl: @coalesce(items('Process_Each_Parent_Message')?['webUrl'], '')
+  attachments: @variables('varMeetingAttachments')
+  sortKey: @outputs('Compose_SortKey')
+出力型: なし（varMeetingsへの副作用のみ）
+後続の参照先: Sort_Meetings（Scope_40）
+実行条件: Compose_SortKeyの成功後（Process_Each_Parent_Message内、当該会議の最終アクション）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+### 4.5 Scope_40_Sort_Meetings（No.109〜110）
+
+[No.109]
+アクション表示名: Scope_40_Sort_Meetings
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート
+入力値: なし（子: Sort_Meetings）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし
+後続の参照先: Scope_50_Build_Word_Content
+実行条件: Scope_20_Process_Meetingsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.110]
+アクション表示名: Sort_Meetings
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_40_Sort_Meetings
+入力値: 名前=varSortedMeetings, 値=sort(varMeetings, 'sortKey')（昇順）
+動的コンテンツ: varMeetings
+Power Automate式: @sort(variables('varMeetings'), 'sortKey')
+出力型: array（sortKey昇順＝日付・時刻の昇順に並んだ会議配列。実在関数sort()を使用、実装確認済み）
+後続の参照先: Apply_To_Each_Sorted_Meeting（Scope_50）, Compose_RunLog_Body(MeetingCount),
+Compose_Finally_Summary(MeetingCount)
+実行条件: Scope_40内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※sortKeyが"yyyyMMddHHmmss_messageId"形式のため文字列昇順ソート＝
+時系列昇順ソートと一致する（§7参照）。
+
+### 4.6 Scope_50_Build_Word_Content（No.111〜131。★v4でvarDocHtmlParts＋join方式を全廃し、varDocumentHtmlへの
+AppendToStringVariable直接連結に変更。Set_DocumentHtml_Header→Append_DocumentHtml_Htmlに改名、
+Set_DocumentHtml（join）は削除。★v5でCompose_Meeting_Header_Htmlの曜日式を堅牢化。
+★v6でAppend_Attachment_Htmlのhrefを&エスケープ）
+
+[No.111]
+アクション表示名: Scope_50_Build_Word_Content
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート
+入力値: なし（子: Append_DocumentHtml_Header, Apply_To_Each_Sorted_Meeting, Append_DocumentHtml_Footer）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし
+後続の参照先: Scope_60_Create_Archive_File
+実行条件: Scope_40_Sort_Meetingsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.112]　★v4で改名・AppendToStringVariable化（旧: Set_DocumentHtml_Header、AppendToArrayVariable）
+アクション表示名: Append_DocumentHtml_Header
+コネクタ: なし
+Power Automate上のアクション: 文字列変数に追加（Append to string variable）
+配置するScope: Scope_50_Build_Word_Content
+入力値: varDocumentHtmlへHTML文書ヘッダ（<html><head>〜A4/余白20mm・游ゴシック等のstyle〜</head><body>）
+を追加
+動的コンテンツ: なし（固定HTML文字列）
+Power Automate式: <html><head><meta charset="utf-8"><style>@page { size: A4; margin: 20mm; } body { font-family: "Yu Gothic","Meiryo",sans-serif; font-size: 10.5pt; } .page-break { page-break-before: always; } .meeting-title { font-size: 16pt; font-weight: bold; } .label { font-weight: bold; } .attachment-list { margin-top: 8px; }</style></head><body>
+出力型: なし
+後続の参照先: Apply_To_Each_Sorted_Meeting
+実行条件: Scope_50内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v4改訂点：旧版（v3）のSet_DocumentHtml_Header（varDocHtmlPartsへの
+AppendToArrayVariable）から改名・型変更した。varDocumentHtml（文字列変数）へ直接AppendToStringVariableで
+書き込む方式に統一されたため、最後にjoinする工程（旧Set_DocumentHtml）が不要になった。
+
+[No.113]
+アクション表示名: Apply_To_Each_Sorted_Meeting
+コネクタ: なし
+Power Automate上のアクション: Apply to each
+配置するScope: Scope_50_Build_Word_Content
+入力値: foreach対象=varSortedMeetings
+動的コンテンツ: varSortedMeetings
+Power Automate式（foreach）: @variables('varSortedMeetings')
+出力型: なし
+後続の参照先: Append_DocumentHtml_Footer
+実行条件: Append_DocumentHtml_Headerの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。runtimeConfiguration.concurrency.repetitions=1（並列オフ。varDocumentHtmlへの
+追記順序保証のため必須）。
+
+[No.114]
+アクション表示名: Condition_Insert_Page_Break
+コネクタ: なし
+Power Automate上のアクション: 条件（Condition / If）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: varMeetingIndexが0より大きい（＝2件目以降）場合にtrue
+動的コンテンツ: varMeetingIndex
+Power Automate式（expression。構造化条件）:
+  { "and": [ { "greater": ["@variables('varMeetingIndex')", 0] } ] }
+出力型: なし（分岐制御）
+後続の参照先: [then]Append_Page_Break
+実行条件: ループ内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※varMeetingIndex=0（1件目）はfalseとなり改ページ無しで開始する
+（最初のページ自体が新規ページのため正しい挙動。§7参照）。
+
+[No.115]（Condition_Insert_Page_Break の then分岐。★v4でAppendToStringVariable化）
+アクション表示名: Append_Page_Break
+コネクタ: なし
+Power Automate上のアクション: 文字列変数に追加（Append to string variable）
+配置するScope: 同上 > Condition_Insert_Page_Break [then]
+入力値: varDocumentHtmlへ改ページ用div（page-break-before: always;）を追加
+動的コンテンツ: なし（固定HTML文字列）
+Power Automate式: <div style="page-break-before: always;"></div>
+出力型: なし
+後続の参照先: Escape_Ampersand（Condition_Insert_Page_Breakの成功後という形で連結）
+実行条件: then分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v4改訂点：旧版（v3）はvarDocHtmlPartsへのAppendToArrayVariableだったが、
+varDocumentHtmlへのAppendToStringVariableに変更（対象・型のみ変更、挿入するHTML断片自体は同一）。
+
+[No.116]
+アクション表示名: Escape_Ampersand
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: 現在会議のbodyText中の & を &amp; に置換
+動的コンテンツ: Apply_To_Each_Sorted_Meeting の 現在項目 → bodyText
+Power Automate式: @replace(coalesce(item()?['bodyText'], ''), '&', '&amp;')
+出力型: string
+後続の参照先: Escape_LessThan
+実行条件: Condition_Insert_Page_Breakの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※HTMLエスケープは必ず & → < → > → " → ' の順（&を最初に置換しないと
+後続で生成した実体参照中の&まで二重エスケープされてしまうため。§7参照）。
+
+[No.117]
+アクション表示名: Escape_LessThan
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: Escape_Ampersandの結果中の < を &lt; に置換
+動的コンテンツ: Escape_Ampersand の 出力
+Power Automate式: @replace(coalesce(outputs('Escape_Ampersand'), ''), '<', '&lt;')
+出力型: string
+後続の参照先: Escape_GreaterThan
+実行条件: Escape_Ampersandの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.118]
+アクション表示名: Escape_GreaterThan
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: Escape_LessThanの結果中の > を &gt; に置換
+動的コンテンツ: Escape_LessThan の 出力
+Power Automate式: @replace(coalesce(outputs('Escape_LessThan'), ''), '>', '&gt;')
+出力型: string
+後続の参照先: Escape_DoubleQuote
+実行条件: Escape_LessThanの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.119]
+アクション表示名: Escape_DoubleQuote
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: Escape_GreaterThanの結果中の " を &quot; に置換
+動的コンテンツ: Escape_GreaterThan の 出力
+Power Automate式: @replace(coalesce(outputs('Escape_GreaterThan'), ''), '"', '&quot;')
+出力型: string
+後続の参照先: Escape_SingleQuote
+実行条件: Escape_GreaterThanの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.120]
+アクション表示名: Escape_SingleQuote
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: Escape_DoubleQuoteの結果中の ' を &#39; に置換
+動的コンテンツ: Escape_DoubleQuote の 出力
+Power Automate式: @replace(coalesce(outputs('Escape_DoubleQuote'), ''), '''', '&#39;')
+出力型: string
+後続の参照先: Compose_Body_With_Breaks
+実行条件: Escape_DoubleQuoteの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※式中の '''' はPower Automate式言語でのシングルクォート1文字の
+エスケープ表記（実体は1文字の ' を検索対象とする）。
+
+[No.121]
+アクション表示名: Compose_Body_With_Breaks
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: エスケープ済み本文の改行（CRLF/LF）を <br> に置換
+動的コンテンツ: Escape_SingleQuote の 出力
+Power Automate式: @replace(replace(outputs('Escape_SingleQuote'), decodeUriComponent('%0D%0A'), '<br>'), decodeUriComponent('%0A'), '<br>')
+出力型: string
+後続の参照先: Compose_Meeting_Header_Html
+実行条件: Escape_SingleQuoteの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※decodeUriComponent('%0D%0A')=CRLF、decodeUriComponent('%0A')=LFで、
+CRLFを先に置換してから残りのLF単体を置換する順序になっている。
+
+[No.122]　★v5で式変更（曜日式の堅牢化）
+アクション表示名: Compose_Meeting_Header_Html
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: 会議見出しHTML（日付＋曜日／投稿者／主催者／投稿日時／内容本文／添付見出し）を組み立て
+動的コンテンツ: Apply_To_Each_Sorted_Meeting の 現在項目 → meetingDate, author, organizer,
+postedDateTimeJst、Compose_Body_With_Breaks の 出力
+Power Automate式: @concat('<div class="meeting-title">', formatDateTime(item()?['meetingDate'], 'yyyy年M月d日'), '（', substring('日月火水木金土', dayOfWeek(item()?['meetingDate']), 1), '）</div>', '<div><span class="label">投稿者：</span>', item()?['author'], '</div>', '<div><span class="label">主催者：</span>', item()?['organizer'], '</div>', '<div><span class="label">投稿日時：</span>', item()?['postedDateTimeJst'], '</div>', '<div><span class="label">内容：</span></div>', '<div>', outputs('Compose_Body_With_Breaks'), '</div>', '<div class="attachment-list"><span class="label">添付ファイル：</span></div>')
+出力型: string（HTML断片）
+後続の参照先: Append_Meeting_Header_Html
+実行条件: Compose_Body_With_Breaksの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v5修正点（Opus監査指摘）：曜日表示式を
+json('["日","月","火","水","木","金","土"]')[dayOfWeek(item()?['meetingDate'])]（JSON配列リテラルへの
+計算インデックスでの角括弧アクセス）から substring('日月火水木金土', dayOfWeek(item()?['meetingDate']), 1)
+（7文字の文字列から1文字を切り出す）に変更した。dayOfWeek()は0(日)〜6(土)を返す実在関数であり、
+文字列substringの方がJSON配列の計算添字アクセスより堅牢な表現である。
+
+[No.123]　★v4でAppendToStringVariable化
+アクション表示名: Append_Meeting_Header_Html
+コネクタ: なし
+Power Automate上のアクション: 文字列変数に追加（Append to string variable）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: varDocumentHtmlへCompose_Meeting_Header_Htmlの出力を追加
+動的コンテンツ: Compose_Meeting_Header_Html の 出力
+Power Automate式: @outputs('Compose_Meeting_Header_Html')
+出力型: なし
+後続の参照先: Condition_Has_Attachments
+実行条件: Compose_Meeting_Header_Htmlの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v4改訂点：旧版（v3）はvarDocHtmlPartsへのAppendToArrayVariableだったが、
+varDocumentHtmlへのAppendToStringVariableに変更（値の式自体は同一）。
+
+[No.124]
+アクション表示名: Condition_Has_Attachments
+コネクタ: なし
+Power Automate上のアクション: 条件（Condition / If）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: 現在会議のattachments件数が0より大きいか
+動的コンテンツ: Apply_To_Each_Sorted_Meeting の 現在項目 → attachments
+Power Automate式（expression。構造化条件）:
+  { "and": [ { "greater": ["@length(coalesce(item()?['attachments'], json('[]')))", 0] } ] }
+出力型: なし（分岐制御）
+後続の参照先: [then]Apply_To_Each_Saved_Attachment / [else]Append_No_Attachments_Html
+実行条件: Append_Meeting_Header_Htmlの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.125]（Condition_Has_Attachments の then分岐。★v4で入力式を明確化）
+アクション表示名: Apply_To_Each_Saved_Attachment
+コネクタ: なし
+Power Automate上のアクション: Apply to each
+配置するScope: 同上 > Condition_Has_Attachments [then]
+入力値: foreach対象=coalesce(外側ループ〔Apply_To_Each_Sorted_Meeting〕の現在会議のattachments, json('[]'))
+動的コンテンツ: Apply_To_Each_Sorted_Meeting の 現在項目 → attachments
+Power Automate式（foreach）: @coalesce(items('Apply_To_Each_Sorted_Meeting')?['attachments'], json('[]'))　★v4で変更（旧: @coalesce(item()?['attachments'], json('[]'))）
+出力型: なし
+後続の参照先: Increment_MeetingIndex（Condition_Has_Attachments終了後）
+実行条件: then分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。runtimeConfiguration.concurrency.repetitions=1（並列オフ）。★v4修正点：
+item()は最も内側のForeachの現在項目を指すため、本アクション自身がForeachである以上、item()は自分自身の
+現在項目（=添付1件）を指すことになり曖昧または誤参照になり得た。items('Apply_To_Each_Sorted_Meeting')?['attachments']
+とすることで、外側ループ（会議単位）の現在項目のattachmentsであることを明示した。
+
+[No.126]
+アクション表示名: Condition_Attachment_Saved
+コネクタ: なし
+Power Automate上のアクション: 条件（Condition / If）
+配置するScope: 同上 > Apply_To_Each_Saved_Attachment
+入力値: 現在添付のsavedFileUrlの文字数が0より大きいか（＝保存後URLを保持しているか）
+動的コンテンツ: Apply_To_Each_Saved_Attachment の 現在項目 → savedFileUrl
+Power Automate式（expression。構造化条件）:
+  { "and": [ { "greater": ["@length(coalesce(item()?['savedFileUrl'], ''))", 0] } ] }
+出力型: なし（分岐制御）
+後続の参照先: [then]Append_Attachment_Html / [else]Append_Attachment_Failed_Html
+実行条件: ループ内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v6の重大バグ修正（Get_Saved_File_Properties/Compose_Ledger_Body/
+Append_Saved_Meeting_Attachmentのbody/参照修正）により、非DryRun本番保存時のsavedFileUrlが正しく
+値を保持するようになったため、本判定が意図通りに機能するようになった（v3では常にnull/空扱いとなり、
+保存成功添付でもelse側〔Append_Attachment_Failed_Html〕に入ってしまう連鎖バグが潜在していた）。
+★v10追記：savedFileUrlの参照元はGet_Saved_File_Properties（GetFileItem）からCompose_Saved_File_Url
+（決定的URL構築）へ変更されたが、本アクション自体の判定式（savedFileUrlの文字数>0）は不変。
+
+[No.127]（Condition_Attachment_Saved の then分岐。★v6でhrefエスケープを追加）
+アクション表示名: Append_Attachment_Html
+コネクタ: なし
+Power Automate上のアクション: 文字列変数に追加（Append to string variable）
+配置するScope: 同上 > Condition_Attachment_Saved [then]
+入力値: varDocumentHtmlへ添付リンク（<a href="エスケープ済みsavedFileUrl">エスケープ済みsavedName</a>）を追加
+動的コンテンツ: Apply_To_Each_Saved_Attachment の 現在項目 → savedFileUrl, savedName
+Power Automate式: @concat('<div><a href="', replace(coalesce(item()?['savedFileUrl'], ''), '&', '&amp;'), '">', replace(replace(replace(replace(replace(coalesce(item()?['savedName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '"', '&quot;'), '''', '&#39;'), '</a></div>')　★v6で変更（旧: hrefにcoalesce(item()?['savedFileUrl'], '')をそのまま挿入、&エスケープ無し）
+出力型: なし
+後続の参照先: なし（当該添付ループの末尾）
+実行条件: then分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v6修正点：SharePointのファイルURL（{Link}）はクエリ文字列に&を含む場合が
+あり、未エスケープのままhref属性値に挿入するとHTMLとして不正になり得た。replace(url, '&', '&amp;')で
+hrefのURL部分のみを&エスケープするよう追加した（アンカーテキスト側のsavedNameは従来通り5段エスケープ）。
+※hrefに入るのはsavedFileUrl（保存後のSPOファイルURL）であり、Teamsの元添付URLではない（§7参照）。
+
+[No.128]（Condition_Attachment_Saved の else分岐。★v4でAppendToStringVariable化）
+アクション表示名: Append_Attachment_Failed_Html
+コネクタ: なし
+Power Automate上のアクション: 文字列変数に追加（Append to string variable）
+配置するScope: 同上 > Condition_Attachment_Saved [else]
+入力値: varDocumentHtmlへ「元のファイル名＋状態表示」の行を追加（リンク無し）。
+status=='Failed'なら「（保存失敗）」、それ以外（Skipped・DryRun等）なら「（テスト実行のため未保存）」
+動的コンテンツ: Apply_To_Each_Saved_Attachment の 現在項目 → originalName, status
+Power Automate式:
+@concat('<div>', replace(replace(replace(replace(replace(coalesce(item()?['originalName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '"', '&quot;'), '''', '&#39;'), if(equals(coalesce(item()?['status'], ''), 'Failed'), '（保存失敗）', '（テスト実行のため未保存）'), '</div>')
+出力型: なし
+後続の参照先: なし（当該添付ループの末尾）
+実行条件: else分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v4改訂点：旧版（v3）はvarDocHtmlPartsへのAppendToArrayVariableだったが、
+varDocumentHtmlへのAppendToStringVariableに変更（値の式自体は不変）。
+※（履歴・v10で解消）v6〜v9では、status="Saved"だが{Link}取得不可でsavedFileUrlが空になった場合、
+本来は保存済みなのにこのelse分岐に入り、status=='Failed'でもないため「（テスト実行のため未保存）」という
+誤った表示になる既知の限界を記録していた（v6のbody/修正はItemId・{Link}参照の欠落バグを直したものであり、
+{Link}自体が環境要因で空になるケースへの対処ではなかったため）。★v10でGet_Saved_File_Properties
+（GetFileItem）自体を廃止し、savedFileUrlをCompose_Saved_File_Urlの決定的URL構築に変更したため、
+「保存成功だがURLが空」という組み合わせ自体が構造的に発生し得なくなり、本限界は解消済み（§6-3, §7参照）。
+
+[No.129]（Condition_Has_Attachments の else分岐。★v4でAppendToStringVariable化）
+アクション表示名: Append_No_Attachments_Html
+コネクタ: なし
+Power Automate上のアクション: 文字列変数に追加（Append to string variable）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting > Condition_Has_Attachments [else]
+入力値: varDocumentHtmlへ固定文字列「添付ファイルなし」の行を追加
+動的コンテンツ: なし（固定HTML文字列）
+Power Automate式: <div>添付ファイルなし</div>
+出力型: なし
+後続の参照先: Increment_MeetingIndex（Condition_Has_Attachments終了後）
+実行条件: else分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.130]
+アクション表示名: Increment_MeetingIndex
+コネクタ: なし
+Power Automate上のアクション: 1ずつ増分（Increment variable）
+配置するScope: Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting
+入力値: 名前=varMeetingIndex, 値=1
+動的コンテンツ: なし
+Power Automate式: 1
+出力型: integer
+後続の参照先: Condition_Insert_Page_Break（次回ループでの判定）
+実行条件: Condition_Has_Attachmentsの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.131]（★v4でAppendToStringVariable化。旧Set_DocumentHtmlは削除されたため本アクションがScope_50の
+最終アクションとなる）
+アクション表示名: Append_DocumentHtml_Footer
+コネクタ: なし
+Power Automate上のアクション: 文字列変数に追加（Append to string variable）
+配置するScope: Scope_50_Build_Word_Content
+入力値: varDocumentHtmlへHTML文書フッタ（</body></html>）を追加
+動的コンテンツ: なし（固定HTML文字列）
+Power Automate式: </body></html>
+出力型: なし
+後続の参照先: Scope_60_Create_Archive_File（Create_Archive_Document内でvarDocumentHtmlをbodyとして使用）
+実行条件: Apply_To_Each_Sorted_Meetingの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v4改訂点：旧版（v3）はvarDocHtmlPartsへのAppendToArrayVariableで、
+この後にSet_DocumentHtml（join(varDocHtmlParts, '')でvarDocumentHtmlへ一括代入）が続いていたが、
+v4で本アクション自体がvarDocumentHtmlへ直接AppendToStringVariableするため、Set_DocumentHtmlは不要になり
+削除された。Scope_50_Build_Word_Contentの子アクションは本アクションが最後（Set_DocumentHtmlは存在しない）。
+
+### 4.7 Scope_60_Create_Archive_File（No.132〜137。★v6でGet_Saved_Archive_Properties/Set_ArchiveUrlの
+body/参照を修正）
+
+[No.132]
+アクション表示名: Scope_60_Create_Archive_File
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート
+入力値: なし（子: Compose_ArchiveFileName, Condition_DryRun_Archive）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし
+後続の参照先: Scope_70_Write_Run_Log
+実行条件: Scope_50_Build_Word_Contentの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.133]
+アクション表示名: Compose_ArchiveFileName
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_60_Create_Archive_File
+入力値: "課内会議総括_"+実行時刻(JST, yyyyMMdd_HHmmss)+".doc" の形式でファイル名を生成
+動的コンテンツ: なし（システム関数utcNow()＋固定文字列）
+Power Automate式: @concat('課内会議総括_', formatDateTime(convertFromUtc(utcNow(), 'Tokyo Standard Time'), 'yyyyMMdd_HHmmss'), '.doc')
+出力型: string（例: 課内会議総括_20260716_153000.doc）
+後続の参照先: Create_Archive_Document（name。DryRun=いいえの場合のみ実際に使用される）
+実行条件: Scope_60内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※拡張子は.doc固定。実体はHTMLのため§6-5(Word警告)参照。
+※DryRun=はいの場合、本アクション自体は実行されるがファイル名は使われない（No.135参照）。
+
+[No.134]
+アクション表示名: Condition_DryRun_Archive
+コネクタ: なし
+Power Automate上のアクション: 条件（Condition / If）
+配置するScope: Scope_60_Create_Archive_File
+入力値: トリガーのDryRunがtrueなら総括ファイル作成自体をスキップ
+動的コンテンツ: トリガー DryRun
+Power Automate式（expression。構造化条件）:
+  {
+    "and": [
+      { "equals": ["@coalesce(triggerBody()?['DryRun'], true)", true] }
+    ]
+  }
+出力型: なし（分岐制御）
+後続の参照先: [then]Set_ArchiveUrl_DryRun / [else]Create_Archive_Document以下
+実行条件: Compose_ArchiveFileNameの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。この分岐により、DryRun=はいの場合は総括Word(.doc)ファイル自体を
+作成しない（本番フォルダを汚さない）。
+
+[No.135]（Condition_DryRun_Archive の then分岐）
+アクション表示名: Set_ArchiveUrl_DryRun
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: 同上 > Condition_DryRun_Archive [then]
+入力値: 名前=varArchiveUrl, 値="(DryRun: 総括Wordファイルは作成していません。DryRun=いいえで実行してください)"
+（固定文字列。実際のURLではない）
+動的コンテンツ: なし
+Power Automate式: (DryRun: 総括Wordファイルは作成していません。DryRun=いいえで実行してください)
+出力型: string
+後続の参照先: Compose_RunLog_Body(ArchiveUrl), Compose_Finally_Summary(ArchiveUrl)
+実行条件: then分岐内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※実行ログ・Finallyサマリ双方のArchiveUrl列にこのプレースホルダ文言が
+そのまま記録される。UI/レポートでリンクとして扱わないよう注意（§6-7参照）。
+
+[No.136]（Condition_DryRun_Archive の else分岐）
+アクション表示名: Create_Archive_Document
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-CreateFile] CreateFile
+配置するScope: 同上 > Condition_DryRun_Archive [else]
+入力値: dataset=varSiteAddress, folderPath="/"+varLibrary+"/"+varDestinationPath,
+name=Compose_ArchiveFileNameの出力, body=varDocumentHtml
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath, Compose_ArchiveFileName の 出力,
+varDocumentHtml
+Power Automate式:
+  dataset: @variables('varSiteAddress')
+  folderPath: @concat('/', variables('varLibrary'), '/', variables('varDestinationPath'))
+  name: @outputs('Compose_ArchiveFileName')
+  body: @variables('varDocumentHtml')
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=CreateFile
+出力型: オブジェクト（ItemId 等の作成結果。OpenApiConnectionの封筒{statusCode,headers,body}形式で格納。
+★v10注記：ItemIdを参照する後続アクションはもう存在しない）
+後続の参照先: Set_ArchiveUrl　★v10で変更（旧: Get_Saved_Archive_Properties（id）。v10でGetFileItem廃止に
+伴い、本アクションがCondition_DryRun_Archive[else]内の最終アクションではなくSet_ArchiveUrlの直前となった）
+実行条件: else分岐内で最初（runAfter={}）
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照]。★v10追記：v9まではCreate_Archive_Document成功後にGet_Saved_Archive_Properties
+（GetFileItem）でファイルプロパティ（{Link}）を取得していたが、v10ではこれを廃止し、Set_ArchiveUrlが
+既知の値（サイト・ライブラリ・保存先パス・本アクションのname）から直接URLを決定的に構築する（詳細は
+本書冒頭「v9→v10 改訂点」参照）。
+
+[No.137]　★v10で式変更（決定的URL構築へ全面変更）
+アクション表示名: Set_ArchiveUrl
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: 同上 > Condition_DryRun_Archive [else]
+入力値: 名前=varArchiveUrl, 値=サイトURL＋ライブラリ＋保存先パス＋アーカイブファイル名を連結し、
+空白を%20へ置換した決定的URL
+動的コンテンツ: varSiteAddress, varLibrary, varDestinationPath, Compose_ArchiveFileName の 出力
+Power Automate式: @replace(concat(variables('varSiteAddress'), '/', variables('varLibrary'), '/', variables('varDestinationPath'), '/', outputs('Compose_ArchiveFileName')), ' ', '%20')　★v10で変更（旧: @body('Get_Saved_Archive_Properties')?['{Link}']。さらにその前のv6では@outputs('Get_Saved_Archive_Properties')?['{Link}']）
+出力型: string
+後続の参照先: Compose_RunLog_Body(ArchiveUrl), Compose_Finally_Summary(ArchiveUrl)
+実行条件: Create_Archive_Documentの成功後　★v10で変更（旧: Get_Saved_Archive_Propertiesの成功後。
+Get_Saved_Archive_Properties廃止に伴いCreate_Archive_Documentの直後となった）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v10で全面変更：v6ではbody('Get_Saved_Archive_Properties')?['{Link}']への
+参照経路修正だったが（outputs()→body()）、v10ではGet_Saved_Archive_Properties（GetFileItem）自体を
+廃止し、Compose_Saved_File_Urlと同一パターン（サイト+ライブラリ+保存先パス+ファイル名の連結、空白のみ
+%20置換）で決定的にURLを構築する方式へ変更した。Create_Archive_Documentが指定どおりのfolderPath・nameで
+成功した以上、そのURLは既知の値から一意に決まるため、{Link}が環境要因で取得できない・空になるという
+残存論点（旧§6-3の一部）自体が解消された。
+
+### 4.8 Scope_70_Write_Run_Log（No.138〜141。★v6でCreate_Run_Logのtableをリスト名の定数直書きから
+varRunLogList変数参照に変更）
+
+[No.138]
+アクション表示名: Scope_70_Write_Run_Log
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート
+入力値: なし（子: Set_RunStatus_Success, Create_Run_Log）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし
+後続の参照先: Scope_90_Catch（Failed/Skipped/TimedOutの場合のみ起動）
+実行条件: Scope_60_Create_Archive_Fileの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。本Scopeが失敗/スキップされるとScope_90_Catchが起動する（§6参照）。
+
+[No.139]
+アクション表示名: Set_RunStatus_Success
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_70_Write_Run_Log
+入力値: 名前=varRunStatus, 値="Success"（固定文字列）
+動的コンテンツ: なし
+Power Automate式: Success
+出力型: string
+後続の参照先: Compose_RunLog_Body(Status), Compose_Finally_Summary(Status)
+実行条件: Scope_70内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.140]　★v7新設（実環境保存エラー対応）
+アクション表示名: Compose_RunLog_Body
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_70_Write_Run_Log（Set_RunStatus_Successの直後、Create_Run_Logの直前）
+入力値: 実行ログ登録用オブジェクト
+{Title, RunId, FlowName="PA_Migrate_Teams_Meeting_Archive_To_SPO", Level="Info", MeetingCount,
+SavedCount, SkippedCount, FailedCount, ArchiveUrl, Status, OccurredDateTimeUtc} を作成
+動的コンテンツ: varRunId, varSortedMeetings, varSavedCount, varSkippedCount, varFailedCount,
+varArchiveUrl, varRunStatus
+Power Automate式:
+  Title: @concat(variables('varRunId'), '_summary')
+  RunId: @variables('varRunId')
+  FlowName: PA_Migrate_Teams_Meeting_Archive_To_SPO
+  Level: Info
+  MeetingCount: @length(variables('varSortedMeetings'))
+  SavedCount: @variables('varSavedCount')
+  SkippedCount: @variables('varSkippedCount')
+  FailedCount: @variables('varFailedCount')
+  ArchiveUrl: @variables('varArchiveUrl')
+  Status: @variables('varRunStatus')
+  OccurredDateTimeUtc: @utcNow()
+出力型: オブジェクト（MeetingCount/SavedCount/SkippedCount/FailedCountの4列は式のまま（length()や
+IncrementVariable由来の整数変数）でCompose出力に格納されるため、数値型（JSON number）として出力される。
+残り8列は文字列。後続でstring()化してもこの4列はクォート無しの数値リテラルとしてJSON文字列内に出力される）
+後続の参照先: Create_Run_Log（parameters/body=@string(outputs('Compose_RunLog_Body'))）
+実行条件: Set_RunStatus_Successの成功後（旧v6のCreate_Run_Logと同一のrunAfter条件を引き継ぐ）
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v7新設：Compose_Ledger_Bodyと同じ理由（PostItem→HTTP要求置換）で追加。
+
+[No.141]　★v7で全面置換（PostItem→HTTP要求）
+アクション表示名: Create_Run_Log
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（UI表示名の目安：「SharePoint に HTTP 要求を送信
+します」/ Send an HTTP request to SharePoint）★v7で変更（旧: [SPO-PostItem] PostItem）
+配置するScope: Scope_70_Write_Run_Log
+入力値: dataset=SharePointサイトURL（★v7で静的リテラルに変更。★v8でpjteamサイトへ変更）,
+parameters/method="POST", parameters/uri=varRunLogListのリストへの_api/web/lists/getbytitle(...)/items
+エンドポイントURL, parameters/headers（Accept, Content-Typeともapplication/json;odata=nometadata）,
+parameters/body=Compose_RunLog_Bodyの出力をstring()化したもの
+動的コンテンツ: varRunLogList, Compose_RunLog_Body の 出力
+Power Automate式:
+  dataset: https://metijapan.sharepoint.com/teams/pjteam_220400119　★v8で変更（旧: mROOM_240600018。
+  さらにその前は@variables('varSiteAddress')）
+  parameters/method: POST
+  parameters/uri: @concat('_api/web/lists/getbytitle(''', variables('varRunLogList'), ''')/items')
+  parameters/headers: {"Accept":"application/json;odata=nometadata","Content-Type":"application/json;odata=nometadata"}
+  parameters/body: @string(outputs('Compose_RunLog_Body'))
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest　★v7で変更（旧: operationId=PostItem）
+出力型: オブジェクト（封筒{statusCode,headers,body}。bodyはSharePoint REST APIのnometadata形式JSON応答）
+後続の参照先: なし（Scope_70の最終アクション。本アクションの出力自体は参照されない）
+実行条件: Compose_RunLog_Bodyの成功後
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照]。★v7の根本修正（実環境で実際に発生した保存エラーへの対応本体。エラー全文
+「OpenApiOperationParameterValidationFailed: Input parameter 'item' validation failed in workflow
+operation 'Create_Run_Log': The API operation 'PostItem' is missing required property 'item'.」は
+本書冒頭「v3→v7 改訂点」のv7項参照）：table=@variables('varRunLogList')という式によりPostItemが列
+スキーマを解決できず「item欠落」で保存失敗した。dataset静的リテラル固定＋Compose_RunLog_Body＋REST化で
+解消した。tableパラメータ自体が無くなったため、インポート後の再選択点はInitialize_RunLogList
+（varRunLogList）の値編集のまま変わらない（parameters/uri内の@concat式で参照）。MeetingArchiveRunLogリスト
+にはFailedCount(数値)列の追加が必要（§8参照）。
+※サイトを変更する場合、本アクションを含む4アクション（Create_Ledger_Item, Create_Ledger_Item_Failed,
+Create_Run_Log, Create_Error_Log）のdataset（いずれも静的リテラル）を個別に編集する必要がある（§8参照）。
+
+### 4.9 Scope_90_Catch（No.142〜146。Scope_70のFailed/Skipped/TimedOut時のみ実行。★v6でCreate_Error_Logの
+tableをvarRunLogList変数参照に変更）
+
+[No.142]
+アクション表示名: Scope_90_Catch
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート
+入力値: なし（子: Set_RunStatus_Failed, Set_ErrorMessage, Create_Error_Log）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし
+後続の参照先: Scope_99_Finally
+実行条件: Scope_70_Write_Run_Logの失敗・スキップ・タイムアウト後
+（runAfter: Scope_70_Write_Run_Log = ["Failed","Skipped","TimedOut"]。Scope_70がSucceededの場合、
+本Scopeはスキップされる）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。フロー全体のエラーハンドラ（catchブロック）に相当。
+
+[No.143]
+アクション表示名: Set_RunStatus_Failed
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_90_Catch
+入力値: 名前=varRunStatus, 値="Failed"（固定文字列。初期値と同じだが明示的に再設定）
+動的コンテンツ: なし
+Power Automate式: Failed
+出力型: string
+後続の参照先: Compose_Finally_SummaryのStatus
+実行条件: Scope_90内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+[No.144]
+アクション表示名: Set_ErrorMessage
+コネクタ: なし
+Power Automate上のアクション: 変数の設定（Set variable）
+配置するScope: Scope_90_Catch
+入力値: 名前=varErrorMessage, 値="実行中にエラーが発生しました。RunId={varRunId}"
+動的コンテンツ: varRunId
+Power Automate式: @concat('実行中にエラーが発生しました。RunId=', variables('varRunId'))
+出力型: string
+後続の参照先: Compose_ErrorLog_Body(ErrorMessage)
+実行条件: Set_RunStatus_Failedの成功後
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。※メッセージは固定文言＋RunIdのみで、失敗した具体的なアクション名や
+Graph/SharePointのエラー詳細（result()等）は含まれない簡易実装（§6参照。詳細診断が必要な場合は
+Power Automateの実行履歴を別途確認する運用を想定）。
+
+[No.145]　★v7新設（実環境保存エラー対応）
+アクション表示名: Compose_ErrorLog_Body
+コネクタ: なし（制御アクション）
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_90_Catch（Set_ErrorMessageの直後、Create_Error_Logの直前）
+入力値: エラーログ登録用オブジェクト
+{Title, RunId, FlowName="PA_Migrate_Teams_Meeting_Archive_To_SPO", Level="Error", ErrorMessage,
+Status="Failed", OccurredDateTimeUtc} を作成
+動的コンテンツ: varRunId, varErrorMessage
+Power Automate式:
+  Title: @concat(variables('varRunId'), '_error')
+  RunId: @variables('varRunId')
+  FlowName: PA_Migrate_Teams_Meeting_Archive_To_SPO
+  Level: Error
+  ErrorMessage: @variables('varErrorMessage')
+  Status: Failed
+  OccurredDateTimeUtc: @utcNow()
+出力型: オブジェクト（7プロパティすべてstring値のJSONオブジェクト。本アクションはFailedCount等の数値列を
+持たない＝Create_Run_Logとは異なるレコード種別）
+後続の参照先: Create_Error_Log（parameters/body=@string(outputs('Compose_ErrorLog_Body'))）
+実行条件: Set_ErrorMessageの成功後（旧v6のCreate_Error_Logと同一のrunAfter条件を引き継ぐ）
+再試行: 対象外（非コネクタ）
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。★v7新設：Compose_Ledger_Bodyと同じ理由（PostItem→HTTP要求置換）で追加。
+
+[No.146]　★v7で全面置換（PostItem→HTTP要求）
+アクション表示名: Create_Error_Log
+コネクタ: SharePoint（shared_sharepointonline）
+Power Automate上のアクション: [SPO-HTTP] HttpRequest（UI表示名の目安：「SharePoint に HTTP 要求を送信
+します」/ Send an HTTP request to SharePoint）★v7で変更（旧: [SPO-PostItem] PostItem）
+配置するScope: Scope_90_Catch
+入力値: dataset=SharePointサイトURL（★v7で静的リテラルに変更。★v8でpjteamサイトへ変更）,
+parameters/method="POST", parameters/uri=varRunLogListのリストへの_api/web/lists/getbytitle(...)/items
+エンドポイントURL, parameters/headers（Accept, Content-Typeともapplication/json;odata=nometadata）,
+parameters/body=Compose_ErrorLog_Bodyの出力をstring()化したもの
+動的コンテンツ: varRunLogList, Compose_ErrorLog_Body の 出力
+Power Automate式:
+  dataset: https://metijapan.sharepoint.com/teams/pjteam_220400119　★v8で変更（旧: mROOM_240600018。
+  さらにその前は@variables('varSiteAddress')）
+  parameters/method: POST
+  parameters/uri: @concat('_api/web/lists/getbytitle(''', variables('varRunLogList'), ''')/items')
+  parameters/headers: {"Accept":"application/json;odata=nometadata","Content-Type":"application/json;odata=nometadata"}
+  parameters/body: @string(outputs('Compose_ErrorLog_Body'))
+host: apiId=/providers/Microsoft.PowerApps/apis/shared_sharepointonline,
+connectionName=shared_sharepointonline, operationId=HttpRequest　★v7で変更（旧: operationId=PostItem）
+出力型: オブジェクト（封筒{statusCode,headers,body}。bodyはSharePoint REST APIのnometadata形式JSON応答）
+後続の参照先: Scope_99_Finally（Scope_90終了後。本アクションの出力自体は参照されない）
+実行条件: Compose_ErrorLog_Bodyの成功後
+再試行: 既定ポリシー
+タイムアウト: 明示設定なし
+エラー時の処理: [凡例参照]。★v7の根本修正：Create_Run_Logと同一理由（本書冒頭「v3→v7 改訂点」のv7項
+参照）。※本アクション自体がさらに失敗した場合、Scope_90自体がFailedとなるが、Scope_99_FinallyはrunAfter
+でScope_90の[Succeeded,Skipped,Failed,TimedOut]全パターンで起動するため必ず実行される（v6以前から変更なし）。
+※本アクションはFailedCountを持たない（Create_Run_Logとは異なるレコード種別。台帳側のCreate_Ledger_Item_Failed
+とも別物）。
+※サイトを変更する場合、本アクションを含む4アクション（Create_Ledger_Item, Create_Ledger_Item_Failed,
+Create_Run_Log, Create_Error_Log）のdataset（いずれも静的リテラル）を個別に編集する必要がある（§8参照）。
+
+### 4.10 Scope_99_Finally（No.147〜148。常に実行される最終処理）
+
+[No.147]
+アクション表示名: Scope_99_Finally
+コネクタ: なし
+Power Automate上のアクション: スコープ（Scope）
+配置するScope: ルート
+入力値: なし（子: Compose_Finally_Summary）
+動的コンテンツ: なし
+Power Automate式: （式なし）
+出力型: なし
+後続の参照先: なし（フローの最終アクション）
+実行条件: Scope_90_Catchの成功・スキップ・失敗・タイムアウトいずれの後でも実行
+（runAfter: Scope_90_Catch = ["Succeeded","Skipped","Failed","TimedOut"]。すなわちfinally相当で
+必ず実行される）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。本Scope自体はcatch対象がなく、フロー全体としての最終出口となる。
+
+[No.148]
+アクション表示名: Compose_Finally_Summary
+コネクタ: なし
+Power Automate上のアクション: 作成（Compose）
+配置するScope: Scope_99_Finally
+入力値: 実行サマリオブジェクト {RunId, Status, MeetingCount, SavedCount, SkippedCount, FailedCount,
+ArchiveUrl} を作成
+動的コンテンツ: varRunId, varRunStatus, varSortedMeetings, varSavedCount, varSkippedCount,
+varFailedCount, varArchiveUrl
+Power Automate式:
+  RunId: @variables('varRunId')
+  Status: @variables('varRunStatus')
+  MeetingCount: @length(variables('varSortedMeetings'))
+  SavedCount: @variables('varSavedCount')
+  SkippedCount: @variables('varSkippedCount')
+  FailedCount: @variables('varFailedCount')
+  ArchiveUrl: @variables('varArchiveUrl')
+出力型: オブジェクト（フロー実行結果のサマリ。実行履歴の最終出力として確認可能）
+後続の参照先: なし（フロー全体の最終アクション。以降アクションなし）
+実行条件: Scope_99内で最初（runAfter={}）
+再試行: 対象外
+タイムアウト: 対象外
+エラー時の処理: [凡例参照]。
+
+--------------------------------------------------------------------
+## 5. 主要Compose式 クイックリファレンス
+--------------------------------------------------------------------
+書式: Compose名 / 配置Scope / Power Automate式 / 出力型 / 用途
+（v6でCompose型の新規アクションはCompose_EffectiveLookbackDays（No.1）のみ追加。★v7でPostItem→HTTP要求置換に伴いCompose_Ledger_Body/Compose_LedgerFailed_Body/Compose_RunLog_Body/Compose_ErrorLog_Bodyの4件を追加。★v10でCompose_Source_Url/Compose_Saved_File_Urlの2件を追加。他は参照先No.の更新のみ）
+
+- Compose_EffectiveLookbackDays　★v4新設
+  ルート（No.1）
+  @if(greater(int(coalesce(triggerBody()?['LookbackDays'], 0)), 0), int(coalesce(triggerBody()?['LookbackDays'], 7)), 7)
+  出力型: integer / 用途: LookbackDaysの安全化（null/未入力/0以下→7、正の整数はそのまま採用）。
+  Initialize_LookbackDaysの値としてそのまま採用される。
+
+- Escape_Ampersand
+  Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting（No.116）
+  @replace(coalesce(item()?['bodyText'], ''), '&', '&amp;')
+  出力型: string / 用途: HTMLエスケープ1段目（&→&amp;、最初に行う必要あり）
+
+- Escape_LessThan
+  Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting（No.117）
+  @replace(coalesce(outputs('Escape_Ampersand'), ''), '<', '&lt;')
+  出力型: string / 用途: HTMLエスケープ2段目（<→&lt;）
+
+- Escape_GreaterThan
+  Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting（No.118）
+  @replace(coalesce(outputs('Escape_LessThan'), ''), '>', '&gt;')
+  出力型: string / 用途: HTMLエスケープ3段目（>→&gt;）
+
+- Escape_DoubleQuote
+  Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting（No.119）
+  @replace(coalesce(outputs('Escape_GreaterThan'), ''), '"', '&quot;')
+  出力型: string / 用途: HTMLエスケープ4段目（"→&quot;）
+
+- Escape_SingleQuote
+  Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting（No.120）
+  @replace(coalesce(outputs('Escape_DoubleQuote'), ''), '''', '&#39;')
+  出力型: string / 用途: HTMLエスケープ5段目・最終段（'→&#39;）。この後Compose_Body_With_Breaksで
+  改行を<br>化する。
+
+- Compose_SavedName
+  Scope_20_Process_Meetings > Process_Each_Parent_Message > Condition_Has_File_Attachments [then] >
+  Process_Each_Attachment > Condition_Already_Saved [else]（No.88）
+  @concat(formatDateTime(items('Process_Each_Parent_Message')?['createdDateTime'], 'yyyyMMdd'), '_', if(greater(length(outputs('Compose_TrimTrailing')), 100), substring(outputs('Compose_TrimTrailing'), 0, 100), outputs('Compose_TrimTrailing')), outputs('Compose_Extension'))
+  出力型: string / 用途: 保存ファイル名生成（yyyyMMdd_元名[100文字超は短縮]+拡張子）。
+  禁止文字置換(Replace_Invalid_*)・末尾trim(Compose_TrimTrailing)後の最終段。Compose_LedgerFailed_Bodyの
+  ErrorMessageにもこの出力が使われる。
+
+- Compose_SortKey
+  Scope_20_Process_Meetings > Process_Each_Parent_Message（No.107）
+  @concat(formatDateTime(convertFromUtc(items('Process_Each_Parent_Message')?['createdDateTime'], 'Tokyo Standard Time'), 'yyyyMMddHHmmss'), '_', items('Process_Each_Parent_Message')?['id'])
+  出力型: string / 用途: 会議の並び替えキー生成（yyyyMMddHHmmss_messageId。文字列昇順＝時系列昇順）。
+  Sort_Meetingsのsort()キーとして使用。
+
+- Compose_ArchiveFileName
+  Scope_60_Create_Archive_File（No.133）
+  @concat('課内会議総括_', formatDateTime(convertFromUtc(utcNow(), 'Tokyo Standard Time'), 'yyyyMMdd_HHmmss'), '.doc')
+  出力型: string / 用途: アーカイブファイル名生成（課内会議総括_yyyyMMdd_HHmmss.doc）。
+  DryRun=はいの場合、本アクションは実行されるが後続のCondition_DryRun_Archiveでファイル作成自体が
+  スキップされるため、生成された名前は使用されない。
+
+- Compose_Author
+  Scope_20_Process_Meetings > Process_Each_Parent_Message（No.47）
+  @if(empty(trim(coalesce(items('Process_Each_Parent_Message')?['from']?['user']?['displayName'], ''))), '不明', trim(coalesce(items('Process_Each_Parent_Message')?['from']?['user']?['displayName'], '')))
+  出力型: string / 用途: 投稿者名の抽出（null/空白のみの場合は"不明"）
+
+- Compose_IdempotencyKey
+  Scope_20_Process_Meetings > Process_Each_Parent_Message > Condition_Has_File_Attachments [then] >
+  Process_Each_Attachment（No.69）
+  @if(empty(trim(coalesce(items('Process_Each_Attachment')?['sourceReplyId'], ''))), concat(items('Process_Each_Parent_Message')?['id'], '_', items('Process_Each_Attachment')?['attachment']?['id']), concat(items('Process_Each_Parent_Message')?['id'], '_', items('Process_Each_Attachment')?['sourceReplyId'], '_', items('Process_Each_Attachment')?['attachment']?['id']))
+  出力型: string / 用途: 冪等キー生成（MessageId(_ReplyId)_AttachmentId形式）。台帳GetItemsの$filterに使用。
+  Compose_Ledger_Body（成功時）・Compose_LedgerFailed_Body（失敗時）の両方でTitle/IdempotencyKeyに使用。
+
+- Compose_Meeting_Header_Html（曜日式）
+  Scope_50_Build_Word_Content > Apply_To_Each_Sorted_Meeting（No.122）
+  曜日部分の抜粋: substring('日月火水木金土', dayOfWeek(item()?['meetingDate']), 1)　★v5で堅牢化
+  出力型: string（HTML断片の一部） / 用途: 会議見出し内の曜日表示。旧版
+  json('["日","月","火","水","木","金","土"]')[dayOfWeek(...)] からの変更（§本書冒頭の改訂点8参照）。
+
+- Compose_Source_Url　★v10新設
+  Scope_20_Process_Meetings > Process_Each_Parent_Message > Condition_Has_File_Attachments [then] >
+  Process_Each_Attachment > Condition_Already_Saved [else] > Condition_DryRun [else] >
+  Scope_Save_File（No.94）
+  @if(contains(coalesce(items('Process_Each_Attachment')?['attachment']?['contentUrl'], ''), '/Shared%20Documents/'), decodeUriComponent(items('Process_Each_Attachment')?['attachment']?['contentUrl']), items('Process_Each_Attachment')?['attachment']?['contentUrl'])
+  出力型: string / 用途: 添付contentUrlの正規化（Graphが%エンコード済みURLを返す場合のみdecodeUriComponent、
+  それ以外はそのまま）。後続のCompose_Source_Site/Compose_Source_Pathの入力元（詳細は本書冒頭
+  「v9→v10 改訂点」参照）。
+
+- Compose_Saved_File_Url　★v10新設
+  Scope_20_Process_Meetings > Process_Each_Parent_Message > Condition_Has_File_Attachments [then] >
+  Process_Each_Attachment > Condition_Already_Saved [else] > Condition_DryRun [else]（No.92。
+  Scope_Save_Fileの直前）
+  @replace(concat(variables('varSiteAddress'), '/', variables('varLibrary'), '/', variables('varDestinationPath'), '/', outputs('Compose_SavedName')), ' ', '%20')
+  出力型: string / 用途: 保存後ファイルURLの決定的構築（サイト+ライブラリ+保存先パス+ファイル名の連結、
+  空白のみ%20置換）。Get_Saved_File_Properties（GetFileItem。v10で廃止）に代わる方式。
+  Compose_Ledger_Body(SavedFileUrl)・Append_Saved_Meeting_Attachment(savedFileUrl)で使用。
+
+- Compose_Ledger_Body　★v7新設
+  Scope_20_Process_Meetings > Process_Each_Parent_Message > Condition_Has_File_Attachments [then] >
+  Process_Each_Attachment > Condition_Already_Saved [else] > Condition_DryRun [else]（No.99）
+  {Title, IdempotencyKey, RunId, MessageId, ReplyId, AttachmentId, OriginalFileName, SavedFileName,
+  SavedFileUrl, Status="Saved", ErrorMessage="", ProcessedDateTimeUtc} のオブジェクト
+  出力型: オブジェクト / 用途: Create_Ledger_Item（HTTP要求）へ渡すRESTボディの組み立て（PostItem廃止に伴う
+  新設。§4.4参照）。★v10でSavedFileUrlの参照元がGet_Saved_File_Propertiesの{Link}からCompose_Saved_File_Url
+  の出力へ変更された。
+
+- Compose_LedgerFailed_Body　★v7新設。★v10でErrorMessageを自己診断化
+  Scope_20_Process_Meetings > Process_Each_Parent_Message > Condition_Has_File_Attachments [then] >
+  Process_Each_Attachment > Condition_Already_Saved [else] > Condition_DryRun [else]（No.104）
+  {Title, IdempotencyKey, RunId, MessageId, ReplyId, AttachmentId, OriginalFileName, SavedFileName="",
+  SavedFileUrl="", Status="Failed", ErrorMessage, ProcessedDateTimeUtc} のオブジェクト。ErrorMessageの式:
+  @concat('添付の保存に失敗しました: ', outputs('Compose_SavedName'), ' 元URL=', coalesce(items('Process_Each_Attachment')?['attachment']?['contentUrl'], '(なし)'), ' 保存先=/', variables('varLibrary'), '/', variables('varDestinationPath'))
+  出力型: オブジェクト / 用途: Create_Ledger_Item_Failed（HTTP要求）へ渡すRESTボディの組み立て。★v10で
+  ErrorMessageに元contentUrlと保存先パスを追加し、台帳の1行だけで原因特定できるよう自己診断化した
+  （旧: @concat('添付の保存に失敗しました: ', outputs('Compose_SavedName'))のみ）。
+
+- Compose_RunLog_Body　★v7新設
+  Scope_70_Write_Run_Log（No.140）
+  {Title, RunId, FlowName, Level="Info", MeetingCount, SavedCount, SkippedCount, FailedCount, ArchiveUrl,
+  Status, OccurredDateTimeUtc} のオブジェクト
+  出力型: オブジェクト（MeetingCount/SavedCount/SkippedCount/FailedCountは数値のまま出力） / 用途:
+  Create_Run_Log（HTTP要求）へ渡すRESTボディの組み立て。
+
+- Compose_ErrorLog_Body　★v7新設
+  Scope_90_Catch（No.145）
+  {Title, RunId, FlowName, Level="Error", ErrorMessage, Status="Failed", OccurredDateTimeUtc} のオブジェクト
+  出力型: オブジェクト / 用途: Create_Error_Log（HTTP要求）へ渡すRESTボディの組み立て。
+
+※上記は「主要」なもの（指示で名指しされたComposeを含む）の抜粋。全Composeアクションの詳細は
+§4の各Noエントリを正典とする。
+
+--------------------------------------------------------------------
+## 6. 想定エラーと対処（★v6で6-2の参照No., 6-3, 6-4を更新。6-8を新設。★v7で6-2〜6-4をREST化に伴い更新、6-9を新設。★v9で6-10を新設。★v10で6-11を新設）
+--------------------------------------------------------------------
+
+6-1. trim/coalesce/null関連
+- Compose_Author, Compose_IdempotencyKey等のtrim対象はいずれもcoalesce(値, '')でstring化してから
+  trimしているため、値がnullでもtrim自体はエラーにならない設計。
+- ただし、trigger入力（LookbackDays/DryRun/ForceReprocess）が想定外の型で渡された場合（GUIからの
+  手動実行では通常発生しないが、後続フロー等からの呼び出しに変更した場合は要注意）、int()/equals()の
+  型不一致でアクションが失敗し得る。LookbackDaysについてはCompose_EffectiveLookbackDays（No.1）が
+  null/0以下を7へ丸めるため、v6ではこの経路の安全性が向上している。
+
+6-2. 添付1件の保存失敗
+- Scope_Save_File（★v10でCompose_Source_Url→Compose_Source_Site→Compose_Source_Path→
+  Get_Source_File_Content→Create_Attachment_Fileの5アクション。Get_Saved_File_Properties〔GetFileItem〕は
+  廃止。旧v9はCompose_Source_Site→Compose_Source_Path→Get_Source_File_Content→Create_Attachment_File→
+  Get_Saved_File_Propertiesの5アクションだった）の
+  いずれかが失敗する原因としては、attachment.contentUrlがSharePoint上のパスとして解析できない形式
+  （Teams外部リンク・共有形式の相違等。★v9のFilter_File_Attachments強化で大部分は事前除外され、
+  ★v10で%エンコード済みURLもFilter_File_Attachments/Compose_Source_Urlで正規化・許容される）である場合、
+  folderPath配下のライブラリ/フォルダが存在しない場合（★v10でScope_05_Ensure_Destination_Folderが
+  フロー冒頭で保存先を事前作成・検証するため、この原因での失敗は大幅に減る見込み。§6-11参照）、
+  権限不足等が考えられる（実際に404が発生した実例と根本原因・対処は§6-10参照。全添付Failedの実例と
+  対処は§6-11参照）。
+- 挙動: Scope_Save_FileがFailed/TimedOutになると、Append_Failed_Meeting_Attachment→
+  Compose_LedgerFailed_Body→Create_Ledger_Item_Failed→Increment_FailedCountの系統（No.103-106）が実行され、
+  当該添付はvarMeetingAttachmentsにstatus=Failedとして記録され、台帳（MeetingArchiveLedger）にも
+  Status=Failed・ErrorMessage付きで1行記録される。varFailedCountが+1され、Process_Each_Attachmentの
+  当該周回は正常終了として扱われるため、次の添付・次の会議・フロー全体の処理は止まらない。
+- 残存する限界: Compose_IdempotencyKey・Get_Ledger_Existing・Compose_Ledger_Body・Create_Ledger_Item・
+  Compose_LedgerFailed_Body・Create_Ledger_Item_Failed
+  自体の失敗は、この添付単位catchの対象外である（Scope_Save_File内の5アクション〔★v9で3→5〕のみが対象）。
+  これらが失敗した場合は通常どおりフロー全体catch（Scope_90_Catch）に委ねられ、フロー全体が停止する。
+
+6-3.（履歴・v10で解消済み）{Link} が取得できない場合／v6で修正されたbody/欠落バグとの違い
+- ★v10で解消：本項が扱っていた問題（{Link}の参照経路・環境要因での空値）は、v10でGet_Saved_File_Properties/
+  Get_Saved_Archive_Properties（GetFileItem）自体を廃止し、savedFileUrl/varArchiveUrlをCompose_Saved_File_Url/
+  Set_ArchiveUrlによる決定的URL構築（サイト+ライブラリ+保存先パス+ファイル名の連結）へ全面変更したことで
+  解消した。以下は経緯の記録として残す（v6〜v9の定義における残存論点であり、v10の現行仕様には該当しない）。
+- ★重要な区別（履歴）: v3にはGet_Saved_File_Properties.id・Create_Ledger_Item.SavedFileUrl・
+  Append_Saved_Meeting_Attachment.savedFileUrl・Get_Saved_Archive_Properties.id・Set_ArchiveUrlの5箇所で
+  outputs('X')?['キー']という誤参照があり、封筒形式（{statusCode,headers,body}）の性質上これは常にnullを
+  返す潜在バグだった。v6ではこれをすべてbody('X')?['キー']に修正済み（本書冒頭の改訂点10参照）。これは
+  「取得元パスの誤り」であり、以下に述べる「{Link}自体が環境要因で空になる」問題とは別物である。
+- （履歴）Get_Saved_File_Properties/Get_Saved_Archive_Propertiesの本文（body）からbody('...')?['{Link}']で
+  取得するsavedFileUrl/varArchiveUrlは、v6の修正後も、SharePoint接続の応答形式やアイテムの共有設定によっては
+  値が空になる可能性が残っていた。これはアクション自体の失敗ではなく「取得できたが値が空」という状態のため、
+  添付単位catch（Scope_Save_FileのFailed/TimedOut）の対象にはならず、成功パス
+  （Create_Ledger_Item→Append_Saved_Meeting_Attachment、status=Saved）に進んでいた。
+- （履歴）結果として、status=Saved・savedFileUrl=''という組み合わせが起こり得た。この場合、Scope_50の
+  Condition_Attachment_Saved（savedFileUrlの有無で判定）ではelse側に入るが、status=='Failed'では
+  ないため「（テスト実行のため未保存）」という誤った表示になっていた（v10ではsavedFileUrlがCreateFile
+  成功の事実から決定的に構築されるため、この組み合わせ自体が発生し得ない）。
+- ★v9実環境実行での関連: 実際にv9パッケージで全添付がStatus=Failedとなる事象が発生し、原因調査の過程で
+  Get_Saved_File_Properties自体（GetFileItemのtableパラメータにライブラリのURLセグメント
+  "Shared Documents"を渡していたが、日本語サイトの表示名は「ドキュメント」であり名前解決に失敗していた
+  可能性）が最有力候補として疑われた。これが本項で述べていた「{Link}自体が環境要因で空になる」問題の
+  延長線上（あるいはより根本的な形）の事象であった可能性が高い（詳細は本書冒頭「v9→v10 改訂点」参照）。
+  v10ではGet_Saved_File_Properties/Get_Saved_Archive_Properties自体を削除したため、この種の問題の
+  発生源自体が無くなった。
+
+6-4. SharePointリスト/ライブラリが未選択の場合
+- Get_Ledger_Existingのtableパラメータ、およびCreate_Ledger_Item/Create_Ledger_Item_Failed/Create_Run_Log/
+  Create_Error_Logのparameters/uri（いずれもvarLedgerListまたはvarRunLogList参照。★v7でtableから
+  parameters/uriへ変更）が実環境の実リストと接続されていない状態、またはリスト名が実物と異なる状態で
+  実行すると、当該アクションがコネクタ側またはSharePoint REST側のエラーで失敗する。
+- Get_Ledger_Existing・Create_Ledger_Itemの失敗は添付単位catchの対象外（6-2の残存限界を参照）であり、
+  Create_Ledger_Item_Failedの失敗も同様に対象外。いずれもフロー全体catchに委ねられる。
+- インポート後は必ず§8の再設定ポイントに従い、各アクションのリスト/ライブラリを実物に選び直すこと
+  （varLedgerList・varRunLogListの2変数を確認すれば足り、v3のようにtableの定数直書き箇所を個別に
+  探す必要はない。ただしCreate_Ledger_Item等4アクションのdataset（サイトURL）は★v7で静的リテラルに
+  固定されているため、サイトを変更する場合はこの4箇所を個別に編集する必要がある。§8参照）。
+- ★v8追記: Get_Ledger_Existingのdatasetはvariables('varListSiteAddress')（pjteam_220400119）に変更された。台帳
+  （varLedgerList）・実行ログ（varRunLogList）の2リストはpjteamサイトに作成される前提となったため、
+  varListSiteAddressの値とREST4アクションの静的dataset（4箇所）が同一サイトを指しているか、インポート後に
+  必ず確認すること（片方だけ変更すると台帳検索とリスト書き込みが別サイトを指す不整合が生じる）。
+
+6-5. .doc形式の警告
+- Create_Archive_Document/Create_Attachment_FileはCreateFileでHTML文字列（またはバイナリ）をそのまま
+  ".doc"拡張子等で保存する。実体はHTMLであるため、Wordで開くと「ファイルの内容と拡張子が一致しない」
+  旨の警告が表示される可能性がある。
+- 対処: 業務要件がWord文書の体裁を厳密に求めない場合は拡張子を".html"に変更する（Compose_ArchiveFileName
+  のNo.133を変更）ことで警告を回避できる。
+- DryRun=はいの場合そもそも本ファイルが作成されないため、この警告が発生するのはDryRun=いいえで
+  実行した場合のみ（§6-7参照）。
+
+6-6. 2年（730日）分をLookbackDays=730で一括取得する場合のタイムアウト
+- Do_Until_Messages_Paging / Do_Until_Replies_Paging はいずれもlimit.timeout=PT1H（1時間）。
+  対象期間・投稿量・返信量が多い場合、1時間以内にページングが完了しない可能性がある。
+- 対処: LookbackDaysを分割して複数回実行する（例: 直近90日→残り640日を別実行、または四半期単位で
+  複数回実行）運用にする。台帳（varLedgerList）による冪等性チェックがあるため、同一添付の重複保存は
+  ForceReprocess=falseである限り防止される。
+- ★v4以降、Compose_EffectiveLookbackDaysにより0以下の値は7へ丸められるが、730超の上限チェックは
+  設けていない点に変わりはない（§8参照）。
+
+6-7. DryRun時のアーカイブファイル省略
+- DryRun=はい（既定値）で実行すると、Condition_DryRun_Archive（No.134）によりCreate_Archive_Document
+  以下が実行されず、総括Word(.doc)ファイル自体が作成されない。varArchiveUrlには
+  "(DryRun: 総括Wordファイルは作成していません。DryRun=いいえで実行してください)"という固定文言が
+  Set_ArchiveUrl_DryRun（No.135）によって設定される。
+- この文言は実行ログ（MeetingArchiveRunLog.ArchiveUrl）・Compose_Finally_Summaryの両方にそのまま
+  記録されるため、これをURLとして扱おうとする後続処理・レポート表示がある場合は誤動作しないよう注意する
+  （現状フロー内にはそのような後続処理は無い）。
+- 本番として.docを作成したい場合は、トリガー実行時にDryRun=いいえを明示的に選択する必要がある
+  （既定値はtrueのため、何も指定しないとDryRun実行になる）。
+
+6-8. 自己参照SetVariableによる保存時エラー（★v6新設。v4での修正の経緯を記録）
+- v3の定義には、更新対象の変数自身をunion()の入力として参照するSetVariableアクション（Set_MessagesArray,
+  Set_RepliesArray, Append_Reply_Attachment_Candidates）が3件存在し、実環境インポート後の保存時に
+  WorkflowRunActionInputsInvalidPropertyエラーが発生することが確認された。
+- v4でこれらをすべて「Apply to each（取得ページ/候補configurationを1件ずつ列挙）＋
+  AppendToArrayVariable（1件ずつ追記）」という自己参照を伴わない構成に置き換えて解消済み（本書冒頭の
+  改訂点2-4、§4.3 No.41-42, §4.4 No.56-57, No.63-64参照）。同様の自己参照パターンを新たに追加しないこと
+  （インポート後の追加改修時の注意点）。
+
+6-9. PostItem保存時エラーとHTTP要求への置換（★v7新設。実環境で実際に発生したエラーへの対応）
+- 実環境でv6パッケージを保存した際、「OpenApiOperationParameterValidationFailed: ... The API operation
+  'PostItem' is missing required property 'item'.」が発生した。原因はPostItemの必須動的ボディitemに対し、
+  dataset/tableを式（@variables(...)）にしていたため列スキーマを解決できなかったこと。同型のPostItem×4
+  （Create_Ledger_Item, Create_Ledger_Item_Failed, Create_Run_Log, Create_Error_Log）すべてが該当した。
+- 対処: 4件とも「SharePoint に HTTP 要求を送信します」（operationId=HttpRequest）＋SharePoint REST APIへ
+  置換し、直前にCompose_X_BodyでRESTボディを組み立てる方式に変更した（詳細・エラー全文は本書冒頭
+  「v3→v7 改訂点」のv7項参照）。
+- 残存注意: テナント設定によりRESTのPOSTで__metadata型指定を要求される可能性がある。また、SavedFileUrl/
+  ArchiveUrl列が「ハイパーリンク」型の場合はRESTで{"Url":...}オブジェクトが必要になるため単一行テキスト列
+  で作成すること（§8参照）。
+
+6-10. 添付取得404エラーとcontentUrl由来のサイト/パス導出への変更（★v9新設。実環境で実際に発生したエラーへの対応）
+- v8パッケージを実環境でインポート・保存し実行した際、フローはMeetingArchiveRunLogへの書き込み
+  （201応答、Id=1）まで到達したが、Get_Source_File_Contentが「404 File not found」で失敗した
+  （ユーザー提供の実行出力3ファイルで確認）。
+- 原因: 実際の添付contentUrlは
+  `https://metijapan.sharepoint.com/teams/pjteam_220400119/Shared Documents/03_課内会議/…`のように、
+  Teamsチャネル添付の実体が**チームのサイト**のShared Documents配下にある形式だった。旧実装は
+  dataset=varSiteAddress（ファイル保存先のmROOMサイト）を固定で使い、pathにも旧contentUrlの
+  サイト部分込みの値（uriPath(contentUrl)）を渡していたため、mROOMサイトに対して「別サイトの
+  パス」を問い合わせる形になり404となっていた。
+- 対処（v9）: Scope_Save_File先頭にCompose_Source_Site（No.95）/Compose_Source_Path（No.96）を追加し、
+  contentUrlを'/Shared Documents/'の位置で分割して、前半をdataset（サイトURL）、後半をpath
+  （サイト配下の相対パス。%20→スペース置換は維持）としてGet_Source_File_Contentへ渡すよう変更した。
+  これによりvarSiteAddressの値に依存せず、添付が実在するサイトを都度動的に特定できるようになった。
+  あわせてFilter_File_Attachments（No.65）にcontains(contentUrl,'/Shared Documents/')判定を追加し、
+  この形式に合致しない添付（外部リンク等）を候補の時点で除外するようにした。
+- 残存注意: v9修正後の実環境再実行はまだ実施していない。実contentUrlを用いた式のシミュレーション検証
+  （dataset=チームサイトURL／path=/Shared Documents/以下のパスが正しく分割されること）は済んでいるが、
+  「404が解消された」ことの実環境確認はできていない。また、v8実行が最終的に「全体失敗」（Scope_90_Catch
+  発火）となった経路の詳細（Scope_Save_Fileの失敗自体は添付単位catchで吸収される設計のため、
+  Create_Ledger_Item_Failed等の後続で別のエラーが起きた可能性が疑われる）は実行履歴が無いと特定できず、
+  本書執筆時点では未解明である。v9では404の発生源自体が無くなるため解消される見込みだが、再発時は
+  失敗アクション名の確認が必要（詳細は本書冒頭「v8→v9 改訂点」参照）。
+
+6-11. 添付保存の全件失敗（v9実環境実行）とScope_05/決定的URL構築への変更（★v10新設。実環境で実際に
+発生した事象への対応）
+- v9パッケージを実環境でインポート・保存・実行した結果、フローはエンドツーエンド完走した（封じ込め・
+  台帳Failed記録・エラーログ201書き込みは全て機能）。しかし**全添付がStatus=Failedとなった**
+  （例: ６Ｇと７Ｇ.pptx）。
+- 原因調査: 新実行証跡（run-evidence/Get_Channel_Messages.txt＝親50件）の分析で、失敗添付のcontentUrlは
+  正しい形（pjteam/Shared Documents配下・生URL）であることを確認した。すなわちv9のサイト/パス導出
+  （Compose_Source_Site/Compose_Source_Path）自体は正しい値を生成しており、失敗は保存側にあると推定した。
+  2つの候補を検討した:
+  (a) CreateFile（Create_Attachment_File）は中間フォルダを自動作成しない。mROOMサイトの保存先が
+      4階層のフォルダ構造で、そのいずれかが未作成の場合、全件が失敗し得る。
+  (b) Get_Saved_File_Properties（GetFileItem）のtableパラメータに渡していた"Shared Documents"は
+      ライブラリのURLセグメントであり、ライブラリの表示名・GUIDではない。日本語サイトのライブラリの
+      表示名は「ドキュメント」であることが多く、GetFileItemが表示名での名前解決を要求する場合は
+      "Shared Documents"という値では解決できず全件失敗し得る（最有力候補と判断）。
+      ※この場合ファイル自体は保存先に既に作成できている可能性が高く、再実行時に同名409で
+      Create_Attachment_File自体が失敗する形に変わる可能性がある（残骸ファイルの確認・退避が必要。
+      §8参照）。
+  また新証跡から、Graphが%エンコード済みcontentUrl（'/Shared%20Documents/'。.aspx実例で確認）を返す
+  場合があることも判明し、現行のFilter_File_Attachments/Compose_Source_Site/Compose_Source_Pathが
+  非エンコード表記のみを前提としていたため、エンコード済みの添付が黙って候補から除外される潜在バグも
+  新たに発見した。
+- 対処（v10・4本柱＋2堅牢化。詳細は本書冒頭「v9→v10 改訂点」参照）:
+  1. Scope_05_Ensure_Destination_Folder（No.30〜36）を新設し、DryRun=いいえの場合のみ保存先フォルダを
+     1階層ずつ作成（既存エラー許容）した上でGETによる実在検証を行う。検証失敗はフロー実行の最も早い
+     段階で明確な失敗として検出される（候補(a)への対処）。
+  2. Filter_File_Attachmentsに'/Shared%20Documents/'含有をor追加し、Scope_Save_File先頭にCompose_Source_Url
+     （%エンコード判定時のみdecodeUriComponent）を追加した（新たに発見したエンコード済みURL潜在バグへの対処）。
+  3. Get_Saved_File_Properties/Get_Saved_Archive_Properties（GetFileItem）を全廃し、savedFileUrl/varArchiveUrl
+     をCompose_Saved_File_Url/Set_ArchiveUrlによる決定的URL構築（サイト+ライブラリ+保存先パス+ファイル名の
+     連結）へ変更した（候補(b)への対処。GetFileItem自体を無くすため、ライブラリ名前解決の問題が
+     構造的に発生し得なくなる）。
+  4. 失敗時の台帳ErrorMessage（Compose_LedgerFailed_Body）に元contentUrlと保存先パスを埋め込み、
+     自己診断化した（再発時に台帳の1行だけで原因特定できるようにする）。
+  5. ファイル名サニタイズに#・%を追加した（決定的URL構築の安全性を高める）。
+- 残存注意: v10修正後の実環境再実行はまだ実施していない（静的検証のみ）。実環境確認ポイントは
+  (1)Verify_Destination_Folderの成功 (2)台帳にSaved行とクリック可能なSavedFileUrlが記録されること
+  (3)まだFailedが発生する場合はErrorMessageの「元URL=／保存先=」から原因を一意に特定できること
+  (4)初回実行前に保存先フォルダの残骸ファイル（候補(b)が正しければ既に保存済みの可能性がある）を
+  確認しておくこと（§8参照）。
+
+--------------------------------------------------------------------
+## 7. 式・型監査（★v6でbody/outputs参照ルール・関数一覧・アクション種別集計を更新。★v9でindexOf使用・
+uriPath廃止を反映。★v10でjoin/split/take/uriPathの再使用、GetFileItem全廃を反映）
+--------------------------------------------------------------------
+
+- trim対象は文字列か:
+  すべてのtrim()呼び出し（Compose_Author, Compose_IdempotencyKey, Compose_TrimTrailing等）は、
+  coalesce(値, '')で先にstring化してからtrim()に渡している。null直接渡しは無い。
+
+- coalesce候補は同型か:
+  各coalesce呼び出しの第1・第2引数は同型（string同士: '', array同士: json('[]'), boolean同士: false/true）
+  で揃っている（例: coalesce(triggerBody()?['ForceReprocess'], false) はboolean同士、
+  coalesce(item()?['attachments'], json('[]')) はarray同士、coalesce(item()?['savedFileUrl'], '')
+  （Condition_Attachment_Saved, No.126）はstring同士）。
+
+- null ≠ 空文字 ≠ 空配列を踏まえた条件式か:
+  Filter_Messages_By_Period, Filter_File_Attachments等のnot(empty(coalesce(...)))は、null・空文字・
+  空配列のいずれもempty()がtrueと判定するため、この3者を同一の「値なし」として扱う意図の設計であり、
+  誤って区別を要求する箇所は無い。Condition_Already_Savedのgreater(length(...), 0)も同様に
+  「0件」と「null」を区別せずcoalesceで配列化してから件数判定している。Condition_Attachment_Saved
+  のgreater(length(coalesce(savedFileUrl,'')),0)も同じパターンで、null/空文字いずれも
+  「URLなし」として正しく統一的に扱われる。
+
+- false/0を「未設定」として誤扱いしていないか:
+  varMeetingIndex=0, varSavedCount=0, varSkippedCount=0, varFailedCount=0の初期値は
+  「未設定」ではなく「0件からのカウント開始」を意味する正しい初期化であり、Condition_Insert_Page_Break
+  （greater(varMeetingIndex,0)）も0（1件目）を意図的に除外している。Condition_DryRun/
+  Condition_DryRun_Archiveのequals(coalesce(DryRun,true),true)、Condition_Already_Savedの
+  not(equals(...,true))もboolean値をそのまま比較しており、falseを「未設定」として扱う誤りは無い。
+
+- Apply to eachへnullを渡していないか:
+  Process_Each_Parent_Message: body('Filter_Messages_By_Period')（Query出力は配列保証）
+  Process_Retrieved_Messages: coalesce(body('Get_Channel_Messages')?['value'], json('[]'))（★v4新設。
+  coalesceで配列保証）
+  Process_Each_Reply: variables('varRepliesArray')（array型変数、初期値json('[]')）
+  Process_Retrieved_Replies: coalesce(body('Get_Message_Replies')?['value'], json('[]'))（★v4新設）
+  Process_Each_Reply_Attachment: body('Select_Reply_Attachments')（Select出力は配列保証。★v4新設）
+  Process_Each_Attachment: body('Filter_File_Attachments')（Query出力は配列保証）
+  Apply_To_Each_Sorted_Meeting: variables('varSortedMeetings')（array型変数）
+  Apply_To_Each_Saved_Attachment: coalesce(items('Apply_To_Each_Sorted_Meeting')?['attachments'], json('[]'))
+  （★v4で外側ループ項目を明示参照するよう変更。coalesceで配列保証）
+  いずれもnullが渡り得ない設計になっている。
+
+- 未定義変数・存在しないアクションへの参照が無いか:
+  §3記載の28変数（v6でvarDocHtmlParts廃止・varRunLogList新設、v8でvarListSiteAddress新設。v7・v9・v10では
+  変数構成に変更なし）はすべてInitializeVariableで定義済み（参照する変数名の欠落なし）。§4に記載した全148
+  エントリ（v10）のbody()/outputs()/items()参照先アクション名はすべて本書内に実在する（No.付きで対応関係を
+  明記）。
+
+- 実在するアクション種別・関数のみを使用しているか:
+  使用アクション種別: InitializeVariable, SetVariable, IncrementVariable, AppendToArrayVariable,
+  AppendToStringVariable（★v4より使用開始）, Compose, Query（フィルター配列）, Select（選択）,
+  If（条件）, Foreach（Apply to each）, Until（Do until）, Scope, OpenApiConnection, Response（未使用）。
+  いずれもPower Automate/Logic Appsワークフロー定義スキーマの標準アクション型。Scope_Save_Fileの
+  「Failed/TimedOut」をrunAfterに指定する構成も、Logic Apps/Power Automate標準の「実行後の構成
+  （Configure run after）」機能であり、独自拡張ではない。
+  種別ごとの集計（v6・機械検証済み。v7でも下記6種別の件数は不変。Compose数のみ+4。★v9でScope→If置換に
+  伴いScope 9→8、If 6→7に変化。★v10でScope_05新設によりScope 8→9、Condition_Provision_Destination新設に
+  よりIf 7→8、サニタイズ2件・Compose_Source_Url・Compose_Saved_File_Url追加によりCompose 35→39に変化）:
+  SetVariable 13（自己参照0）／AppendToArrayVariable 8／
+  AppendToStringVariable 7／IncrementVariable 5／Foreach 8／Scope 9（Scope_05,10,20,40,50,60,70,90,99。
+  ★v10でScope_05_Ensure_Destination_Folderを追加。★v9でScope_30_Save_Attachmentsを除去。
+  なおScope_Save_Fileはこれとは別にProcess_Each_Attachment内のネストScopeとして存在し、本集計の対象外
+  〔従来から不変〕）／
+  If 8（Condition_Provision_Destination, Condition_Has_File_Attachments, Condition_Already_Saved,
+  Condition_DryRun, Condition_Insert_Page_Break, Condition_Has_Attachments, Condition_Attachment_Saved,
+  Condition_DryRun_Archive）★v10でCondition_Provision_Destinationを追加／Until 2／Query 2／Select 2／
+  Compose 39（★v10で+4。Replace_Invalid_Hash/Percent、Compose_Source_Url、Compose_Saved_File_Url）／
+  OpenApiConnection 16（★v10で+3。Scope_05のCreate_Destination_Folder_L1〜L4＋Verify_Destination_Folderの
+  5件を追加、Get_Saved_File_Properties/Get_Saved_Archive_Propertiesの2件を削除。差引13→16）／
+  InitializeVariable・その他は§3・§4参照。
+  使用関数: guid, int, coalesce, utcNow, addDays, sub, concat, json, empty, formatDateTime,
+  convertFromUtc, trim, if, replace, contains, indexOf（★v9で新規使用。Compose_Source_Site/Compose_Source_Path）,
+  last, split, substring, length, endsWith, sort, greater,
+  equals, not, and, or, first, uriComponent（★v5で新規使用）, decodeUriComponent, item, items,
+  variables, outputs, body, triggerBody, triggerOutputs, decodeBase64, dayOfWeek, join（★v10で再使用開始。
+  Scope_05のServerRelativeUrl組み立て）, take（★v10で新規使用。split結果から先頭N要素を取得）,
+  uriPath（★v10で再使用開始。varSiteAddressのサーバー相対部分抽出） — いずれもPower Automate
+  式言語の標準関数。独自関数・存在しない関数名の使用は無い。★v9でuriPath()の使用を一旦廃止（旧
+  Get_Source_File_Contentのpath式が uriPath(contentUrl) を使用していたが、Compose_Source_Path
+  〔substring/indexOf/replace〕に置換したため、v9時点ではフロー全体でuriPath()は使用されていなかった）。
+  ★v10でuriPath()をScope_05のServerRelativeUrl組み立て（uriPath(varSiteAddress)）で再び使用開始した
+  （Get_Source_File_Content側のcontentUrl解析用途とは別の、varSiteAddress自体からサーバー相対パスを
+  取り出す用途）。
+  ★v10でjoin()を再使用開始（v6で「union()・join()は使用されない」としていたのは旧Set_DocumentHtml
+  〔varDocHtmlParts配列のjoin〕の廃止に伴うものであり、v10のjoin(take(split(varDestinationPath,'/'),N),'/')
+  はこれとは無関係の新規用途。split/takeもv10で新規使用）。union()は引き続き不使用
+  （v3にあったunion()はSet_MessagesArray/Set_RepliesArray/Append_Reply_Attachment_Candidatesでのみ
+  使用されていたが、いずれもv4で該当アクション自体が削除されたため、フロー全体としてunion()の使用箇所は
+  無い）。
+
+- コネクタ出力はbody/経由で参照しているか（★v6で新規追加した監査項目）:
+  OpenApiConnectionアクションの出力はすべて{statusCode, headers, body}という封筒形式である。
+  definition.json全体をスキャンし、outputs('コネクタアクション名')?['非bodyキー']という誤参照パターンが
+  無いことを確認した。v3にあった5箇所（Get_Saved_File_Properties.id, Create_Ledger_Item.SavedFileUrl,
+  Append_Saved_Meeting_Attachment.savedFileUrl, Get_Saved_Archive_Properties.id, Set_ArchiveUrlの値）は
+  v6ですべてbody('...')?['...']に修正済み（本書冒頭の改訂点10）。この検査は今後の改修時にも恒久的に
+  実施すべき項目である。
+  ★v7追記: Create_Ledger_Item/Create_Ledger_Item_Failed/Create_Run_Log/Create_Error_Log（HTTP要求へ置換）
+  の出力（応答）を参照する後続アクションは元から存在しないため、この4件についてはbody/参照ルールの
+  適用対象外（参照自体が無い）。新設のCompose_X_Body側はComposeのため封筒構造を持たず、引き続き
+  outputs('Compose_X_Body')で参照する（既存ルールのまま）。
+
+- 添付リンクは保存後のSharePointファイルURLか:
+  Append_Attachment_Html（No.127）のhref = replace(coalesce(item()?['savedFileUrl'], ''), '&', '&amp;')
+  （★v6でエスケープ追加）であり、savedFileUrlはAppend_Saved_Meeting_Attachment（No.101）で
+  outputs('Compose_Saved_File_Url')から設定される（★v10で変更。旧: body('Get_Saved_File_Properties')?['{Link}']。
+  さらにその前のv6ではoutputs()から修正）。すなわちTeamsの元添付contentUrlではなく、SharePointへ保存した
+  後のファイルURL（決定的に構築された値）がドキュメント本文へ挿入される（設計意図どおり）。
+
+- 会議は日付順（時系列順）に並んでいるか:
+  varSortedMeetings = sort(variables('varMeetings'), 'sortKey')（Sort_Meetings, No.110）。
+  sortKey = "yyyyMMddHHmmss_messageId"（Compose_SortKey, No.107）であり、この形式は文字列の
+  辞書順ソート＝時系列昇順ソートと一致する（先頭が固定桁数の年月日時分秒のため）。
+
+- 各会議が新規ページ（改ページ）で始まるか:
+  Condition_Insert_Page_Break（No.114）はgreater(varMeetingIndex, 0)がtrueの場合のみ改ページdivを
+  挿入する。varMeetingIndexは0始まりでIncrement_MeetingIndex（No.130）により会議ごとに+1されるため、
+  2件目以降の会議冒頭にのみpage-break-beforeが挿入される。1件目（index=0）は改ページ無しで開始する
+  （文書の先頭ページ自体が新規ページであるため、この挙動は意図通りで欠陥ではない）。
+
+- 監査所見（Condition_Attachment_Saved／Append_Attachment_Failed_Htmlの表示ロジック。§6-3再掲）
+  ★v10で解消: 判定はsavedFileUrlの有無のみを見ており、status（Saved/Skipped/Failed）そのものは
+  Append_Attachment_Failed_Html（No.128）内のメッセージ選択（if(status=='Failed', ...)）でしか
+  参照されない。v6〜v9では「status=Saved かつ savedFileUrl=''（{Link}取得不可）」という組み合わせが
+  理論上起こり得たため、実際には保存済みであるにも関わらず「（テスト実行のため未保存）」という不正確な
+  文言が表示される既知の限界として記録していた。v10ではsavedFileUrlをCompose_Saved_File_Url
+  （CreateFile成功の事実のみから決定的に構築。SharePoint接続の応答形式・共有設定に左右されない）から
+  設定するようになったため、「保存成功だがURLが空」という組み合わせ自体が構造的に発生し得なくなり、
+  本監査所見は解消済みである（Scope_Save_Fileが成功すればsavedFileUrlは必ず非空になる）。
+
+- varFailedCountの扱い（§3-25再掲）:
+  varSavedCount/varSkippedCountと同様、初期値0は「未失敗」を表す正しい初期値であり「未設定」ではない。
+  Increment_FailedCount（No.106）はCreate_Ledger_Item_Failedの成功後にのみ実行されるため、
+  台帳へのFailed記録と変数カウントの整合性は保たれる（台帳書き込み自体が失敗した場合はカウントされない
+  ままフロー全体がFailedへ波及するため、この場合は実行ログ上に反映される前にフロー自体が異常終了する）。
+
+--------------------------------------------------------------------
+## 8. インポート後の再設定ポイント（要実環境確認）
+--------------------------------------------------------------------
+
+1. 3コネクタ（Microsoft Teams / SharePoint / Content Conversion）の接続を、インポート先テナントの
+   実際の接続へ選択し直す（connectionReferencesは匿名化ダミーGUIDのため、そのままでは使用不可）。
+
+2. SharePoint系アクションの「サイトのアドレス」「リスト/ライブラリ」を実物へ再選択する。★v8で
+   サイトが2系統に分離されたため、以下を区別して確認すること。
+   - ファイル保存系（varSiteAddress＝mROOM_240600018。Create_Destination_Folder_L1〜L4/
+     Verify_Destination_Folder〔★v10新設のScope_05〕, Get_Source_File_Content, Create_Attachment_File,
+     Create_Archive_Document, Compose_Saved_File_Url, Set_ArchiveUrl）: これらの
+     dataset/folderPath/URL組み立ては従来どおりvarSiteAddress経由。サイト変更時はvarSiteAddressの値を
+     直せば1箇所で足りる。★v10でGet_Saved_File_Properties/Get_Saved_Archive_Properties（GetFileItem）は
+     廃止済みのため、これらの「テーブル/ライブラリ」再選択は不要になった。
+   - リスト操作系（varListSiteAddress＝pjteam_220400119。Get_Ledger_Existing）: ★v8でdatasetを
+     varSiteAddressからvarListSiteAddressへ分離した。GetItemsのtable（varLedgerList）にはリスト名を
+     仮置きしているのみで実際のGUID参照ではないため、開き直して選択し直す必要がある。
+   - REST4アクション（Create_Ledger_Item, Create_Ledger_Item_Failed, Create_Run_Log, Create_Error_Log）:
+     ★v7でPostItemからSharePoint「HTTP要求を送信します」へ置換され、tableパラメータ自体が無くなった
+     （リスト名はparameters/uri内の@concat式でvarLedgerList/varRunLogListを引き続き参照するため、この
+     2変数の値確認で足りる）。ただし、この4件のdataset（サイトURL）は★v7で静的リテラルに固定されており、
+     ★v8でその値をpjteam_220400119へ変更済み。サイトのアドレス自体を変更する場合は、varListSiteAddress
+     の値を直すだけでなく、この4アクションのdatasetも個別に編集する必要がある（varSiteAddress経由の
+     ファイル保存系アクションのように1箇所の変更では済まない。11.参照）。
+
+3. 定数として埋め込んでいる下記7変数の値を実環境に合わせて確認・更新する。
+   varTeamId, varChannelId, varSiteAddress, varListSiteAddress, varDestinationPath, varLedgerList,
+   varRunLogList
+   （Initialize_TeamId, Initialize_ChannelId, Initialize_SiteAddress, Initialize_ListSiteAddress,
+   Initialize_DestinationPath, Initialize_LedgerList, Initialize_RunLogListの各値を編集。★v6で
+   varRunLogListが対象に追加、★v8でvarListSiteAddressが対象に追加）
+
+4.（履歴・v10で対応不要化）{Link}によるファイルURL取得可否の確認は、v10でGet_Saved_File_Properties/
+   Get_Saved_Archive_Properties（GetFileItem）自体を廃止し、savedFileUrl/varArchiveUrlを
+   Compose_Saved_File_Url/Set_ArchiveUrlの決定的URL構築（サイト+ライブラリ+保存先パス+ファイル名の連結）
+   に変更したため不要になった。CreateFile（Create_Attachment_File/Create_Archive_Document）が指定どおりの
+   folderPath・nameで成功した事実そのものからURLが一意に決まるため、{Link}の取得可否・空値化という
+   論点自体が発生しない（詳細は§6-3, §7参照）。
+
+5. 添付のcontentUrlから本体コンテンツを取得できるか（Get_Source_File_ContentのGetFileContentByPath
+   パス解析）を実環境データで確認する。取得できない添付があった場合はStatus=Failedで記録され処理は
+   継続する（§6-2参照）。★v9追記: v8の実環境初実行でここが404 File not foundで失敗した（Teamsチャネル
+   添付の実体がチームのサイトのShared Documents配下にあり、旧実装のdataset=varSiteAddress〔保存先の
+   mROOMサイト〕とは別サイトだったため）。v9ではdataset/pathともcontentUrlから
+   Compose_Source_Site/Compose_Source_Path（No.95,96）で動的に導出するよう変更し、設定値に依存せず
+   汎用的に404を回避する構成にしたが、この修正後の実環境再実行はまだ実施していない（§6-10参照）。
+
+6. .doc形式で保存したファイルをWordで開いた際に「内容と拡張子が一致しない」警告が出る可能性がある
+   （実体はHTML）。許容できない場合は.html拡張子等への変更を検討する（§6-5参照）。なおDryRun=はいの
+   場合はそもそもファイルが作成されないため、本番運用（DryRun=いいえ）時のみ該当する。
+
+7. 手動トリガー入力（LookbackDays, DryRun, ForceReprocess）の内部名は本書の手作業定義に基づく固定名
+   であるが、Power Automate UIでボタン入力を新規に組み立て直した場合、内部名が自動採番
+   （例: text_1等）に変わる可能性がある。UI上の内部名が本書記載と一致しているか確認すること。
+
+8. MeetingArchiveRunLogリストにFailedCount(数値)列を追加する（Title/RunId/FlowName/Level/
+   ErrorMessage/MeetingCount/SavedCount/SkippedCount/FailedCount/ArchiveUrl/Status/OccurredDateTimeUtc
+   の12列構成）。列が無い状態でCreate_Run_Log（No.141）を実行するとFailedCountフィールドの書き込みで
+   失敗する可能性がある（★v7でRESTボディ内のキー名はitem/接頭辞なしの単純なJSONプロパティ名になった）。
+
+9. LookbackDaysに730超などの極端に大きい値を入力した場合の挙動を確認する（★v6でも上限チェックは
+   未実装。Compose_EffectiveLookbackDaysは0以下の値を7へ丸めるのみで上限は設けていない。§6-6参照）。
+
+10. MeetingArchiveLedger/MeetingArchiveRunLogの両リストの列は、SharePoint上でASCII英名（本書記載の
+    列名そのまま。例: Title, IdempotencyKey, SavedFileUrl, FailedCount等）で作成し、内部名(internal name)が
+    表示名と一致していることを確認する（★v6監査所見）。日本語等の非ASCII列名で作成すると、SharePointが
+    内部名を自動的に OData__x0020_... のような形式に変換するため、Compose_X_Bodyで組み立てたJSON
+    プロパティ名（Compose_Ledger_Body, Compose_LedgerFailed_Body, Compose_RunLog_Body,
+    Compose_ErrorLog_Body）をそのままRESTボディのキーとして送信するCreate_Ledger_Item,
+    Create_Ledger_Item_Failed, Create_Run_Log, Create_Error_Logが列を正しく引き当てられずエラーとなる
+    可能性がある（★v7でPostItem/item接頭辞方式からHTTP要求＋プレーンJSONボディ方式に変更後も、
+    内部名一致の要件自体は変わらない）。
+
+11. ★v7新設：REST化した4アクション（Create_Ledger_Item, Create_Ledger_Item_Failed, Create_Run_Log,
+    Create_Error_Log）のdatasetはSharePointサイトURLの静的リテラルで固定されている（varSiteAddressの
+    ような変数参照ではない）。これは、PostItem時代に保存時検証で「item欠落」エラーが発生した対策として
+    dataset/tableを静的化したことに伴う制約であり（詳細は本書冒頭「v3→v7 改訂点」のv7項参照）、他の
+    SharePointアクションと異なり、サイトを変更する場合はこの4アクションを個別に編集する必要がある。
+    ★v8で、この4アクションのdataset値をmROOM_240600018からpjteam_220400119へ変更した（台帳・実行ログの
+    リスト作成先をpjteamサイトへ統一するため。詳細は本書冒頭「v7→v8 改訂点」参照）。
+
+12. ★v7新設：MeetingArchiveLedgerのSavedFileUrl列、MeetingArchiveRunLogのArchiveUrl列は、いずれも
+    **単一行テキスト列で作成すること**（ハイパーリンク型は不可）。RESTのnometadata JSONボディでは
+    ハイパーリンク型の列に{"Url":..., "Description":...}のようなオブジェクトを要求されるが、
+    Compose_X_Bodyは単純文字列（URL文字列そのもの）しか組み立てていないため、ハイパーリンク型で作成
+    すると書き込み時にエラーとなる。
+
+13. ★v8新設：本フローはサイトが2系統に分かれている。ファイル保存（添付・総括doc）はvarSiteAddress
+    （mROOM_240600018、初期値のまま）、台帳・実行ログのリスト操作はvarListSiteAddress
+    （pjteam_220400119、★v8新設）を使用する。インポート後はこの2つのサイト変数がそれぞれ正しい実サイトを
+    指しているか個別に確認すること（1つのサイトに統合されていると誤解して片方だけ変更すると、
+    ファイル保存またはリスト書き込みのいずれかが失敗する）。
+
+14. ★v9新設：Get_Source_File_Contentのdataset/pathは、v9以降varSiteAddress等の変数値に依存せず、
+    添付attachment.contentUrl自体からCompose_Source_Site/Compose_Source_Path（No.95,96）で動的に
+    導出される（'/Shared Documents/'を境界にサイトとパスへ分割）。このため、Teamsチャネル添付が
+    varSiteAddress（mROOM）と異なるサイト（例: チームのサイト）に実在していても、本アクション自体は
+    正しいサイト・パスを組み立てられる設計になった。ただし、この修正は404エラーの原因（誤ったサイトを
+    参照していたこと）を解消するものであり、Filter_File_Attachments（No.65）の
+    contains(contentUrl,'/Shared Documents/')判定を通過した添付が実際にアクセス可能かどうか
+    （権限・共有設定等）までは保証しない。★v10でCompose_Source_Site/Compose_Source_Pathの入力元は
+    Compose_Source_Url（%エンコード判定時のみdecodeUriComponent）経由になった。v9修正後・v10修正後とも
+    実環境再実行はまだ実施していない（§1, §6-10, §6-11参照）。
+
+15. ★v10新設：初回実行前（DryRun=いいえでの初回本番実行前）に、保存先フォルダ
+    （varSiteAddress/varLibrary/varDestinationPath配下）に同名の残骸ファイルが無いか確認すること。
+    v9実環境実行で全添付がStatus=Failedとなった原因の有力候補が「ファイル自体は保存先に作成できていたが、
+    Get_Saved_File_Properties〔GetFileItem〕のライブラリ名前解決に失敗していた」という筋であり、この場合
+    再実行するとCreateFile（Create_Attachment_File/Create_Archive_Document）が同名ファイルへのPOSTで
+    エラー（409相当）になる可能性がある。再実行前に保存先フォルダの中身を確認し、前回実行の残骸と
+    思われるファイルがあれば退避・削除しておくこと（詳細は本書冒頭「v9→v10 改訂点」、§6-11参照）。
+
+16. ★v10新設：varDestinationPathは'/'区切りで**最大4階層**までを前提とする設計になっている
+    （Scope_05のCreate_Destination_Folder_L1〜L4がsplit(varDestinationPath,'/')の先頭1〜4要素を
+    join/takeで組み立てて各階層を作成するため）。5階層以上のパスを設定した場合、L4より深い階層は
+    Scope_05では自動作成されない点に注意すること（§3 varDestinationPathの項参照）。
+
+17. ★v10新設：Verify_Destination_Folder（Scope_05の最終アクション。GetFolderByServerRelativeUrlへのGET）
+    が失敗した場合、保存先パス（varSiteAddress/varLibrary/varDestinationPathの組み合わせ）が実在しない、
+    またはアクセス権限が不足していることを意味する。この場合Scope_05自体がFailedとなり、Scope_10以降が
+    実行されずScope_70がSkippedとなってScope_90_Catchが捕捉する（フロー実行の最も早い段階で明確な
+    失敗として検出される設計。§4.0凡例(0)、§6-11参照）。
+
+18. ★v10新設：Scope_05のCreate_Destination_Folder_L1〜L4は、後続runAfterに[Succeeded,Failed]を指定して
+    おり、対象フォルダが既に存在する場合のエラー（相当409）を意図的に無視して次階層の作成に進む設計に
+    なっている。これはPower Automate/Logic Apps標準の「実行後の構成（Configure run after）」機能であり、
+    デザイナー上でエラーが表示されても異常ではない（詳細は§8デザイナー操作手順・power_automate_cloud_flow_implementation_guide.md参照）。
+
+※実環境での実行状況（★v10追記）: v9パッケージは実環境でエンドツーエンド完走したが、全添付が
+Status=Failedとなる事象が発生した（詳細は本書冒頭「v9→v10 改訂点」、§6-11参照）。v10はこの事象への
+対応（原因2候補への対処＋堅牢化2点）であり、修正後の実環境再実行はまだ実施していない（静的検証のみ済み）。
+構造・JSON妥当性・ZIP再展開・機械検証〔0エラー0警告〕はv10についても確認済み。検証結果は
+package_validation_report.txt / official_reference_findings.mdに記録されている。「v10で修正済みかつ
+実環境で動作確認済み」であることを意味するものではない。
+
+--------------------------------------------------------------------
+## 9. 本書の自己検証（v10改訂に伴い実施）
+--------------------------------------------------------------------
+本書§4のNo.1〜No.148ブロックのアクション表示名を出現順に抽出し、
+../validation/action_outline.txt に記載された全148アクション名（実行順）と機械的に突合した。
+結果は本書末尾の報告（作業実施者からの報告）に記載のとおり148/148件で完全一致している。
+突合に使用したスクリプト（extract_check.py / compare_outline.py）は ../validation/ に保存されており、再検証が可能である。
+併せて、以下をgrep・目視で確認した:
+- 旧PostItem（[SPO-PostItem]）の記載が現行仕様として本書に残っていないこと（変更履歴内での言及を除く）。
+- 旧Scope_30_Save_Attachmentsが現行仕様（§4エントリ・章見出し・配置するScope欄・後続の参照先欄）として
+  本書に残っていないこと（「旧: 」等の変更履歴的な言及を除く）。
+- ★v10で追加した恒久検査: GetFileItem（Get_Saved_File_Properties/Get_Saved_Archive_Properties含む）が
+  現行仕様（§4エントリの「Power Automate上のアクション」欄・operationId欄・後続の参照先欄）として
+  本書に残っていないこと（変更履歴・監査所見内での「廃止した」旨の言及を除く）。
+- ★v10で追加した恒久検査: {Link}が現行仕様の式（Power Automate式欄）として本書に残っていないこと
+  （§6-3等の履歴セクション内での言及、および「{Link}を廃止した」旨の記述を除く）。
+- Scope_05_Ensure_Destination_Folder（No.30〜36）が新設され、Condition_Provision_Destinationの条件式・
+  Create_Destination_Folder_L1〜L4のServerRelativeUrl式（join/take/split/uriPath）・
+  Verify_Destination_FolderのGetFolderByServerRelativeUrl式がdefinition.json（v10）の実値と一致していること。
+- Scope_Save_File内の子アクションがCompose_Source_Url→Compose_Source_Site→Compose_Source_Path→
+  Get_Source_File_Content→Create_Attachment_Fileの5つになっており、Get_Saved_File_Propertiesが
+  含まれていないこと。
+- Compose_Saved_File_Url/Set_ArchiveUrlの式が決定的URL構築（replace(concat(...), ' ', '%20')）に
+  なっていること。
+- Compose_LedgerFailed_BodyのErrorMessage式に元contentUrl（items()の生参照）と保存先パスが
+  含まれていること。
+- Replace_Invalid_Hash/Replace_Invalid_Percentが追加され、Compose_TrimTrailingの入力元が
+  Replace_Invalid_Percentの出力になっていること。
+- Filter_File_Attachmentsのwhereに'/Shared%20Documents/'含有のor条件が追加されていること。
+- Get_Ledger_Existingのdatasetがvariables('varListSiteAddress')になっていること。
+- REST4アクション（Create_Ledger_Item, Create_Ledger_Item_Failed, Create_Run_Log, Create_Error_Log）の
+  静的datasetがpjteam_220400119になっていること。
+- ファイル保存系（Create_Attachment_File, Create_Archive_Document）のdatasetがvarSiteAddress
+  （mROOM_240600018）のまま変更されていないこと。
+- §4の各エントリのdataset/parameters記載がdefinition.json（v10）の実値と一致していること。
+実環境再実行による解消確認（v9の全添付Failed事象の解消含む）は行っていない（静的検証のみ。
+§1, §6-11, §8参照）。
+
+====================================================================
+以上（v10）
+====================================================================

@@ -1,0 +1,9 @@
+=== TeamsChannelMemberSync_Daily ZIP再展開検査 ===
+zip                   : TeamsChannelMemberSync_Daily_20260804180000.zip
+entries               : 5
+packageGuid           : b8365e01-9d47-42fa-a06c-3e57192db4c8
+connectionReferences  : ['shared_sharepointonline', 'shared_teams']
+displayName           : Teamsチャネルメンバー同期 日次実行
+
+=== ERRORS ===
+  (0 errors)

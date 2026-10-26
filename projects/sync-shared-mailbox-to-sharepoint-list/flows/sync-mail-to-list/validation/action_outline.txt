@@ -1,0 +1,324 @@
+=== v4 アクションアウトライン（実行順・ネスト・通し番号=定義上の全アクション） ===
+trigger: manual (Request/Button) inputs: SharePointUrl*/ListName*/SharedMailboxAddress*/MailCount*  ※*=必須
+  1 Initialize_InputSharePointUrl  <InitializeVariable> [varInputSharePointUrl:string]  runAfter: -
+  2 Initialize_ListName  <InitializeVariable> [varListName:string]  runAfter: Initialize_InputSharePointUrl(Succeeded)
+  3 Initialize_Mailbox  <InitializeVariable> [varMailbox:string]  runAfter: Initialize_ListName(Succeeded)
+  4 Initialize_RawCount  <InitializeVariable> [varRawCount:string]  runAfter: Initialize_Mailbox(Succeeded)
+  5 Initialize_RequestedCount  <InitializeVariable> [varRequestedCount:integer]  runAfter: Initialize_RawCount(Succeeded)
+  6 Initialize_IsValid  <InitializeVariable> [varIsValid:boolean]  runAfter: Initialize_RequestedCount(Succeeded)
+  7 Initialize_Stage  <InitializeVariable> [varStage:string]  runAfter: Initialize_IsValid(Succeeded)
+  8 Initialize_ErrorCode  <InitializeVariable> [varErrorCode:string]  runAfter: Initialize_Stage(Succeeded)
+  9 Initialize_ErrorMessage  <InitializeVariable> [varErrorMessage:string]  runAfter: Initialize_ErrorCode(Succeeded)
+ 10 Initialize_ErrorMessages  <InitializeVariable> [varErrorMessages:array]  runAfter: Initialize_ErrorMessage(Succeeded)
+ 11 Initialize_LastStatusCode  <InitializeVariable> [varLastStatusCode:string]  runAfter: Initialize_ErrorMessages(Succeeded)
+ 12 Initialize_LastErrorBody  <InitializeVariable> [varLastErrorBody:string]  runAfter: Initialize_LastStatusCode(Succeeded)
+ 13 Initialize_SiteUrl  <InitializeVariable> [varSiteUrl:string]  runAfter: Initialize_LastErrorBody(Succeeded)
+ 14 Initialize_SiteOrigin  <InitializeVariable> [varSiteOrigin:string]  runAfter: Initialize_SiteUrl(Succeeded)
+ 15 Initialize_SiteId  <InitializeVariable> [varSiteId:string]  runAfter: Initialize_SiteOrigin(Succeeded)
+ 16 Initialize_ListExists  <InitializeVariable> [varListExists:boolean]  runAfter: Initialize_SiteId(Succeeded)
+ 17 Initialize_ListId  <InitializeVariable> [varListId:string]  runAfter: Initialize_ListExists(Succeeded)
+ 18 Initialize_ListEntityType  <InitializeVariable> [varListEntityType:string]  runAfter: Initialize_ListId(Succeeded)
+ 19 Initialize_ListServerRelativeUrl  <InitializeVariable> [varListServerRelativeUrl:string]  runAfter: Initialize_ListEntityType(Succeeded)
+ 20 Initialize_ListUrl  <InitializeVariable> [varListUrl:string]  runAfter: Initialize_ListServerRelativeUrl(Succeeded)
+ 21 Initialize_CreatedInThisRun  <InitializeVariable> [varCreatedInThisRun:boolean]  runAfter: Initialize_ListUrl(Succeeded)
+ 22 Initialize_DefaultViewId  <InitializeVariable> [varDefaultViewId:string]  runAfter: Initialize_CreatedInThisRun(Succeeded)
+ 23 Initialize_SchemaOk  <InitializeVariable> [varSchemaOk:boolean]  runAfter: Initialize_DefaultViewId(Succeeded)
+ 24 Initialize_MissingFields  <InitializeVariable> [varMissingFields:array]  runAfter: Initialize_SchemaOk(Succeeded)
+ 25 Initialize_IncompatibleFields  <InitializeVariable> [varIncompatibleFields:array]  runAfter: Initialize_MissingFields(Succeeded)
+ 26 Initialize_SchemaWarnings  <InitializeVariable> [varSchemaWarnings:array]  runAfter: Initialize_IncompatibleFields(Succeeded)
+ 27 Initialize_FetchedCount  <InitializeVariable> [varFetchedCount:integer]  runAfter: Initialize_SchemaWarnings(Succeeded)
+ 28 Initialize_CreatedCount  <InitializeVariable> [varCreatedCount:integer]  runAfter: Initialize_FetchedCount(Succeeded)
+ 29 Initialize_UpdatedCount  <InitializeVariable> [varUpdatedCount:integer]  runAfter: Initialize_CreatedCount(Succeeded)
+ 30 Initialize_DuplicateCount  <InitializeVariable> [varDuplicateCount:integer]  runAfter: Initialize_UpdatedCount(Succeeded)
+ 31 Initialize_FailedCount  <InitializeVariable> [varFailedCount:integer]  runAfter: Initialize_DuplicateCount(Succeeded)
+ 32 Initialize_TruncatedCount  <InitializeVariable> [varTruncatedCount:integer]  runAfter: Initialize_FailedCount(Succeeded)
+ 33 Initialize_Duplicates  <InitializeVariable> [varDuplicates:array]  runAfter: Initialize_TruncatedCount(Succeeded)
+ 34 Initialize_ItemErrors  <InitializeVariable> [varItemErrors:array]  runAfter: Initialize_Duplicates(Succeeded)
+ 35 Initialize_TruncatedItems  <InitializeVariable> [varTruncatedItems:array]  runAfter: Initialize_ItemErrors(Succeeded)
+ 36 Initialize_ItemBodyText  <InitializeVariable> [varItemBodyText:string]  runAfter: Initialize_TruncatedItems(Succeeded)
+ 37 Initialize_ItemBodyFinal  <InitializeVariable> [varItemBodyFinal:string]  runAfter: Initialize_ItemBodyText(Succeeded)
+ 38 Initialize_ItemError  <InitializeVariable> [varItemError:string]  runAfter: Initialize_ItemBodyFinal(Succeeded)
+ 39 Initialize_ItemCreateFailed  <InitializeVariable> [varItemCreateFailed:boolean]  runAfter: Initialize_ItemError(Succeeded)
+ 40 Initialize_Status  <InitializeVariable> [varStatus:string]  runAfter: Initialize_ItemCreateFailed(Succeeded)
+ 41 Initialize_ResultObject  <InitializeVariable> [varResultObject:object]  runAfter: Initialize_Status(Succeeded)
+ 42 Initialize_ResultJson  <InitializeVariable> [varResultJson:string]  runAfter: Initialize_ResultObject(Succeeded)
+ 43 Scope_Validate_Input  <Scope>  runAfter: Initialize_ResultJson(Succeeded)
+ 44   Set_Stage_Validate_Input  <SetVariable> [varStage]  runAfter: -
+ 45   Compose_Url_No_Fragment  <Compose>  runAfter: Set_Stage_Validate_Input(Succeeded)
+ 46   Compose_Url_No_Query  <Compose>  runAfter: Compose_Url_No_Fragment(Succeeded)
+ 47   Compose_Url_Before_Layouts  <Compose>  runAfter: Compose_Url_No_Query(Succeeded)
+ 48   Compose_Site_Url  <Compose>  runAfter: Compose_Url_Before_Layouts(Succeeded)
+ 49   Compose_Site_Host  <Compose>  runAfter: Compose_Site_Url(Succeeded)
+ 50   Compose_Site_Origin  <Compose>  runAfter: Compose_Site_Host(Succeeded)
+ 51   Compose_ListName_Sanitized  <Compose>  runAfter: Compose_Site_Origin(Succeeded)
+ 52   Compose_Count_Digits_Removed  <Compose>  runAfter: Compose_ListName_Sanitized(Succeeded)
+ 53   Compose_Count_Safe  <Compose>  runAfter: Compose_Count_Digits_Removed(Succeeded)
+ 54   Compose_Count_Numeric  <Compose>  runAfter: Compose_Count_Safe(Succeeded)
+ 55   Validate_SiteUrl  <Compose>  runAfter: Compose_Count_Numeric(Succeeded)
+ 56   Validate_ListName  <Compose>  runAfter: Validate_SiteUrl(Succeeded)
+ 57   Validate_Mailbox  <Compose>  runAfter: Validate_ListName(Succeeded)
+ 58   Validate_Count  <Compose>  runAfter: Validate_Mailbox(Succeeded)
+ 59   Compose_Input_Validation_Code  <Compose>  runAfter: Validate_Count(Succeeded)
+ 60   Set_SiteUrl  <SetVariable> [varSiteUrl]  runAfter: Compose_Input_Validation_Code(Succeeded)
+ 61   Set_SiteOrigin  <SetVariable> [varSiteOrigin]  runAfter: Set_SiteUrl(Succeeded)
+ 62   Set_RequestedCount  <SetVariable> [varRequestedCount]  runAfter: Set_SiteOrigin(Succeeded)
+ 63   Set_ErrorCode_From_Input_Validation  <SetVariable> [varErrorCode]  runAfter: Set_RequestedCount(Succeeded)
+ 64   Set_IsValid_From_Input_Validation  <SetVariable> [varIsValid]  runAfter: Set_ErrorCode_From_Input_Validation(Succeeded)
+ 65   Set_ErrorMessage_From_Input_Validation  <SetVariable> [varErrorMessage]  runAfter: Set_IsValid_From_Input_Validation(Succeeded)
+ 66   Condition_Has_Input_Error  <If>  runAfter: Set_ErrorMessage_From_Input_Validation(Succeeded)
+ 67     Append_Input_Error_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: -
+ 68 Scope_Check_List  <Scope>  runAfter: Scope_Validate_Input(Succeeded)
+ 69   Set_Stage_Check_List  <SetVariable> [varStage]  runAfter: -
+ 70   Condition_Input_Is_Valid  <If>  runAfter: Set_Stage_Check_List(Succeeded)
+ 71     Verify_SharePoint_Web  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+ 72     Set_Site_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Verify_SharePoint_Web(Succeeded/Failed)
+ 73     Store_Site_Id  <SetVariable> [varSiteId]  runAfter: Verify_SharePoint_Web(Succeeded)
+ 74     Get_All_Lists  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Store_Site_Id(Succeeded)
+ 75     Set_Lists_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Get_All_Lists(Succeeded/Failed)
+ 76     Set_Lists_Error_Body  <SetVariable> [varLastErrorBody]  runAfter: Get_All_Lists(Failed/TimedOut)
+ 77     Filter_Matching_Lists  <Query>  runAfter: Get_All_Lists(Succeeded)
+ 78     Condition_Lists_Ambiguous  <If>  runAfter: Filter_Matching_Lists(Succeeded)
+ 79       Set_ErrorCode_Ambiguous  <SetVariable> [varErrorCode]  runAfter: -
+ 80       Set_ErrorMessage_Ambiguous  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_Ambiguous(Succeeded)
+ 81       Set_IsValid_Ambiguous  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_Ambiguous(Succeeded)
+ 82       Append_Ambiguous_Error  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_Ambiguous(Succeeded)
+ 83     Condition_List_Single_Match  <If>  runAfter: Condition_Lists_Ambiguous(Succeeded)
+ 84       Condition_List_Is_Generic  <If>  runAfter: -
+ 85         Set_ListExists_True  <SetVariable> [varListExists]  runAfter: -
+ 86         Set_ListId_From_Existing  <SetVariable> [varListId]  runAfter: Set_ListExists_True(Succeeded)
+ 87         Set_List_ServerRelativeUrl_From_Existing  <SetVariable> [varListServerRelativeUrl]  runAfter: Set_ListId_From_Existing(Succeeded)
+          [else]
+ 88         Set_ErrorCode_Not_Generic  <SetVariable> [varErrorCode]  runAfter: -
+ 89         Set_ErrorMessage_Not_Generic  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_Not_Generic(Succeeded)
+ 90         Set_IsValid_Not_Generic  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_Not_Generic(Succeeded)
+ 91         Append_Not_Generic_Error  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_Not_Generic(Succeeded)
+ 92 Scope_Create_List  <Scope>  runAfter: Scope_Check_List(Succeeded)
+ 93   Set_Stage_Create_List  <SetVariable> [varStage]  runAfter: -
+ 94   Condition_Should_Create_List  <If>  runAfter: Set_Stage_Create_List(Succeeded)
+ 95     Recheck_Lists_Before_Create  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+ 96     Filter_Recheck_Lists  <Query>  runAfter: Recheck_Lists_Before_Create(Succeeded)
+ 97     Condition_Recheck_Found  <If>  runAfter: Filter_Recheck_Lists(Succeeded)
+ 98       Set_ListExists_Race  <SetVariable> [varListExists]  runAfter: -
+ 99       Set_ListId_Race  <SetVariable> [varListId]  runAfter: Set_ListExists_Race(Succeeded)
+100       Set_List_ServerRelativeUrl_Race  <SetVariable> [varListServerRelativeUrl]  runAfter: Set_ListId_Race(Succeeded)
+101       Append_Race_Warning  <AppendToArrayVariable> [varSchemaWarnings]  runAfter: Set_List_ServerRelativeUrl_Race(Succeeded)
+        [else]
+102       Compose_Create_List_Body  <Compose>  runAfter: -
+103       Create_List  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Create_List_Body(Succeeded)
+104       Set_Create_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Create_List(Succeeded/Failed)
+105       Set_Create_Error_Body  <SetVariable> [varLastErrorBody]  runAfter: Create_List(Failed/TimedOut)
+106       Retry_Get_Lists_After_Failure  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Create_List(Failed/TimedOut)
+107       Filter_Retry_Lists  <Query>  runAfter: Retry_Get_Lists_After_Failure(Succeeded)
+108       Condition_Create_Failed_But_Exists  <If>  runAfter: Filter_Retry_Lists(Succeeded)
+109         Set_ListExists_After_Failure  <SetVariable> [varListExists]  runAfter: -
+110         Set_ListId_After_Failure  <SetVariable> [varListId]  runAfter: Set_ListExists_After_Failure(Succeeded)
+111         Set_List_ServerRelativeUrl_After_Failure  <SetVariable> [varListServerRelativeUrl]  runAfter: Set_ListId_After_Failure(Succeeded)
+112         Append_Create_Race_Warning  <AppendToArrayVariable> [varSchemaWarnings]  runAfter: Set_List_ServerRelativeUrl_After_Failure(Succeeded)
+          [else]
+113         Set_ErrorCode_Create_Failed  <SetVariable> [varErrorCode]  runAfter: -
+114         Set_ErrorMessage_Create_Failed  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_Create_Failed(Succeeded)
+115         Set_IsValid_Create_Failed  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_Create_Failed(Succeeded)
+116         Append_Create_Failed_Error  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_Create_Failed(Succeeded)
+117       Condition_Create_Succeeded  <If>  runAfter: Create_List(Succeeded)
+118         Set_ListId_From_Create  <SetVariable> [varListId]  runAfter: -
+119         Set_CreatedInThisRun  <SetVariable> [varCreatedInThisRun]  runAfter: Set_ListId_From_Create(Succeeded)
+120         Set_ListExists_After_Create  <SetVariable> [varListExists]  runAfter: Set_CreatedInThisRun(Succeeded)
+121 Scope_Init_List_Schema  <Scope>  runAfter: Scope_Create_List(Succeeded)
+122   Set_Stage_Init_Schema  <SetVariable> [varStage]  runAfter: -
+123   Condition_Created_In_This_Run  <If>  runAfter: Set_Stage_Init_Schema(Succeeded)
+124     Get_Fields_Before_Init  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+125     Filter_Existing_Field_MessageId  <Query>  runAfter: Get_Fields_Before_Init(Succeeded)
+126     Condition_Create_Field_MessageId  <If>  runAfter: Filter_Existing_Field_MessageId(Succeeded)
+127       Compose_Field_Body_MessageId  <Compose>  runAfter: -
+128       Create_Field_MessageId  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Field_Body_MessageId(Succeeded)
+129     Filter_Existing_Field_ReceivedDateTime  <Query>  runAfter: Condition_Create_Field_MessageId(Succeeded)
+130     Condition_Create_Field_ReceivedDateTime  <If>  runAfter: Filter_Existing_Field_ReceivedDateTime(Succeeded)
+131       Compose_Field_Body_ReceivedDateTime  <Compose>  runAfter: -
+132       Create_Field_ReceivedDateTime  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Field_Body_ReceivedDateTime(Succeeded)
+133     Filter_Existing_Field_SenderAddress  <Query>  runAfter: Condition_Create_Field_ReceivedDateTime(Succeeded)
+134     Condition_Create_Field_SenderAddress  <If>  runAfter: Filter_Existing_Field_SenderAddress(Succeeded)
+135       Compose_Field_Body_SenderAddress  <Compose>  runAfter: -
+136       Create_Field_SenderAddress  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Field_Body_SenderAddress(Succeeded)
+137     Filter_Existing_Field_Subject  <Query>  runAfter: Condition_Create_Field_SenderAddress(Succeeded)
+138     Condition_Create_Field_Subject  <If>  runAfter: Filter_Existing_Field_Subject(Succeeded)
+139       Compose_Field_Body_Subject  <Compose>  runAfter: -
+140       Create_Field_Subject  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Field_Body_Subject(Succeeded)
+141     Filter_Existing_Field_BodyPlainText  <Query>  runAfter: Condition_Create_Field_Subject(Succeeded)
+142     Condition_Create_Field_BodyPlainText  <If>  runAfter: Filter_Existing_Field_BodyPlainText(Succeeded)
+143       Compose_Field_Body_BodyPlainText  <Compose>  runAfter: -
+144       Create_Field_BodyPlainText  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Field_Body_BodyPlainText(Succeeded)
+145     Compose_Rename_Body_MessageId  <Compose>  runAfter: Condition_Create_Field_BodyPlainText(Succeeded)
+146     Rename_Field_MessageId  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Rename_Body_MessageId(Succeeded)
+147     Compose_Rename_Body_ReceivedDateTime  <Compose>  runAfter: Rename_Field_MessageId(Succeeded)
+148     Rename_Field_ReceivedDateTime  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Rename_Body_ReceivedDateTime(Succeeded)
+149     Compose_Rename_Body_SenderAddress  <Compose>  runAfter: Rename_Field_ReceivedDateTime(Succeeded)
+150     Rename_Field_SenderAddress  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Rename_Body_SenderAddress(Succeeded)
+151     Compose_Rename_Body_Subject  <Compose>  runAfter: Rename_Field_SenderAddress(Succeeded)
+152     Rename_Field_Subject  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Rename_Body_Subject(Succeeded)
+153     Compose_Rename_Body_BodyPlainText  <Compose>  runAfter: Rename_Field_Subject(Succeeded)
+154     Rename_Field_BodyPlainText  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Rename_Body_BodyPlainText(Succeeded)
+155     Compose_Title_Not_Required_Body  <Compose>  runAfter: Rename_Field_BodyPlainText(Succeeded)
+156     Deactivate_Title_Required  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Title_Not_Required_Body(Succeeded)
+157     Verify_MessageId_Field  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Deactivate_Title_Required(Succeeded)
+158     Condition_Unique_Not_Enforced  <If>  runAfter: Verify_MessageId_Field(Succeeded)
+159       Append_Unique_Warning  <AppendToArrayVariable> [varSchemaWarnings]  runAfter: -
+160 Scope_Configure_View  <Scope>  runAfter: Scope_Init_List_Schema(Succeeded)
+161   Set_Stage_Configure_View  <SetVariable> [varStage]  runAfter: -
+162   Condition_Configure_View_Allowed  <If>  runAfter: Set_Stage_Configure_View(Succeeded)
+163     Get_List_Views  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+164     Filter_Default_View  <Query>  runAfter: Get_List_Views(Succeeded)
+165     Condition_Default_View_Found  <If>  runAfter: Filter_Default_View(Succeeded)
+166       Set_Default_View_Id  <SetVariable> [varDefaultViewId]  runAfter: -
+167       Remove_All_Default_View_Fields  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Default_View_Id(Succeeded)
+168       Compose_Add_View_Field_Body  <Compose>  runAfter: Remove_All_Default_View_Fields(Succeeded)
+169       Add_View_Field_MessageId  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Add_View_Field_Body(Succeeded)
+170       Add_View_Field_ReceivedDateTime  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Add_View_Field_MessageId(Succeeded)
+171       Add_View_Field_SenderAddress  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Add_View_Field_ReceivedDateTime(Succeeded)
+172       Add_View_Field_Subject  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Add_View_Field_SenderAddress(Succeeded)
+173       Add_View_Field_BodyPlainText  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Add_View_Field_Subject(Succeeded)
+174       Compose_View_Query_Body  <Compose>  runAfter: Add_View_Field_BodyPlainText(Succeeded)
+175       Set_Default_View_Sort  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_View_Query_Body(Succeeded)
+176       Verify_Default_View_Fields  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_Default_View_Sort(Succeeded)
+        [else]
+177       Append_View_Warning  <AppendToArrayVariable> [varSchemaWarnings]  runAfter: -
+178 Scope_Verify_Schema  <Scope>  runAfter: Scope_Configure_View(Succeeded)
+179   Set_Stage_Verify_Schema  <SetVariable> [varStage]  runAfter: -
+180   Condition_Verify_Schema_Allowed  <If>  runAfter: Set_Stage_Verify_Schema(Succeeded)
+181     Get_List_Info  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+182     Set_List_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Get_List_Info(Succeeded)
+183     Set_List_Entity_Type  <SetVariable> [varListEntityType]  runAfter: Set_List_Status_Code(Succeeded)
+184     Compose_List_ServerRelativeUrl  <Compose>  runAfter: Set_List_Entity_Type(Succeeded)
+185     Set_List_ServerRelativeUrl_Final  <SetVariable> [varListServerRelativeUrl]  runAfter: Compose_List_ServerRelativeUrl(Succeeded)
+186     Set_List_Url  <SetVariable> [varListUrl]  runAfter: Set_List_ServerRelativeUrl_Final(Succeeded)
+187     Get_List_Fields_For_Schema  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Set_List_Url(Succeeded)
+188     Filter_Schema_Field_MessageId  <Query>  runAfter: Get_List_Fields_For_Schema(Succeeded)
+189     Condition_Schema_Field_MessageId  <If>  runAfter: Filter_Schema_Field_MessageId(Succeeded)
+190       Append_Missing_Field_MessageId  <AppendToArrayVariable> [varMissingFields]  runAfter: -
+        [else]
+191       Condition_Schema_Type_MessageId  <If>  runAfter: -
+192         Append_Incompatible_Field_MessageId  <AppendToArrayVariable> [varIncompatibleFields]  runAfter: -
+193     Filter_Schema_Field_ReceivedDateTime  <Query>  runAfter: Condition_Schema_Field_MessageId(Succeeded)
+194     Condition_Schema_Field_ReceivedDateTime  <If>  runAfter: Filter_Schema_Field_ReceivedDateTime(Succeeded)
+195       Append_Missing_Field_ReceivedDateTime  <AppendToArrayVariable> [varMissingFields]  runAfter: -
+        [else]
+196       Condition_Schema_Type_ReceivedDateTime  <If>  runAfter: -
+197         Append_Incompatible_Field_ReceivedDateTime  <AppendToArrayVariable> [varIncompatibleFields]  runAfter: -
+198     Filter_Schema_Field_SenderAddress  <Query>  runAfter: Condition_Schema_Field_ReceivedDateTime(Succeeded)
+199     Condition_Schema_Field_SenderAddress  <If>  runAfter: Filter_Schema_Field_SenderAddress(Succeeded)
+200       Append_Missing_Field_SenderAddress  <AppendToArrayVariable> [varMissingFields]  runAfter: -
+        [else]
+201       Condition_Schema_Type_SenderAddress  <If>  runAfter: -
+202         Append_Incompatible_Field_SenderAddress  <AppendToArrayVariable> [varIncompatibleFields]  runAfter: -
+203     Filter_Schema_Field_Subject  <Query>  runAfter: Condition_Schema_Field_SenderAddress(Succeeded)
+204     Condition_Schema_Field_Subject  <If>  runAfter: Filter_Schema_Field_Subject(Succeeded)
+205       Append_Missing_Field_Subject  <AppendToArrayVariable> [varMissingFields]  runAfter: -
+        [else]
+206       Condition_Schema_Type_Subject  <If>  runAfter: -
+207         Append_Incompatible_Field_Subject  <AppendToArrayVariable> [varIncompatibleFields]  runAfter: -
+208     Filter_Schema_Field_BodyPlainText  <Query>  runAfter: Condition_Schema_Field_Subject(Succeeded)
+209     Condition_Schema_Field_BodyPlainText  <If>  runAfter: Filter_Schema_Field_BodyPlainText(Succeeded)
+210       Append_Missing_Field_BodyPlainText  <AppendToArrayVariable> [varMissingFields]  runAfter: -
+        [else]
+211       Condition_Schema_Type_BodyPlainText  <If>  runAfter: -
+212         Append_Incompatible_Field_BodyPlainText  <AppendToArrayVariable> [varIncompatibleFields]  runAfter: -
+213     Set_SchemaOk  <SetVariable> [varSchemaOk]  runAfter: Condition_Schema_Field_BodyPlainText(Succeeded)
+214     Condition_Schema_Incompatible  <If>  runAfter: Set_SchemaOk(Succeeded)
+215       Set_ErrorCode_Schema  <SetVariable> [varErrorCode]  runAfter: -
+216       Set_ErrorMessage_Schema  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_Schema(Succeeded)
+217       Set_IsValid_Schema  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_Schema(Succeeded)
+218       Append_Schema_Error  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_Schema(Succeeded)
+219 Scope_Get_Emails  <Scope>  runAfter: Scope_Verify_Schema(Succeeded)
+220   Set_Stage_Get_Emails  <SetVariable> [varStage]  runAfter: -
+221   Condition_Get_Emails_Allowed  <If>  runAfter: Set_Stage_Get_Emails(Succeeded)
+222     Get_Emails  <OpenApiConnection> [shared_office365/GetEmailsV3]  runAfter: -
+223     Set_Emails_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Get_Emails(Succeeded/Failed)
+224     Set_Emails_Error_Body  <SetVariable> [varLastErrorBody]  runAfter: Get_Emails(Failed/TimedOut)
+225     Compose_Sorted_Emails  <Compose>  runAfter: Get_Emails(Succeeded)
+226     Set_Fetched_Count  <SetVariable> [varFetchedCount]  runAfter: Compose_Sorted_Emails(Succeeded)
+227 Scope_Sync_Items  <Scope>  runAfter: Scope_Get_Emails(Succeeded)
+228   Set_Stage_Sync_Items  <SetVariable> [varStage]  runAfter: -
+229   Condition_Sync_Allowed  <If>  runAfter: Set_Stage_Sync_Items(Succeeded)
+230     Foreach_Email  <Foreach> [in: @outputs('Compose_Sorted_Emails')]  runAfter: -
+231       Set_Item_Body_Text_Reset  <SetVariable> [varItemBodyText]  runAfter: -
+232       Set_Item_Body_Final_Reset  <SetVariable> [varItemBodyFinal]  runAfter: Set_Item_Body_Text_Reset(Succeeded)
+233       Set_Item_Error_Reset  <SetVariable> [varItemError]  runAfter: Set_Item_Body_Final_Reset(Succeeded)
+234       Set_Item_Create_Failed_Reset  <SetVariable> [varItemCreateFailed]  runAfter: Set_Item_Error_Reset(Succeeded)
+235       Compose_Message_Id  <Compose>  runAfter: Set_Item_Create_Failed_Reset(Succeeded)
+236       Compose_Subject  <Compose>  runAfter: Compose_Message_Id(Succeeded)
+237       Compose_Sender  <Compose>  runAfter: Compose_Subject(Succeeded)
+238       Compose_Received  <Compose>  runAfter: Compose_Sender(Succeeded)
+239       Compose_Body_Html  <Compose>  runAfter: Compose_Received(Succeeded)
+240       Condition_Item_Has_Body  <If>  runAfter: Compose_Body_Html(Succeeded)
+241         Convert_Body_To_Text  <OpenApiConnection> [shared_conversionservice/HtmlToText]  runAfter: -
+242         Set_Convert_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Convert_Body_To_Text(Succeeded/Failed)
+243         Set_Item_Body_Text  <SetVariable> [varItemBodyText]  runAfter: Convert_Body_To_Text(Succeeded)
+244         Set_Item_Error_Convert_Failed  <SetVariable> [varItemError]  runAfter: Convert_Body_To_Text(Failed/TimedOut)
+245       Condition_Item_Ready  <If>  runAfter: Condition_Item_Has_Body(Succeeded)
+246         Condition_Body_Too_Long  <If>  runAfter: -
+247           Compose_Body_Truncated  <Compose>  runAfter: -
+248           Set_Item_Body_Final_Truncated  <SetVariable> [varItemBodyFinal]  runAfter: Compose_Body_Truncated(Succeeded)
+249           Append_Truncated_Item  <AppendToArrayVariable> [varTruncatedItems]  runAfter: Set_Item_Body_Final_Truncated(Succeeded)
+250           Increment_Truncated_Count  <IncrementVariable> [varTruncatedCount]  runAfter: Append_Truncated_Item(Succeeded)
+            [else]
+251           Set_Item_Body_Final_Full  <SetVariable> [varItemBodyFinal]  runAfter: -
+252         Search_Existing_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Condition_Body_Too_Long(Succeeded)
+253         Set_Search_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Search_Existing_Item(Succeeded/Failed)
+254         Append_Search_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: Search_Existing_Item(Failed/TimedOut)
+255         Increment_Failed_Count_Search  <IncrementVariable> [varFailedCount]  runAfter: Append_Search_Error(Succeeded)
+256         Condition_Item_Is_Duplicate  <If>  runAfter: Search_Existing_Item(Succeeded)
+257           Append_Duplicate_Record  <AppendToArrayVariable> [varDuplicates]  runAfter: -
+258           Increment_Duplicate_Count  <IncrementVariable> [varDuplicateCount]  runAfter: Append_Duplicate_Record(Succeeded)
+259         Condition_Item_Exists  <If>  runAfter: Condition_Item_Is_Duplicate(Succeeded)
+260           Compose_Existing_Item_Id  <Compose>  runAfter: -
+261           Compose_Update_Item_Body  <Compose>  runAfter: Compose_Existing_Item_Id(Succeeded)
+262           Update_Existing_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Update_Item_Body(Succeeded)
+263           Increment_Updated_Count  <IncrementVariable> [varUpdatedCount]  runAfter: Update_Existing_Item(Succeeded)
+264           Set_Update_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Update_Existing_Item(Succeeded/Failed)
+265           Append_Update_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: Set_Update_Status_Code(Succeeded),Update_Existing_Item(Failed/TimedOut)
+266           Increment_Failed_Count_Update  <IncrementVariable> [varFailedCount]  runAfter: Append_Update_Error(Succeeded)
+267         Condition_Item_Is_New  <If>  runAfter: Condition_Item_Exists(Succeeded)
+268           Compose_Create_Item_Body  <Compose>  runAfter: -
+269           Create_List_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Create_Item_Body(Succeeded)
+270           Set_Create_Item_Status_Code  <SetVariable> [varLastStatusCode]  runAfter: Create_List_Item(Succeeded/Failed)
+271           Increment_Created_Count  <IncrementVariable> [varCreatedCount]  runAfter: Create_List_Item(Succeeded)
+272           Set_Item_Create_Failed  <SetVariable> [varItemCreateFailed]  runAfter: Create_List_Item(Failed/TimedOut)
+273         Condition_Create_Failed_Fallback  <If>  runAfter: Condition_Item_Is_New(Succeeded)
+274           Research_After_Create_Failure  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+275           Condition_Retry_Found  <If>  runAfter: Research_After_Create_Failure(Succeeded/Failed)
+276             Compose_Retry_Item_Id  <Compose>  runAfter: -
+277             Compose_Retry_Update_Body  <Compose>  runAfter: Compose_Retry_Item_Id(Succeeded)
+278             Update_Item_After_Create_Failure  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Retry_Update_Body(Succeeded)
+279             Increment_Updated_Count_After_Retry  <IncrementVariable> [varUpdatedCount]  runAfter: Update_Item_After_Create_Failure(Succeeded)
+              [else]
+280             Append_Create_Item_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: -
+281             Increment_Failed_Count_Create  <IncrementVariable> [varFailedCount]  runAfter: Append_Create_Item_Error(Succeeded)
+282       Condition_Item_Message_Id_Unusable  <If>  runAfter: Condition_Item_Ready(Succeeded)
+283         Append_Bad_MessageId_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: -
+284         Increment_Failed_Count_BadId  <IncrementVariable> [varFailedCount]  runAfter: Append_Bad_MessageId_Error(Succeeded)
+285       Condition_Item_Convert_Failed  <If>  runAfter: Condition_Item_Message_Id_Unusable(Succeeded)
+286         Append_Convert_Error  <AppendToArrayVariable> [varItemErrors]  runAfter: -
+287         Increment_Failed_Count_Convert  <IncrementVariable> [varFailedCount]  runAfter: Append_Convert_Error(Succeeded)
+288 Scope_Create_Result  <Scope>  runAfter: Scope_Sync_Items(Succeeded)
+289   Set_Stage_Create_Result  <SetVariable> [varStage]  runAfter: -
+290   Condition_Result_Is_Success  <If>  runAfter: Set_Stage_Create_Result(Succeeded)
+291     Set_Status_Success  <SetVariable> [varStatus]  runAfter: -
+      [else]
+292     Set_Status_Error  <SetVariable> [varStatus]  runAfter: -
+293 Scope_Handle_Error  <Scope>  runAfter: Scope_Create_Result(Failed/Skipped/TimedOut)
+294   Compose_Handler_Error_Code  <Compose>  runAfter: -
+295   Compose_Handler_Error_Message  <Compose>  runAfter: Compose_Handler_Error_Code(Succeeded)
+296   Compose_Handler_Error_Details  <Compose>  runAfter: Compose_Handler_Error_Message(Succeeded)
+297   Set_Error_Code_From_Handler  <SetVariable> [varErrorCode]  runAfter: Compose_Handler_Error_Details(Succeeded)
+298   Set_Error_Message_From_Handler  <SetVariable> [varErrorMessage]  runAfter: Set_Error_Code_From_Handler(Succeeded)
+299   Set_Error_Messages_From_Handler  <SetVariable> [varErrorMessages]  runAfter: Set_Error_Message_From_Handler(Succeeded)
+300   Set_Status_From_Handler  <SetVariable> [varStatus]  runAfter: Set_Error_Messages_From_Handler(Succeeded)
+301 Scope_Finalize  <Scope>  runAfter: Scope_Handle_Error(Succeeded/Failed/Skipped/TimedOut)
+302   Condition_Result_Is_Error  <If>  runAfter: -
+303     Create_Error_Result  <Compose>  runAfter: -
+304     Set_Result_Object_Error  <SetVariable> [varResultObject]  runAfter: Create_Error_Result(Succeeded)
+      [else]
+305     Create_Success_Result  <Compose>  runAfter: -
+306     Set_Result_Object_Success  <SetVariable> [varResultObject]  runAfter: Create_Success_Result(Succeeded)
+307   Serialize_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Condition_Result_Is_Error(Succeeded)
+308   Compose_Flow_Output  <Compose>  runAfter: Serialize_Result_To_Json(Succeeded)
+--- total actions: 308 ---

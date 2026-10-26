@@ -1,0 +1,54 @@
+==============================================================================
+[flow1] URL解析テスト（definition.json の式をそのまま評価）
+==============================================================================
+PASS N01 親投稿のURL（parentMessageId が messageId と同値）
+PASS N02 返信のURL（parentMessageId が親を指す）→ 親投稿へ解決される
+PASS N03 URLエンコードされたチャネルID（%3A / %40）を復号できる
+PASS N04 クエリパラメーターの順番が異なる（groupId が先頭・tenantId が末尾）
+PASS N05 parentMessageId が存在しないURL → パス上の messageId を採用
+PASS N06 parentMessageId=0（親投稿リンクの変種）→ パス上の messageId を採用
+PASS N07 末尾に追加パラメーターがあっても解析できる
+PASS N08 非エンコードのチャネルID（':' '@' が生）でも解析できる
+PASS N09 URLの前後に空白がある → trim される
+PASS N10 フラグメント（#...）が付いていても解析できる
+PASS N11 パス末尾にスラッシュがあっても messageId を取り出せる
+PASS N12 新Teamsドメイン（teams.cloud.microsoft）でも解析できる
+PASS E01 空文字
+PASS E02 空白のみ
+PASS E03 Teams以外のURL
+PASS E04 TeamsのチャットURL（/l/chat/ 形式）
+PASS E05 チャットスレッドのメッセージURL（unq.gbl.spaces）
+PASS E06 groupId が無いURL
+PASS E07 チャネルIDが無いURL
+PASS E08 メッセージIDが無いURL
+------------------------------------------------------------------------------
+[flow1] 合格 20 / 不合格 0（全 20 件）
+
+==============================================================================
+[flow2] URL解析テスト（definition.json の式をそのまま評価）
+==============================================================================
+PASS N01 親投稿のURL（parentMessageId が messageId と同値）
+PASS N02 返信のURL（parentMessageId が親を指す）→ 親投稿へ解決される
+PASS N03 URLエンコードされたチャネルID（%3A / %40）を復号できる
+PASS N04 クエリパラメーターの順番が異なる（groupId が先頭・tenantId が末尾）
+PASS N05 parentMessageId が存在しないURL → パス上の messageId を採用
+PASS N06 parentMessageId=0（親投稿リンクの変種）→ パス上の messageId を採用
+PASS N07 末尾に追加パラメーターがあっても解析できる
+PASS N08 非エンコードのチャネルID（':' '@' が生）でも解析できる
+PASS N09 URLの前後に空白がある → trim される
+PASS N10 フラグメント（#...）が付いていても解析できる
+PASS N11 パス末尾にスラッシュがあっても messageId を取り出せる
+PASS N12 新Teamsドメイン（teams.cloud.microsoft）でも解析できる
+PASS E01 空文字
+PASS E02 空白のみ
+PASS E03 Teams以外のURL
+PASS E04 TeamsのチャットURL（/l/chat/ 形式）
+PASS E05 チャットスレッドのメッセージURL（unq.gbl.spaces）
+PASS E06 groupId が無いURL
+PASS E07 チャネルIDが無いURL
+PASS E08 メッセージIDが無いURL
+------------------------------------------------------------------------------
+[flow2] 合格 20 / 不合格 0（全 20 件）
+
+==============================================================================
+合計: 合格 40 / 不合格 0

@@ -1,0 +1,600 @@
+========================================================================
+05_save_attachment_child_flow.txt
+PA_Save_Meeting_Attachment — 添付ファイル保存 子フロー
+本ファイルは CANONICAL_REFERENCE.md（正典）と 00_overview.txt に基づく詳細設計です。
+名称・型・式は正典からコピーしており、勝手な変更はしていません。
+========================================================================
+
+■ このフローについて
+------------------------------------------------------------------------
+表示名: PA_Save_Meeting_Attachment
+推奨名(英語): PA_Save_Meeting_Attachment
+ファイル名(本TXT): 05_save_attachment_child_flow.txt
+フロー種別: 子フロー（呼出可能）。トリガーは「フローを手動でトリガーする」、
+  末尾の「Respond to a PowerApp or flow」で戻り値を返す。
+作成場所: [1]PA_Manual_Meeting_Archive_Start、[2]PA_Scheduled_Meeting_Archive_Start、
+  [3]PA_Meeting_Archive_Orchestrator、[5]PA_Write_Run_Log と同一の
+  Power Platformソリューション内。
+役割: 添付ファイル1件を受け取り、(1)冪等性を台帳(MeetingArchiveLedger)で確認し、
+  (2)未保存なら元ファイル本体を取得し、(3)ファイル名を yyyyMMdd_元名 に正規化して
+  SharePointの保存先へ保存し、(4)保存後ファイルのURLを取得し、(5)台帳へ記録して、
+  (6)結果を小さいJSONで親フローへ返す。1件の失敗で親を止めないため、失敗も
+  戻り値(Status=Failed)として返す。
+呼出元: PA_Meeting_Archive_Orchestrator（Apply_To_Each_Attachment内の
+  Run_Child_Flow_Save_Attachment）。添付1件ごとに1回呼ばれる。
+呼出先: なし（SharePoint標準アクションのみ使用）。
+
+使用するコネクタ:
+  - SharePoint（複数の項目の取得／ファイルコンテンツの取得(パス使用)／
+    ファイルの作成／ファイルのプロパティの取得／項目の作成）
+  - Power Apps（Respond to a PowerApp or flow）※子フローの戻り値用
+  - 変数を初期化する／変数を設定する／作成(Compose)／条件／Scope は組み込み(built-in)
+使用する接続:
+  - SharePoint: 実行者のSharePoint接続。元ファイルのあるサイト（チームの
+    SharePointサイト）への読み取り権限と、保存先サイト(envSiteUrl)への
+    書き込み権限が必要。
+必要な権限:
+  - 元ファイルサイトの読み取り、保存先ライブラリ(envDestinationPath)への書き込み、
+    処理台帳リスト(MeetingArchiveLedger)への読み書き。
+プレミアムコネクタの有無: なし（SharePoint・Power Apps応答・組み込みは標準）。
+管理者承認の必要性: 原則不要（標準コネクタのみ）。DLPでSharePointが制限される
+  場合は要DLP確認。子フロー機能は要ライセンス確認。
+
+■ 入力引数（トリガー: フローを手動でトリガーする）
+------------------------------------------------------------------------
+| 引数名 | PA表示名 | 型 | 必須/任意 | 既定値 | 用途 |
+|---|---|---|---|---|---|
+| RunId | RunId | テキスト | 必須 | なし | 実行を一意に識別するID（台帳記録・串刺し用） |
+| MessageId | MessageId | テキスト | 必須 | なし | 親投稿のメッセージID（冪等キー構成要素） |
+| ReplyId | ReplyId | テキスト | 任意 | 空 | 返信添付のときの返信ID。親投稿添付では空文字 |
+| AttachmentId | AttachmentId | テキスト | 必須 | なし | 添付のID（冪等キー構成要素） |
+| OriginalFileName | OriginalFileName | テキスト | 任意 | 空 | 元ファイル名。null/空の可能性あり |
+| ContentUrl | ContentUrl | テキスト | 任意 | 空 | 元ファイルの場所を指すURL（SharePoint/OneDrive） |
+| MeetingDate | MeetingDate | テキスト | 必須 | なし | 会議日付 yyyy-MM-dd。保存名の日付部に使用 |
+| DryRun | DryRun | はい/いいえ | 任意 | いいえ | はい＝実保存せずStatus=Skipped(DryRun)を返す |
+| ForceReprocess | ForceReprocess | はい/いいえ | 任意 | いいえ | はい＝台帳を無視して再保存 |
+
+呼出元(オーケストレータ)から渡す式（Run_Child_Flow_Save_Attachmentの入力欄。
+Apply_To_Each_Attachment内、対象=Filter_File_Attachmentsの出力）:
+| 引数 | 呼出元から渡す式 |
+|---|---|
+| RunId | triggerBody()?['RunId']（オーケストレータのトリガー入力RunId） |
+| MessageId | items('Apply_To_Each_Meeting')?['id'] |
+| ReplyId | coalesce(items('Apply_To_Each_Attachment')?['sourceReplyId'], '') |
+| AttachmentId | items('Apply_To_Each_Attachment')?['id'] |
+| OriginalFileName | coalesce(items('Apply_To_Each_Attachment')?['name'], '') |
+| ContentUrl | coalesce(items('Apply_To_Each_Attachment')?['contentUrl'], '') |
+| MeetingDate | outputs('Compose_MeetingDate') |
+| DryRun | triggerBody()?['DryRun'] |
+| ForceReprocess | triggerBody()?['ForceReprocess'] |
+
+要実環境確認: 手動トリガーの入力欄の内部キー名は環境・作成順序で自動採番される
+  （text/text_1/number/boolean 等）。式を手入力せず、原則Dynamic contentパネルから
+  該当入力名を選択して挿入すること。本書は可読性のため triggerBody()?['MessageId']
+  のように入力名で表記する。
+
+■ 出力（Respond to a PowerApp or flow）
+------------------------------------------------------------------------
+| 出力名 | 型 | 内容 | 呼出元での参照方法 |
+|---|---|---|---|
+| Status | テキスト | Saved / Skipped / Failed | body('Run_Child_Flow_Save_Attachment')?['Status'] |
+| SavedName | テキスト | 保存後ファイル名(yyyyMMdd_元名)。失敗時は空 | body('Run_Child_Flow_Save_Attachment')?['SavedName'] |
+| SavedFileUrl | テキスト | 保存後SharePointファイルを開くURL。失敗時は空 | body('Run_Child_Flow_Save_Attachment')?['SavedFileUrl'] |
+| ErrorMessage | テキスト | 失敗理由。成功/スキップ時は空 | body('Run_Child_Flow_Save_Attachment')?['ErrorMessage'] |
+| IdempotencyKey | テキスト | 使用した冪等キー | body('Run_Child_Flow_Save_Attachment')?['IdempotencyKey'] |
+
+戻り値JSONの例（失敗時。正典§19の方針）:
+  { "Status": "Failed", "SavedName": "", "SavedFileUrl": "",
+    "ErrorMessage": "ファイルコンテンツを取得できませんでした。",
+    "IdempotencyKey": "1748923456789_0-1" }
+
+■ 環境変数
+------------------------------------------------------------------------
+| 表示名 | 型 | 用途（本フローでの使い方） |
+|---|---|---|
+| envSiteUrl | テキスト | 保存先サイトのアドレス。Create_Attachment_File/Get_Saved_File_Properties |
+| envLibrary | テキスト | 保存先ライブラリ名(Shared Documents)。フォルダーパス構築 |
+| envDestinationPath | テキスト | ライブラリ内フォルダー(99_過去の課内会議まで)。フォルダーパス構築 |
+| envLedgerListName | テキスト | 処理台帳リスト名(MeetingArchiveLedger)。冪等性確認・記録 |
+環境変数の参照式: 「動的なコンテンツ」→「環境変数」から選択（推奨）。
+  式表記例: <envSiteUrl>（実際は環境変数トークンが挿入される）。
+
+■ 内部変数（すべてフロー先頭でトップレベル初期化。並列ループは使わない）
+------------------------------------------------------------------------
+| 変数名 | 型 | 初期値 | 用途 | 更新するアクション | 並列実行時の注意 |
+|---|---|---|---|---|---|
+| varStatus | 文字列 | '' | 戻り値Status。Saved/Skipped/Failed | Set_Status_* 各所 | 本フローはApply to each/Do untilを使わないため競合なし |
+| varSavedName | 文字列 | '' | 戻り値SavedName | Set_Result_Saved / Set_Result_Skipped_Existing | 同上 |
+| varSavedFileUrl | 文字列 | '' | 戻り値SavedFileUrl（保存後URL） | Set_SavedFileUrl / Set_Result_Skipped_Existing | 同上 |
+| varErrorMessage | 文字列 | '' | 戻り値ErrorMessage | Set_Status_Failed | 同上 |
+| varIdempotencyKey | 文字列 | '' | 戻り値IdempotencyKey | Set_IdempotencyKey | 同上 |
+
+■ アクション一覧
+------------------------------------------------------------------------
+全体構造: [1]変数初期化 → Scope_Try → Scope_Catch → Respond_To_Caller。
+Scope_Catch は Scope_Try の「失敗しました／タイムアウトしました」で実行。
+Respond_To_Caller は Scope_Catch の後に置き、「構成 → 実行条件の構成」で
+  Scope_Catch の「成功」「スキップ」「失敗」「タイムアウト」すべてにチェックを
+  入れて“必ず実行”させる（Tryが成功→Catchはスキップ→Respond実行、
+  Tryが失敗→Catch実行→Respond実行）。
+
+[0] トリガー: フローを手動でトリガーする
+  コネクタ: 組み込み（Manually trigger a flow）
+  PA上のアクション名: フローを手動でトリガーする
+  配置場所: フロー先頭（唯一のトリガー）
+  入力内容: 上記「入力引数」表の9項目を追加（テキスト7・はい/いいえ2）。
+  操作: 1.新規フロー→「インスタントクラウドフロー」→トリガー「フローを手動で
+    トリガーする」を選択。2.「入力の追加」で各項目を型に合わせて追加。
+  出力: triggerBody()（各入力値）
+  次のアクション: Initialize_Status
+
+[1] Initialize_Status / Initialize_SavedName / Initialize_SavedFileUrl /
+    Initialize_ErrorMessage / Initialize_IdempotencyKey
+  コネクタ: 組み込み（変数を初期化する）
+  PA上のアクション名: 変数を初期化する
+  配置場所: トリガー直後（トップレベル、5つ連続）
+  操作(各1回・計5回):
+    1. 「新しいステップ」を選択。
+    2. 「変数を初期化する」を検索して追加。
+    3. アクション名を上記の各名称へ変更。
+    4. 「名前」に varStatus / varSavedName / varSavedFileUrl /
+       varErrorMessage / varIdempotencyKey を入力。
+    5. 「種類」で「文字列」を選択。
+    6. 「値」は空欄（''）のまま。
+  使用する式: なし（初期値は空文字列）
+  出力: 各変数
+  次のアクション: Scope_Try
+  実行条件: 既定（前が成功）
+  再試行/タイムアウト: 既定
+  エラー時の処理: 特になし
+
+── ここから Scope_Try（正典§19） ──
+[2] Scope_Try
+  コネクタ: 組み込み（スコープ）
+  PA上のアクション名: スコープ
+  配置場所: 変数初期化群の直後（トップレベル）
+  操作: 「新しいステップ」→「スコープ」を追加し、名前を Scope_Try に変更。
+    以降[3]〜[16]をこの中に入れる。
+  次のアクション: Scope_Catch
+
+  [3] Compose_IdempotencyKey
+    コネクタ: 組み込み（作成）
+    PA上のアクション名: 作成
+    配置場所: Scope_Try内 先頭
+    入力内容/使用する式（正典§7.12）:
+      if(empty(trim(coalesce(triggerBody()?['ReplyId'],''))),
+         concat(triggerBody()?['MessageId'],'_',triggerBody()?['AttachmentId']),
+         concat(triggerBody()?['MessageId'],'_',triggerBody()?['ReplyId'],'_',triggerBody()?['AttachmentId']))
+    出力: outputs('Compose_IdempotencyKey')
+    次のアクション: Set_IdempotencyKey
+    エラー時の処理: 例外はScope_Catchで捕捉
+
+  [4] Set_IdempotencyKey
+    コネクタ: 組み込み（変数を設定する）
+    PA上のアクション名: 変数を設定する
+    配置場所: Scope_Try内 [3]の次
+    入力内容: 名前=varIdempotencyKey、値=outputs('Compose_IdempotencyKey')
+    目的: 失敗時(Scope_Catch)でも戻り値に冪等キーを含められるよう先に確定。
+    次のアクション: Get_Ledger_Existing
+
+  [5] Get_Ledger_Existing
+    コネクタ: SharePoint
+    PA上のアクション名: 複数の項目の取得
+    配置場所: Scope_Try内 [4]の次
+    入力内容:
+      サイトのアドレス: <envSiteUrl>
+      リスト名: <envLedgerListName>（MeetingArchiveLedger）
+      フィルタークエリ: IdempotencyKey eq '@{outputs('Compose_IdempotencyKey')}' and Status eq 'Saved'
+        （文字列値はシングルクォートで囲む。式は @{...} で埋め込む）
+      上限件数: 1
+    出力: body('Get_Ledger_Existing')?['value']（配列）
+    使用する式（件数判定に使用）: length(body('Get_Ledger_Existing')?['value'])
+    次のアクション: Condition_Already_Saved
+    要SharePointコネクタ確認: IdempotencyKey列がインデックス化されていないと
+      大量アイテム時に警告が出る場合がある（台帳は本フロー専用で小規模想定）。
+
+  [6] Condition_Already_Saved
+    コネクタ: 組み込み（条件）
+    PA上のアクション名: 条件
+    配置場所: Scope_Try内 [5]の次
+    条件式（詳細モード/advanced）:
+      @and(greater(length(body('Get_Ledger_Existing')?['value']), 0),
+           not(equals(triggerBody()?['ForceReprocess'], true)))
+      ※falseを未設定扱いしない: ForceReprocessは equals(...,true) で厳密判定。
+    「はい(true)」の分岐（既に保存済み・強制再処理でない → 再保存しない）:
+      [6a] Set_Result_Skipped_Existing
+        - varStatus = 'Skipped'
+        - varSavedName = first(body('Get_Ledger_Existing')?['value'])?['SavedFileName']
+        - varSavedFileUrl = first(body('Get_Ledger_Existing')?['value'])?['SavedFileUrl']
+        （既存の保存先URLをそのまま返す。冪等性の中核）
+    「いいえ(false)」の分岐（保存する）:
+      [7] Condition_DryRun 以降をこの分岐内に配置。
+
+  [7] Condition_DryRun（Condition_Already_Savedの「いいえ」分岐内）
+    コネクタ: 組み込み（条件）
+    条件式: @equals(triggerBody()?['DryRun'], true)
+    「はい」分岐（DryRun）:
+      [7a] Set_Result_Skipped_DryRun
+        - varStatus = 'Skipped'
+        （DryRunでは実ファイル保存・台帳記録を行わない。件数確認のみ）
+    「いいえ」分岐（実保存）: [8]〜[15]を配置。
+
+  ── ファイル名正規化（正典§7.13。禁止文字 " * : < > ? / \ | を'_'へ） ──
+  [8] Compose_Extension（Condition_DryRunの「いいえ」分岐内）
+    PA上のアクション名: 作成
+    使用する式:
+      if(contains(coalesce(triggerBody()?['OriginalFileName'],''),'.'),
+         concat('.',last(split(coalesce(triggerBody()?['OriginalFileName'],'file'),'.'))),
+         '')
+    出力: 拡張子（先頭ドット付き。無ければ空）
+
+  [9] Compose_BaseName
+    PA上のアクション名: 作成
+    使用する式:
+      if(contains(coalesce(triggerBody()?['OriginalFileName'],''),'.'),
+         substring(coalesce(triggerBody()?['OriginalFileName'],'file'),0,
+           sub(length(coalesce(triggerBody()?['OriginalFileName'],'file')),
+               length(outputs('Compose_Extension')))),
+         coalesce(triggerBody()?['OriginalFileName'],'file'))
+    出力: 拡張子を除いた元ファイル名部（null/空なら 'file'）
+
+  [10] Replace_Invalid_Quote → [11] Replace_Invalid_Star → [12] Replace_Invalid_Colon
+       → [13] Replace_Invalid_Lt → [14] Replace_Invalid_Gt → [15] Replace_Invalid_Question
+       → [16] Replace_Invalid_Slash → [17] Replace_Invalid_Backslash → [18] Replace_Invalid_Pipe
+    PA上のアクション名: 各「作成」
+    使用する式（前の出力を入力にして1文字ずつ置換。正典§16と同じ分割方針）:
+      Replace_Invalid_Quote     = replace(outputs('Compose_BaseName'), '"', '_')
+      Replace_Invalid_Star      = replace(outputs('Replace_Invalid_Quote'), '*', '_')
+      Replace_Invalid_Colon     = replace(outputs('Replace_Invalid_Star'), ':', '_')
+      Replace_Invalid_Lt        = replace(outputs('Replace_Invalid_Colon'), '<', '_')
+      Replace_Invalid_Gt        = replace(outputs('Replace_Invalid_Lt'), '>', '_')
+      Replace_Invalid_Question  = replace(outputs('Replace_Invalid_Gt'), '?', '_')
+      Replace_Invalid_Slash     = replace(outputs('Replace_Invalid_Question'), '/', '_')
+      Replace_Invalid_Backslash = replace(outputs('Replace_Invalid_Slash'), '\', '_')
+      Replace_Invalid_Pipe      = replace(outputs('Replace_Invalid_Backslash'), '|', '_')
+    注: WDLのシングルクォート文字列内でバックスラッシュ '\' はそのまま1文字。
+      各Composeの入力元は「直前のCompose出力」、出力先は「次のCompose」。
+
+  [19] Compose_TrimTrailing（末尾の空白・ピリオド除去）
+    PA上のアクション名: 作成
+    使用する式:
+      if(endsWith(trim(outputs('Replace_Invalid_Pipe')), '.'),
+         trim(substring(trim(outputs('Replace_Invalid_Pipe')),0,
+              sub(length(trim(outputs('Replace_Invalid_Pipe'))),1))),
+         trim(outputs('Replace_Invalid_Pipe')))
+    注: 末尾ピリオドが連続する場合は1回のみ除去（簡略化）。複数連続は稀。
+      厳密化が必要なら本Composeを繰り返す＝要実環境確認。
+
+  [20] Compose_SavedName（正典§7.13。yyyyMMdd_元名。長さ超過時は元名部を短縮）
+    PA上のアクション名: 作成
+    使用する式:
+      concat(
+        formatDateTime(triggerBody()?['MeetingDate'],'yyyyMMdd'),
+        '_',
+        if(greater(length(outputs('Compose_TrimTrailing')),100),
+           substring(outputs('Compose_TrimTrailing'),0,100),
+           outputs('Compose_TrimTrailing')),
+        outputs('Compose_Extension'))
+    出力: 例 20260716_課内会議資料.pdf
+    要実環境確認: MeetingDateは呼出元が必ず yyyy-MM-dd で渡す前提。null/空だと
+      formatDateTimeが失敗するため、想定エラー欄の対処を参照。
+
+  [21] Get_Source_File_Content（元ファイル本体の取得）
+    コネクタ: SharePoint
+    PA上のアクション名: ファイルコンテンツの取得（パス使用）
+      （英語: Get file content using path）
+    配置場所: [20]の次
+    入力内容:
+      サイトのアドレス: 元ファイルのあるサイト。多くの場合チームの
+        SharePointサイト（保存先envSiteUrlとは別サイトのことがある）。
+      ファイルパス: ContentUrlから解析したサーバー相対パス（%20等はデコード）。
+    使用する式（ContentUrl解析の考え方。要実環境確認）:
+      ・ContentUrlは https://テナント.sharepoint.com/sites/xxx/Shared%20Documents/...
+        の形が多い。サイト部分（/sites/xxx まで）とサーバー相対パス部分に分ける。
+      ・サーバー相対パス例:
+        replace(uriPath(triggerBody()?['ContentUrl']), '%20', ' ')
+        （uriPathはパス部分を返す。必要に応じ decodeUriComponent() で復号）
+    出力: body('Get_Source_File_Content')（ファイルコンテンツ）
+    次のアクション: Create_Attachment_File
+    要SharePointコネクタ確認 / 要実環境確認:
+      ・添付のcontentUrlはカード種別・共有リンク種別により形式が異なる。
+        SharePoint上の実ファイルを指す場合のみ本アクションで取得できる。
+      ・OneDrive上のファイルは「OneDrive for Business」の該当アクションを使う。
+      ・Teams「Send a Microsoft Graph HTTP request」は許可セグメントが
+        /teams・/me・/users・/chats に限られ /drives・/shares を呼べないため、
+        ファイル本体取得には使えない（本アクションで取得する）。
+      ・取得不能時は例外となりScope_Catchで捕捉し、Status=Failedで返す
+        （1件失敗で親を止めない）。
+
+  [22] Create_Attachment_File
+    コネクタ: SharePoint
+    PA上のアクション名: ファイルの作成
+    配置場所: [21]の次
+    入力内容:
+      サイトのアドレス: <envSiteUrl>
+      フォルダーのパス: concat('/', <envLibrary>, '/', <envDestinationPath>)
+        （例 /Shared Documents/123_伝送システム/00_共用フォルダ/60_庶務担当/99_過去の課内会議）
+      ファイル名: outputs('Compose_SavedName')
+      ファイルコンテンツ: body('Get_Source_File_Content')
+    出力: outputs('Create_Attachment_File')（ItemId/Id/Name/Path等。webUrlは含まない）
+    次のアクション: Get_Saved_File_Properties
+    要SharePointコネクタ確認: 同名ファイルが既に存在する場合の挙動（上書き/エラー）。
+      内容が異なる同名は yyyyMMdd_元名_(2).ext の連番規則で回避する運用も可
+      （本フローは冪等キーで再保存自体を抑止するため通常は発生しない）。
+
+  [23] Get_Saved_File_Properties（保存後URL取得。正典§7.14）
+    コネクタ: SharePoint
+    PA上のアクション名: ファイルのプロパティの取得
+    配置場所: [22]の次
+    入力内容:
+      サイトのアドレス: <envSiteUrl>
+      ライブラリ名: <envLibrary>（Shared Documents）
+      ID: outputs('Create_Attachment_File')?['ItemId']
+        （「ファイルの作成」出力のItemIdを指定。動的コンテンツから選択）
+    出力/保存後URL: 動的コンテンツ「Link to item」
+      = outputs('Get_Saved_File_Properties')?['body/{Link}']
+    代替（直接プロパティが取れない場合のURL構築式。正典§7.14）:
+      concat(<envSiteUrl>, replace(outputs('Get_Saved_File_Properties')?['body/{FullPath}'], ' ', '%20'))
+      ※スラッシュはエンコードしない。URL全体に encodeUriComponent()/uriComponent() を掛けない。
+    注: SharePoint「ファイルの作成」出力に webUrl は存在しないため、作成後に
+      本アクションで取得する。フォルダーURLではなくファイル自体のURLを使うこと。
+    次のアクション: Set_SavedFileUrl
+
+  [24] Set_SavedFileUrl
+    PA上のアクション名: 変数を設定する
+    入力内容: 名前=varSavedFileUrl、値=outputs('Get_Saved_File_Properties')?['body/{Link}']
+    次のアクション: Set_Result_Saved
+
+  [25] Set_Result_Saved
+    PA上のアクション名: 変数を設定する（2回。またはひとつずつ）
+    入力内容: varSavedName=outputs('Compose_SavedName')、varStatus='Saved'
+    次のアクション: Create_Ledger_Item
+
+  [26] Create_Ledger_Item（台帳へ記録）
+    コネクタ: SharePoint
+    PA上のアクション名: 項目の作成
+    配置場所: [25]の次（実保存分岐内）
+    入力内容（MeetingArchiveLedger）:
+      Title: outputs('Compose_IdempotencyKey')
+      IdempotencyKey: outputs('Compose_IdempotencyKey')
+      RunId: triggerBody()?['RunId']
+      MessageId: triggerBody()?['MessageId']
+      ReplyId: coalesce(triggerBody()?['ReplyId'],'')
+      AttachmentId: triggerBody()?['AttachmentId']
+      OriginalFileName: coalesce(triggerBody()?['OriginalFileName'],'')
+      SavedFileName: outputs('Compose_SavedName')
+      SavedFileUrl: variables('varSavedFileUrl')
+      Status: 'Saved'
+      ErrorMessage: ''
+      ProcessedDateTimeUtc: utcNow()
+    次のアクション: （Scope_Try終端）
+
+── ここまで Scope_Try ──
+
+[27] Scope_Catch
+  コネクタ: 組み込み（スコープ）
+  PA上のアクション名: スコープ
+  配置場所: Scope_Tryの直後（トップレベル）
+  実行条件（構成→実行条件の構成）: Scope_Try の「失敗しました」「タイムアウト
+    しました」にチェック。
+  内容:
+    [27a] Set_Status_Failed
+      - varStatus = 'Failed'
+      - varErrorMessage = concat('保存に失敗しました: ',
+          coalesce(string(first(body('Scope_Try')?['error'])), 'unknown'))
+        ※要実環境確認: エラー詳細の取得は result('Scope_Try') 等でも可。
+          ファイル本文・トークン・認証情報はログ/戻り値に含めない（正典§9）。
+    [27b] Create_Ledger_Item_Failed
+      コネクタ: SharePoint / PA上のアクション名: 項目の作成
+      入力内容（MeetingArchiveLedger。失敗記録）:
+        Title/IdempotencyKey: variables('varIdempotencyKey')
+        RunId/MessageId/ReplyId/AttachmentId/OriginalFileName: 各triggerBody()
+        SavedFileName: ''、SavedFileUrl: ''
+        Status: 'Failed'
+        ErrorMessage: variables('varErrorMessage')
+        ProcessedDateTimeUtc: utcNow()
+  次のアクション: Respond_To_Caller
+
+[28] Respond_To_Caller
+  コネクタ: Power Apps
+  PA上のアクション名: Respond to a PowerApp or flow
+  配置場所: Scope_Catchの直後（トップレベル・フロー末尾）
+  実行条件（構成→実行条件の構成）: Scope_Catch の「成功しました」「スキップ
+    されました」「失敗しました」「タイムアウトしました」すべてにチェック
+    （必ず実行させる）。
+  出力（戻り値。型はテキスト×5）:
+    Status = variables('varStatus')
+    SavedName = variables('varSavedName')
+    SavedFileUrl = variables('varSavedFileUrl')
+    ErrorMessage = variables('varErrorMessage')
+    IdempotencyKey = variables('varIdempotencyKey')
+
+■ 条件 / Apply to each / Do until / Select / Filter array / Compose / ページング
+------------------------------------------------------------------------
+条件: Condition_Already_Saved（既存保存の有無×強制再処理）、Condition_DryRun。
+Apply to each: 使用しない（本フローは添付1件を処理する子フロー）。
+Do until: 使用しない。
+Select: 使用しない。
+Filter array: 使用しない（絞り込みはSharePointのフィルタークエリで実施）。
+Compose: IdempotencyKey/Extension/BaseName/Replace_Invalid_*/TrimTrailing/SavedName。
+ページング: 使用しない（Get_Ledger_Existingは上限1件）。
+
+■ 並列実行
+------------------------------------------------------------------------
+本フローはApply to each/Do untilを持たず、共通変数の競合は発生しない。
+呼出元(オーケストレータ)側のApply_To_Each_Attachmentは並列オフ（初心者向け
+主設計）。並列化する場合も本子フローは自己完結し共通変数を汚さない。
+
+■ エラー処理
+------------------------------------------------------------------------
+Scope_Try/Scope_Catchで捕捉。1件の失敗で親を止めないため、失敗も
+Status=Failedの戻り値として返す（例外を親へ伝播させない）。台帳へFailedを
+記録して原因追跡を可能にする。ログにファイル本文・トークン・共有リンクの
+認証情報を記録しない（正典§9）。
+
+■ ログ
+------------------------------------------------------------------------
+台帳(MeetingArchiveLedger)への1行が本フローの主ログ。追加のエラーログが必要な
+場合は、親(オーケストレータ)がまとめてPA_Write_Run_Logへ記録する方針
+（本子フローからは呼ばず、戻り値ErrorMessageで親に伝える）。
+
+■ 想定されるエラーと修正方法（正典§20書式）
+------------------------------------------------------------------------
+想定エラー: OriginalFileNameがnullでsubstring/splitが失敗
+  原因: 添付にnameが無い。
+  確認するアクション: Compose_Extension / Compose_BaseName
+  確認する入力: triggerBody()?['OriginalFileName']
+  修正方法: coalesce(...,'file')で既定名を与える（本設計では適用済み）。
+  修正後の式: coalesce(triggerBody()?['OriginalFileName'],'file')
+
+想定エラー: contentUrlがnull/空でファイル取得に失敗
+  原因: 添付が実ファイルを指さない（カード等）。
+  確認するアクション: Get_Source_File_Content
+  確認する入力: triggerBody()?['ContentUrl']
+  修正方法: 呼出元のFilter_File_AttachmentsでcontentUrl空を除外。到達時は
+    Scope_Catchで捕捉しStatus=Failedを返す。
+  修正後の式: 呼出元 @not(empty(item()?['contentUrl']))
+
+想定エラー: MeetingDateがnull/空でformatDateTimeが失敗
+  原因: 呼出元がMeetingDateを渡していない。
+  確認するアクション: Compose_SavedName
+  確認する入力: triggerBody()?['MeetingDate']
+  修正方法: 呼出元(オーケストレータ)でCompose_MeetingDateを必ず渡す。防御的に
+    既定値を与えるなら下式。
+  修正後の式: formatDateTime(coalesce(triggerBody()?['MeetingDate'],
+    formatDateTime(utcNow(),'yyyy-MM-dd')),'yyyyMMdd')
+
+想定エラー: SharePointファイルが見つからない（Get_Source_File_Content）
+  原因: パス解析誤り、権限不足、元ファイル移動/削除。
+  確認するアクション: Get_Source_File_Content
+  確認する入力: サイトのアドレス／ファイルパス
+  修正方法: ContentUrlのサイト部・サーバー相対パスの分割を実データで確認
+    （要実環境確認）。権限を付与。取得不能はStatus=Failedで継続。
+  修正後の式: replace(uriPath(triggerBody()?['ContentUrl']),'%20',' ')
+
+想定エラー: 同名ファイルが既に存在する
+  原因: 過去実行の残存、または同一会議日・同名。
+  確認するアクション: Create_Attachment_File
+  確認する入力: ファイル名(Compose_SavedName)
+  修正方法: 冪等キーで再保存自体を抑止（Condition_Already_Saved）。内容差異の
+    同名は連番 _(2) 付与運用（要SharePointコネクタ確認）。
+
+想定エラー: 保存先フォルダーが存在しない
+  原因: envDestinationPathの誤り、フォルダー未作成。
+  確認するアクション: Create_Attachment_File
+  確認する入力: フォルダーのパス
+  修正方法: 手順書10章で保存先フォルダーの存在を事前確認。envLibrary/
+    envDestinationPathの綴りを確認。
+  修正後の式: concat('/', <envLibrary>, '/', <envDestinationPath>)
+
+想定エラー: ファイルへのリンク（保存後URL）を取得できない
+  原因: Get_Saved_File_PropertiesのID指定誤り、{Link}未取得。
+  確認するアクション: Get_Saved_File_Properties
+  確認する入力: ID（Create_Attachment_FileのItemId）
+  修正方法: 「Link to item」動的コンテンツを使用。取れない場合は{FullPath}
+    からの構築式（スラッシュ非エンコード）。
+  修正後の式: concat(<envSiteUrl>, replace(outputs('Get_Saved_File_Properties')?['body/{FullPath}'],' ','%20'))
+
+想定エラー: coalesceの候補値の型が一致しない
+  原因: 文字列既定''に配列/オブジェクトを混在。
+  確認するアクション: 各coalesce
+  確認する入力: 対象プロパティの型
+  修正方法: 文字列は''、配列はjson('[]')、オブジェクトはjson('{}')を既定に。
+  修正後の式: trim(coalesce(triggerBody()?['OriginalFileName'],''))
+
+想定エラー: falseを未設定扱いしてDryRun/ForceReprocessを誤判定
+  原因: coalesceでfalseをフォールバックしてしまう。
+  確認するアクション: Condition_DryRun / Condition_Already_Saved
+  確認する入力: triggerBody()?['DryRun'] / ['ForceReprocess']
+  修正方法: equals(...,true)で厳密判定（本設計で適用済み）。
+  修正後の式: equals(triggerBody()?['ForceReprocess'], true)
+
+■ テスト手順
+------------------------------------------------------------------------
+1. 台帳リストを空にする。
+2. 本子フローを単体テスト実行し、実在する添付1件分の入力
+   （MessageId/AttachmentId/OriginalFileName/ContentUrl/MeetingDate=今日、
+   DryRun=いいえ、ForceReprocess=いいえ）を渡す。
+3. 保存先フォルダーに yyyyMMdd_元名 のファイルが1つできることを確認。
+4. 戻り値Status=Saved、SavedFileUrlをブラウザで開くとそのファイルが開くこと。
+5. 同じ入力で再実行→Status=Skipped、ファイルが増えないこと（冪等性）。
+6. ForceReprocess=はいで再実行→再保存されること。
+7. DryRun=はいで実行→Status=Skipped、ファイルが作られないこと。
+8. 存在しないContentUrlで実行→Status=Failed、親が止まらないこと。
+
+■ 完成条件
+------------------------------------------------------------------------
+・実ファイルが yyyyMMdd_元名 で保存先へ保存される。
+・戻り値SavedFileUrlが保存後SharePointファイル自体を開くURLである。
+・再実行で同一添付が無制限に複製されない（冪等キーで抑止）。
+・1件失敗しても例外を親へ投げず、Status=Failedで返す。
+・ログ/戻り値にファイル本文・トークン・認証情報を含めない。
+
+■ 式・型検査結果
+------------------------------------------------------------------------
+・trim対象はすべて文字列（OriginalFileName等をcoalesce(...,'')で文字列保証）。
+・coalesce候補は同一型（文字列は''、判定はequals(...,true)）。
+・formatDateTimeはyyyy-MM-dd文字列に適用（MeetingDate）。null時の対処を明記。
+・実在アクションのみ使用（複数の項目の取得／ファイルコンテンツの取得(パス使用)／
+  ファイルの作成／ファイルのプロパティの取得／項目の作成／Respond to a PowerApp or flow）。
+・実在WDL関数のみ使用（if/empty/trim/coalesce/concat/contains/split/last/
+  substring/length/sub/greater/replace/endsWith/equals/first/uriPath/
+  decodeUriComponent/utcNow/formatDateTime/string）。
+
+========================================================================
+式・型監査
+========================================================================
+trim対象はすべて文字列か:
+  Yes。trimはtrim(coalesce(triggerBody()?['OriginalFileName'],''))等、文字列を
+  coalesceで保証してから適用。配列/オブジェクト/Boolean/整数へは適用していない。
+coalesceの候補値は同一型か:
+  Yes。文字列プロパティは第2候補''で統一。ReplyId/OriginalFilename/ContentUrl等。
+nullと空文字列を区別しているか:
+  Yes。ReplyIdはempty(trim(coalesce(...,'')))で「null/空/空白」を判定し冪等キー
+  の形を切替。空文字はフォールバックせず空のまま扱う箇所と区別。
+空白だけの文字列を考慮しているか:
+  Yes。Compose_IdempotencyKeyの分岐でtrim()後にemptyを判定。
+配列の既定値がjson('[]')になっているか:
+  該当する配列変数は本フローに無い（Get_Ledger_ExistingのvalueはSharePoint出力で
+  常に配列）。length()で件数判定し、null前提の参照はしていない。
+オブジェクトの既定値がjson('{}')になっているか:
+  本フローでオブジェクト変数は使用しない（該当なし）。
+falseを未設定扱いしていないか:
+  Yes。DryRun/ForceReprocessはequals(...,true)で厳密判定し、coalesceで
+  falseをフォールバックしていない。
+0を未設定扱いしていないか:
+  Yes。整数の未設定扱いは本フローに無い（件数はlength()で0以上を素直に判定）。
+Apply to eachへnullを渡していないか:
+  Apply to eachを使用しない（該当なし）。
+JSONプロパティを安全に参照しているか:
+  Yes。?['...'] とcoalesce/first併用。first(body('Get_Ledger_Existing')?['value'])
+  はConditionで件数>0を確認した分岐内でのみ参照。
+HTMLへ入れる値をエスケープしているか:
+  本フローはHTMLを生成しない（該当なし）。HTML生成・エスケープは06セクション。
+未定義の変数がないか:
+  Yes。varStatus/varSavedName/varSavedFileUrl/varErrorMessage/varIdempotencyKey
+  はフロー先頭で初期化済み。
+未定義のアクション参照がないか:
+  Yes。outputs()/body()参照はすべて先行アクション（Compose_*/Get_*/Create_*）を指す。
+式内のアクション名が実在するか:
+  Yes。Compose_IdempotencyKey/Compose_BaseName/Replace_Invalid_*/Compose_SavedName/
+  Get_Source_File_Content/Create_Attachment_File/Get_Saved_File_Properties/
+  Get_Ledger_Existing/Scope_Try は本TXTで定義したアクション名と一致。
+添付リンクが保存後SharePointファイルを指しているか:
+  Yes。SavedFileUrlはGet_Saved_File_Propertiesの「Link to item」（保存後ファイル
+  自体を開くURL）。元Teamsリンク/元contentUrlは返さない。
+会議が日付順に並ぶか:
+  本フローの責務外（並べ替えはオーケストレータのGet_Sorted_Meetings）。本フローは
+  会議日付をSavedNameの日付部にのみ使用。
+各会議が新しいページから開始するか:
+  本フローの責務外（改ページは06セクション）。該当なし。
+
+■ 未確定事項（要確認ラベル一覧）
+------------------------------------------------------------------------
+要実環境確認: 手動トリガー入力の内部キー名。ContentUrl解析（サイト部/サーバー
+  相対パスの分割、%20等のデコード）。末尾ピリオド連続の除去回数。
+要SharePointコネクタ確認: 「ファイルコンテンツの取得(パス使用)」の元サイト/
+  パス指定方法。同名ファイル存在時の挙動。IdempotencyKey列のインデックス。
+要ライセンス確認: 子フロー機能・実行ライセンス。
+要DLP確認: SharePointコネクタのDLP制限。
+========================================================================

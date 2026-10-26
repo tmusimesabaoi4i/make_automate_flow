@@ -1,0 +1,23 @@
+=== TeamsChannelMemberSync_Setup 静的検証 ===
+packageGuid           : 1f7ac52d-6390-4b81-a4e7-92c0d3865fe1
+displayName           : Teamsチャネルメンバー同期 初期設定・テスト
+connectionReferences  : ['shared_sharepointonline', 'shared_teams']
+authMode              : embedded
+actions               : 416
+maxDepth              : 6
+maxExpr               : 1120
+expressionsChecked    : 475
+substringCalls        : 7
+spoActions            : 30
+graphActions          : 4
+listMembers           : 1
+writeActions          : 14
+memberSourceMode      : connector_first
+configListTitle       : Teamsチャネルメンバー同期設定
+memberFieldCount      : 17
+configFieldCount      : 15
+
+=== ERRORS ===
+  (0 errors)
+=== WARNINGS ===
+  (0 warnings)

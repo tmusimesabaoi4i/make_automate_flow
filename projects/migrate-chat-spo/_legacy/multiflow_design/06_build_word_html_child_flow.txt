@@ -1,0 +1,749 @@
+========================================================================
+06_build_word_html_child_flow.txt
+Word用HTML生成セクション（PA_Meeting_Archive_Orchestrator 内）
+標準Microsoft 365コネクタのみ / 独自コード・外部サービス不使用
+========================================================================
+
+■ このファイルについて（最重要の前提）
+------------------------------------------------------------------------
+本ファイルは「独立した子フロー」の設計書ではありません。
+ファイル名に含まれる "child_flow" は初期構想段階での名称の名残であり、
+実際にはフロー [3] PA_Meeting_Archive_Orchestrator （中核・子フロー）の
+Scope_Try 内、Get_Sorted_Meetings アクションの直後に配置される一連の
+アクション（セクション）の詳細シートです。
+
+00_overview.txt に明記の通り、最終的に作成するフローは5本のみであり、
+本セクション専用の子フローは作成しません（06専用の「新しいフロー」画面は
+開きません。フロー3の中に、以下のアクション群をそのまま追加します）。
+
+本セクションが使用する変数 varDocumentHtml, varMeetingIndex は、
+フロー3のトップレベルで既に初期化済み（正典§13: Initialize_DocumentHtml
+＝文字列・既定値''、Initialize_MeetingIndex＝整数・既定値0）という前提で
+記述します。本ファイル内で Initialize（変数の初期化）アクションは追加
+しません。
+
+本ファイルは、正典（CANONICAL_REFERENCE.md）§6・§7.7・§7.9・§7.10・§8を
+根拠とし、名称・式は正典からそのままコピーしています。正典に明示のない
+細部（後述「本シートで補う補助アクション」）のみ、正典の要求ロジックを
+実現するために本シートで名称を補っています。
+
+■ 1. 概要
+------------------------------------------------------------------------
+表示名（このセクションの呼び名）  : Word用HTML生成セクション
+推奨名（英語）                    : Build_Word_Html_Section
+ファイル名                        : 06_build_word_html_child_flow.txt
+フロー種別                        : 該当なし（独立フローではない。
+                                     PA_Meeting_Archive_Orchestrator内の
+                                     Scope_Try内のセクション）
+作成場所                          : フロー3 [PA_Meeting_Archive_Orchestrator]
+                                     の Scope_Try 内、
+                                     Get_Sorted_Meetings アクションの直後
+役割                              : 並び替え済みの会議一覧
+                                     （Get_Sorted_Meetings の value）を
+                                     1件ずつHTML化し、varDocumentHtmlへ
+                                     逐次連結する。1会議＝1ページとなる
+                                     よう改ページを制御し、本文と添付
+                                     ファイル名をHTMLエスケープする。
+呼出元                            : 同一フロー内（フロー3）の直前セクション
+                                     （04: 収集・整形・Get_Sorted_Meetings）
+呼出先                            : 同一フロー内（フロー3）の次セクション
+                                     （07: Word互換.doc作成セクション）
+
+■ 2. 使用するコネクタ・接続・権限
+------------------------------------------------------------------------
+使用するコネクタ        : なし（Power Automate組み込みの「変数」
+                          「データ操作（作成/Compose）」「制御
+                          （条件・Apply to each）」アクションのみ。
+                          外部コネクタ・外部サービス呼び出しは一切ない）
+使用する接続            : なし
+必要な権限              : なし（フロー3自体の実行権限のみで完結。
+                          追加の接続・APIアクセス権限は不要）
+プレミアムコネクタの有無: 無
+管理者承認の必要性      : 無
+
+■ 3. 入力（本セクション開始時点で参照できる値）
+------------------------------------------------------------------------
+本セクションは子フローではないため、正式な「トリガー入力」は存在しま
+せん。代わりに、フロー3内で本セクション開始前までに用意されている値
+（変数・直前アクションの出力）を、入力に準じるものとして示します。
+
+| 参照名                          | 型     | 由来（初期化/直前アクション）        | 用途                                   |
+|----------------------------------|--------|----------------------------------------|------------------------------------------|
+| body('Get_Sorted_Meetings')?['value'] | 配列 | 04セクション末の Get_Sorted_Meetings（SharePoint「複数の項目の取得」。MeetingArchiveStaging、RunId絞込み、SortKey昇順） | Apply_To_Each_Sorted_Meeting の対象配列 |
+| variables('varDocumentHtml')     | 文字列 | フロー3トップレベル Initialize_DocumentHtml（既定値''） | HTML文字列の連結先（本セクションで更新） |
+| variables('varMeetingIndex')     | 整数   | フロー3トップレベル Initialize_MeetingIndex（既定値0） | 何件目の会議かを判定し、初回は改ページを入れない |
+| item()?['MeetingDate'] 他Staging列 | 文字列 | Apply_To_Each_Sorted_Meeting の現在項目（MeetingArchiveStaging 1件分） | 会議日付・投稿者・主催者・本文・添付JSON等の参照元 |
+
+■ 4. 出力（本セクション終了時点の状態）
+------------------------------------------------------------------------
+本セクションは「Respond to a PowerApp or flow」を持ちません。終了時点の
+状態（後続の07セクションが参照する値）を以下に示します。
+
+| 出力に相当する値              | 型     | 内容                                             | 参照方法（07セクションでの使い方）        |
+|--------------------------------|--------|--------------------------------------------------|--------------------------------------------|
+| variables('varDocumentHtml')  | 文字列 | 全会議分のHTML本文（Header〜各会議ブロック〜Footerまで完成した状態） | Create_Word_Archive_File のファイルコンテンツ欄で `variables('varDocumentHtml')` として参照 |
+| variables('varMeetingIndex')  | 整数   | 処理済み会議件数（HTML生成完了時点でGet_Sorted_Meetingsの件数と一致） | 07では未使用。通知/ログセクションでMeetingCountとして参照可 |
+
+■ 5. 環境変数
+------------------------------------------------------------------------
+本セクションでは環境変数を使用しません（HTML文字列の組み立てのみで、
+SharePoint等の外部リソースへアクセスしないため）。
+
+■ 6. 内部変数（本セクションで参照・更新するもの）
+------------------------------------------------------------------------
+| 変数名          | 型   | 初期値（フロー3トップレベルで設定済み） | 用途                         | 本セクションで更新するアクション                | 並列実行時の注意 |
+|------------------|------|--------------------------------------|--------------------------------|--------------------------------------------------|--------------------|
+| varDocumentHtml  | 文字列 | ''                                  | 全会議分のWord用HTML本文       | Set_DocumentHtml_Header, Append_Page_Break_Html, Append_Meeting_Html, Append_Attachment_Html, Append_No_Attachments_Text, Append_DocumentHtml_Footer | 共通変数への逐次追記のため、Apply_To_Each_Sorted_Meeting／Apply_To_Each_Saved_Attachment ともに **同時実行度＝オフ（並列オフ）** が必須。並列にすると読み取り→上書きの競合で内容が欠落する |
+| varMeetingIndex  | 整数   | 0                                    | 何件目の会議かを判定し、初回(0件目)は改ページを追加しない | Increment_MeetingIndex（各会議処理の末尾で+1） | 同上の理由で並列オフ必須 |
+
+■ 7. 本シートで補う補助アクションについて（正典に無いが必要な名称）
+------------------------------------------------------------------------
+正典§6の「HTML生成(06)」アクション一覧には次の13個の名称のみが列挙され
+ています：Set_DocumentHtml_Header, Apply_To_Each_Sorted_Meeting,
+Escape_Ampersand, Escape_LessThan, Escape_GreaterThan, Escape_DoubleQuote,
+Escape_SingleQuote, Compose_Body_With_Breaks, Compose_Page_Break,
+Apply_To_Each_Saved_Attachment, Append_Attachment_Html, Append_Meeting_Html,
+Increment_MeetingIndex, Append_DocumentHtml_Footer。
+
+一方で、正典は次のロジックも明示的に要求しています（正典§7.10・§8、
+および本タスク指示）：
+  (a) 「varMeetingIndex>0のときだけ改ページを追加する」条件分岐
+  (b) 「添付JSON配列が空のときは『添付ファイルなし』と表示する」分岐
+
+このロジックを画面上で組むには、正典未記載の「条件」アクションと
+「もう1つの追記アクション」が最低限必要です。本シートでは以下の4つを
+補助アクションとして追加し、既存の正典アクション名（Compose_Page_Break,
+Apply_To_Each_Saved_Attachment, Append_Attachment_Html 等）は一切変更・
+改名していません。
+
+| 補助アクション名             | アクション種類   | 根拠                                                   |
+|-------------------------------|------------------|---------------------------------------------------------|
+| Condition_Insert_Page_Break   | 条件             | 正典§7.10「2件目以降のみ改ページ」を実行するための分岐 |
+| Append_Page_Break_Html        | 変数を設定する   | Condition_Insert_Page_Break の「はい」の場合にvarDocumentHtmlへ改ページHTMLを追記する |
+| Condition_Has_Attachments     | 条件             | 正典§8「添付なし＝添付ファイルなし」を判定する分岐     |
+| Append_No_Attachments_Text    | 変数を設定する   | Condition_Has_Attachments の「いいえ」の場合に「添付ファイルなし」をvarDocumentHtmlへ追記する |
+
+※ 使用するアクション種類は、指示にある通り「SharePoint『ファイルの作成』
+『ファイルのプロパティの取得』『複数の項目の取得』、変数を設定する、
+作成(Compose)、Apply to each、条件」の範囲内に収めています。専用の
+「文字列変数に追加する」アクションは使わず、すべて「変数を設定する」＋
+concat(variables('varDocumentHtml'), 追加分) の形で統一しています
+（HTMLの追記先が常にvarDocumentHtml 1本であることを明確にするため）。
+
+■ 8. アクション一覧（画面操作の詳細・逐次操作粒度）
+------------------------------------------------------------------------
+以下、各アクションは「新しいステップ」→検索→追加→名前変更→各欄入力→
+式、の順で記載します。フロー3のデザイナー内、Get_Sorted_Meetings の
+直後に追加していきます。
+
+------------------------------------------------------------------------
+[1] Set_DocumentHtml_Header
+------------------------------------------------------------------------
+コネクタ            : 変数（組み込み）
+PA上のアクション名   : 変数を設定する（Set variable）
+配置                : Get_Sorted_Meetings の直後（Apply_To_Each_Sorted_Meetingの外側・前）
+操作手順:
+ 1. 「+ 新しいステップ」をクリック
+ 2. 検索ボックスに「変数を設定する」と入力
+ 3. 「変数を設定する」を選択して追加
+ 4. アクション名を「Set_DocumentHtml_Header」に変更（「…」→名前の変更）
+ 5. 「名前」欄のドロップダウンで varDocumentHtml を選択
+ 6. 「値」欄に、下記のHTMLヘッダーをそのまま貼り付け（式ではなく直接
+    テキストとして入力。改行を含めてよい）
+入力: なし（varDocumentHtmlは初期値''のため、ここではconcatせず直接
+        上書きで初期表示を作る）
+値（そのままテキストとして貼り付け。正典§8のヘッダーと完全一致）:
+```
+<html><head><meta charset="utf-8"><style>
+@page { size: A4; margin: 20mm; }
+body { font-family: "Yu Gothic","Meiryo",sans-serif; font-size: 10.5pt; }
+.page-break { page-break-before: always; }
+.meeting-title { font-size: 16pt; font-weight: bold; }
+.label { font-weight: bold; }
+.attachment-list { margin-top: 8px; }
+</style></head><body>
+```
+補足: 初回会議の前に改ページ（page-break）を入れないことで、Word/HTMLを
+      開いたときに先頭に空白ページができるのを防ぐ（本タスクの明示要件）。
+出力  : variables('varDocumentHtml') が上記ヘッダーで上書きされる
+次のアクション: Apply_To_Each_Sorted_Meeting
+実行条件（Run after）: Get_Sorted_Meetings が成功した場合
+再試行        : 既定なし（変数操作のため再試行不要）
+タイムアウト  : 既定
+エラー時の処理: 通常失敗しない。万一失敗した場合はScope_Catchが捕捉
+
+------------------------------------------------------------------------
+[2] Apply_To_Each_Sorted_Meeting
+------------------------------------------------------------------------
+コネクタ            : 制御（組み込み）
+PA上のアクション名   : Apply to each
+配置                : Set_DocumentHtml_Header の直後
+操作手順:
+ 1. 「+ 新しいステップ」→検索「Apply to each」→追加
+ 2. 名前を「Apply_To_Each_Sorted_Meeting」に変更
+ 3. 「以前の手順から出力を選択」欄に式を入力:
+    `body('Get_Sorted_Meetings')?['value']`
+ 4. ループ内右上「…」→設定→「同時実行を有効にする」を **オフのまま**
+    （既定でオフ。誤ってオンにしない）にする。
+    理由: 共通変数varDocumentHtml・varMeetingIndexへの逐次追記・加算を
+    行うため、並列実行すると内容の欠落・上書き競合が発生する
+    （正典§9「共通変数へAppendするループは並列オフ」）。
+入力  : Get_Sorted_Meetings の value（配列。要素＝MeetingArchiveStaging
+        1件分＝Title/RunId/SortKey/MeetingDate/PostedDateTimeJst/
+        MessageId/Author/Organizer/BodyText/AttachmentsJson/
+        TeamsMessageUrl）
+出力  : ループ内で item() として各会議1件を参照
+次のアクション: Append_DocumentHtml_Footer（ループ終了後）
+実行条件      : Set_DocumentHtml_Header が成功した場合
+再試行        : ループ自体に再試行設定なし（内部アクション個別に設定）
+タイムアウト  : 既定（2年分想定で件数が多い場合は§17「HTML肥大化対策」参照）
+エラー時の処理: ループ内個別アクションの失敗はScope_Catchへ波及
+
+  ループ内の並び順（このApply to eachの中に、下記[2-1]〜[2-11]を
+  この順番で追加していきます）:
+
+  --------------------------------------------------------------------
+  [2-1] Compose_Page_Break
+  --------------------------------------------------------------------
+  コネクタ          : データ操作（組み込み）
+  PA上のアクション名 : 作成する（Compose）
+  配置              : Apply_To_Each_Sorted_Meeting ループの先頭
+  操作手順:
+   1. ループ内「アクションの追加」→検索「作成する」→追加
+   2. 名前を「Compose_Page_Break」に変更
+   3. 「入力」欄に式（正典§7.10。定数のためテキストとして入力可）:
+      `<div style="page-break-before:always"></div>`
+  出力              : 改ページ用HTML断片（毎回作成するが、実際に
+                      追記するかは次の[2-2]の条件が判定する）
+  次のアクション    : Condition_Insert_Page_Break
+  実行条件          : ループ開始時
+  再試行/タイムアウト: 既定
+  エラー時の処理    : 定数のため実質失敗しない
+
+  --------------------------------------------------------------------
+  [2-2] Condition_Insert_Page_Break（本シート補助アクション）
+  --------------------------------------------------------------------
+  コネクタ          : 制御（組み込み）
+  PA上のアクション名 : 条件（Condition）
+  配置              : Compose_Page_Break の直後
+  操作手順:
+   1. 「アクションの追加」→検索「条件」→追加
+   2. 名前を「Condition_Insert_Page_Break」に変更
+   3. 値1: `variables('varMeetingIndex')`
+   4. 演算子: 「次の値より大きい」
+   5. 値2: `0`
+  意図              : 0件目（＝最初の会議）のときは改ページを入れない。
+                      1件目以降（varMeetingIndex>=1）で改ページを入れる。
+  はいの場合:
+    --- [2-2-a] Append_Page_Break_Html（本シート補助アクション） ---
+    PA上のアクション名: 変数を設定する
+    名前              : varDocumentHtml
+    値                : `concat(variables('varDocumentHtml'), outputs('Compose_Page_Break'))`
+  いいえの場合      : 何もしない（アクションを追加しない）
+  次のアクション    : Escape_Ampersand
+  実行条件          : Compose_Page_Break が成功した場合
+
+  --------------------------------------------------------------------
+  [2-3] Escape_Ampersand
+  --------------------------------------------------------------------
+  コネクタ          : データ操作（組み込み）
+  PA上のアクション名 : 作成する（Compose）
+  配置              : Condition_Insert_Page_Break の直後
+  操作手順:
+   1. 「作成する」を追加、名前を「Escape_Ampersand」に変更
+   2. 「入力」欄に式（正典§7.9。順序厳守・&が最初。入力元は
+      Apply_To_Each_Sorted_Meeting の現在項目のBodyText。nullガードとして
+      coalesceを付与）:
+      `replace(coalesce(item()?['BodyText'], ''), '&', '&amp;')`
+  入力              : item()?['BodyText']（MeetingArchiveStagingの
+                      本文プレーンテキスト。04セクションでHtml to text
+                      済み）
+  出力              : &をエスケープした文字列
+  次のアクション    : Escape_LessThan
+  実行条件          : Condition_Insert_Page_Break の完了後
+
+  --------------------------------------------------------------------
+  [2-4] Escape_LessThan
+  --------------------------------------------------------------------
+  コネクタ/種類     : 作成する（Compose）
+  入力欄の式（正典§7.9）:
+      `replace(outputs('Escape_Ampersand'), '<', '&lt;')`
+  次のアクション    : Escape_GreaterThan
+
+  --------------------------------------------------------------------
+  [2-5] Escape_GreaterThan
+  --------------------------------------------------------------------
+  コネクタ/種類     : 作成する（Compose）
+  入力欄の式（正典§7.9）:
+      `replace(outputs('Escape_LessThan'), '>', '&gt;')`
+  次のアクション    : Escape_DoubleQuote
+
+  --------------------------------------------------------------------
+  [2-6] Escape_DoubleQuote
+  --------------------------------------------------------------------
+  コネクタ/種類     : 作成する（Compose）
+  入力欄の式（正典§7.9）:
+      `replace(outputs('Escape_GreaterThan'), '"', '&quot;')`
+  次のアクション    : Escape_SingleQuote
+
+  --------------------------------------------------------------------
+  [2-7] Escape_SingleQuote
+  --------------------------------------------------------------------
+  コネクタ/種類     : 作成する（Compose）
+  入力欄の式（正典§7.9。PAの式ではシングルクォートは''でエスケープして
+  記述する）:
+      `replace(outputs('Escape_DoubleQuote'), '''', '&#39;')`
+  次のアクション    : Compose_Body_With_Breaks
+
+  --------------------------------------------------------------------
+  [2-8] Compose_Body_With_Breaks
+  --------------------------------------------------------------------
+  コネクタ/種類     : 作成する（Compose）
+  入力欄の式（正典§7.9末尾。CR+LF→<br>、LF→<br>の順）:
+      `replace(replace(outputs('Escape_SingleQuote'), decodeUriComponent('%0D%0A'), '<br>'), decodeUriComponent('%0A'), '<br>')`
+  出力              : HTMLエスケープ済み・改行を<br>化した本文（これが
+                      Word本文として使われる最終テキスト）
+  次のアクション    : Append_Meeting_Html
+
+  --------------------------------------------------------------------
+  [2-9] Append_Meeting_Html
+  --------------------------------------------------------------------
+  コネクタ          : 変数（組み込み）
+  PA上のアクション名 : 変数を設定する（Set variable）
+  配置              : Compose_Body_With_Breaks の直後
+  操作手順:
+   1. 「変数を設定する」を追加、名前を「Append_Meeting_Html」に変更
+   2. 「名前」欄: varDocumentHtml
+   3. 「値」欄に下記の式（正典§8のブロック構造＋正典§7.7の日付式を
+      concatでまとめて1回のSetで追記する）
+  値（式。1行で入力する。読みやすさのため改行して示す）:
+```
+concat(
+  variables('varDocumentHtml'),
+  '<div class="meeting-title">',
+  formatDateTime(item()?['MeetingDate'],'yyyy年M月d日'),
+  '（',
+  json('["日","月","火","水","木","金","土"]')[dayOfWeek(item()?['MeetingDate'])],
+  '）</div>',
+  '<div><span class="label">投稿者：</span>', coalesce(item()?['Author'], '不明'), '</div>',
+  '<div><span class="label">主催者：</span>', coalesce(item()?['Organizer'], '不明'), '</div>',
+  '<div><span class="label">投稿日時：</span>', coalesce(item()?['PostedDateTimeJst'], ''), '</div>',
+  '<div><span class="label">内容：</span></div>',
+  '<div>', outputs('Compose_Body_With_Breaks'), '</div>',
+  '<div class="attachment-list"><span class="label">添付ファイル：</span></div>'
+)
+```
+  補足              : 日付部分は正典§7.7の式をそのまま埋め込んでいる
+                      （dayOfWeekは日曜=0を返すため、json配列は
+                      ["日","月","火","水","木","金","土"]の順で固定）。
+                      Author/Organizer/PostedDateTimeJstは04セクションで
+                      既に文字列として整形済みの値（正典§7.2〜7.5）を
+                      そのまま表示する。これらはTeams由来の表示名・
+                      システム生成の日時文字列であり、通常HTML特殊文字
+                      を含まないため、本タスク指示の対象
+                      （本文・ファイル名のエスケープ）には含めていない。
+                      ただし表示名に&や<等が混入する可能性はゼロではない
+                      ため、§22想定エラーに注記する。
+  出力              : varDocumentHtmlに会議ヘッダー〜本文〜添付ラベルまで
+                      が追記された状態
+  次のアクション    : Condition_Has_Attachments
+  実行条件          : Compose_Body_With_Breaks が成功した場合
+
+  --------------------------------------------------------------------
+  [2-10] Condition_Has_Attachments（本シート補助アクション）
+  --------------------------------------------------------------------
+  コネクタ          : 制御（組み込み）
+  PA上のアクション名 : 条件（Condition）
+  配置              : Append_Meeting_Html の直後
+  操作手順:
+   1. 「条件」を追加、名前を「Condition_Has_Attachments」に変更
+   2. 値1: `length(json(coalesce(item()?['AttachmentsJson'], '[]')))`
+   3. 演算子: 「次の値より大きい」
+   4. 値2: `0`
+  補足              : AttachmentsJsonがnull/空文字列の場合に備え、
+                      coalesceで既定値'[]'（空配列のJSON文字列）に
+                      フォールバックしてからjson()で配列化する
+                      （正典§9「配列の既定値はjson('[]')」に準拠）。
+                      AttachmentsJson配列の各要素は、04セクション
+                      （Append_Meeting_Attachment）で
+                      {OriginalName, SavedName, SavedFileUrl, Status}
+                      を持つオブジェクトとして組み立てられている前提
+                      （フィールド名は本セクションの参照式と一致させる
+                      こと。04側の実装で要確認）。
+
+    ------------------------------------------------------------------
+    [2-10-a] はいの場合: Apply_To_Each_Saved_Attachment
+    ------------------------------------------------------------------
+    コネクタ          : 制御（組み込み）
+    PA上のアクション名 : Apply to each
+    操作手順:
+     1. 「はいの場合」内で「アクションの追加」→検索「Apply to each」→追加
+     2. 名前を「Apply_To_Each_Saved_Attachment」に変更
+     3. 「以前の手順から出力を選択」欄に式:
+        `json(coalesce(item()?['AttachmentsJson'], '[]'))`
+     4. 「…」→設定→「同時実行を有効にする」を **オフのまま**にする
+        （varDocumentHtmlへの共通追記のため並列オフ必須。正典§9）。
+    入力              : 現在の会議（外側ループ item()）が持つ添付JSON配列
+    出力              : ループ内でこのループ専用のitem()として添付1件を参照
+                        （外側の会議1件を参照したい場合は
+                        items('Apply_To_Each_Sorted_Meeting') を使う。
+                        本セクションの内側ではitem()のみ使用するため
+                        不要）
+    次のアクション    : （はいの場合の中はこのApply to eachのみ）
+    実行条件          : Condition_Has_Attachmentsの「はい」の場合
+
+      ----------------------------------------------------------------
+      [2-10-a-1] Append_Attachment_Html
+      ----------------------------------------------------------------
+      コネクタ          : 変数（組み込み）
+      PA上のアクション名 : 変数を設定する（Set variable）
+      配置              : Apply_To_Each_Saved_Attachment ループの中
+      操作手順:
+       1. ループ内「アクションの追加」→検索「変数を設定する」→追加
+       2. 名前を「Append_Attachment_Html」に変更
+       3. 「名前」欄: varDocumentHtml
+       4. 「値」欄に下記の式
+      値（式。成功時＝保存後SharePointファイルへのリンク／
+      失敗時＝「（保存失敗）」注記。SavedName/OriginalNameは正典§7.9と
+      同じ順序・同じ置換をこのアクション内で入れ子のreplace()により
+      適用してエスケープする）:
+```
+concat(
+  variables('varDocumentHtml'),
+  if(
+    equals(item()?['Status'], 'Failed'),
+    concat(
+      '<div>',
+      replace(replace(replace(replace(replace(
+        coalesce(item()?['OriginalName'], ''),
+        '&','&amp;'),'<','&lt;'),'>','&gt;'),'"','&quot;'),'''','&#39;'),
+      '（保存失敗）</div>'
+    ),
+    concat(
+      '<div><a href="', coalesce(item()?['SavedFileUrl'], ''), '">',
+      replace(replace(replace(replace(replace(
+        coalesce(item()?['SavedName'], ''),
+        '&','&amp;'),'<','&lt;'),'>','&gt;'),'"','&quot;'),'''','&#39;'),
+      '</a></div>'
+    )
+  )
+)
+```
+      補足              : SavedFileUrlは04セクション（PA_Save_Meeting_
+                          Attachment子フロー呼出＋Get_Saved_File_Properties
+                          「Link to item」）で得た**保存後のSharePoint
+                          ファイルそのもののURL**であり、Teamsの元投稿
+                          リンク（TeamsMessageUrl）ではない（正典§7.14、
+                          MeetingArchiveStaging列TeamsMessageUrlの説明
+                          「参照用。添付リンクには使わない」と整合）。
+                          Status='Failed'以外（'Saved'/'Skipped'）は
+                          いずれも保存済みファイルへの有効なリンクが
+                          あるため、リンク表示側の分岐に含める。
+      出力              : varDocumentHtmlに添付1件分の<div>が追記される
+      次のアクション    : ループ継続（次の添付、または[2-11]へ）
+      実行条件          : ループの各反復
+
+    ------------------------------------------------------------------
+    [2-10-b] いいえの場合: Append_No_Attachments_Text（本シート補助アクション）
+    ------------------------------------------------------------------
+    コネクタ          : 変数（組み込み）
+    PA上のアクション名 : 変数を設定する（Set variable）
+    操作手順:
+     1. 「いいえの場合」内で「変数を設定する」を追加
+     2. 名前を「Append_No_Attachments_Text」に変更
+     3. 「名前」欄: varDocumentHtml
+     4. 「値」欄:
+        `concat(variables('varDocumentHtml'), '<div>添付ファイルなし</div>')`
+    実行条件          : Condition_Has_Attachmentsの「いいえ」の場合
+
+  --------------------------------------------------------------------
+  [2-11] Increment_MeetingIndex
+  --------------------------------------------------------------------
+  コネクタ          : 変数（組み込み）
+  PA上のアクション名 : 変数を設定する（Set variable）
+  配置              : Condition_Has_Attachments（はい/いいえ両分岐）の直後
+                      ＝Apply_To_Each_Sorted_Meetingループの最後
+  操作手順:
+   1. 「変数を設定する」を追加、名前を「Increment_MeetingIndex」に変更
+   2. 「名前」欄: varMeetingIndex
+   3. 「値」欄: `add(variables('varMeetingIndex'), 1)`
+  出力              : varMeetingIndexが1増加（次の反復でCondition_Insert_
+                      Page_Breakが「1件目以降」を正しく判定できる）
+  次のアクション    : ループの次の反復、または全反復終了でループを抜ける
+  実行条件          : Condition_Has_Attachmentsの完了後（はい/いいえ
+                      いずれのブランチでも実行されるよう、ループ内の
+                      最後の独立アクションとして配置する）
+
+------------------------------------------------------------------------
+[3] Append_DocumentHtml_Footer
+------------------------------------------------------------------------
+コネクタ            : 変数（組み込み）
+PA上のアクション名   : 変数を設定する（Set variable）
+配置                : Apply_To_Each_Sorted_Meeting ループの外側・直後
+操作手順:
+ 1. 「+ 新しいステップ」（ループの外）→「変数を設定する」→追加
+ 2. 名前を「Append_DocumentHtml_Footer」に変更
+ 3. 「名前」欄: varDocumentHtml
+ 4. 「値」欄: `concat(variables('varDocumentHtml'), '</body></html>')`
+入力  : variables('varDocumentHtml')（全会議ブロック追記済み）
+値    : 正典§8のFooter `</body></html>` を末尾に追記
+出力  : varDocumentHtmlが完成（HTMLとして閉じたドキュメントになる）
+次のアクション: 07セクション（Compose_ArchiveFileName）
+実行条件      : Apply_To_Each_Sorted_Meeting ループが全件完了した場合
+再試行/タイムアウト: 既定
+エラー時の処理: 通常失敗しない
+
+■ 9. 条件（Condition）一覧まとめ
+------------------------------------------------------------------------
+| 条件名                      | 判定内容                                    | はいの場合                       | いいえの場合                    |
+|-------------------------------|-----------------------------------------------|------------------------------------|------------------------------------|
+| Condition_Insert_Page_Break  | variables('varMeetingIndex') > 0             | Append_Page_Break_Html（改ページ追記） | 何もしない（初回は改ページなし） |
+| Condition_Has_Attachments    | length(json(coalesce(item()?['AttachmentsJson'],'[]'))) > 0 | Apply_To_Each_Saved_Attachment（添付リンク列挙） | Append_No_Attachments_Text（添付ファイルなし表示） |
+
+■ 10. Apply to each 一覧まとめ（並列設定を含む）
+------------------------------------------------------------------------
+| ループ名                        | 対象配列の式                                                     | 同時実行 | 理由 |
+|-----------------------------------|--------------------------------------------------------------------|----------|------|
+| Apply_To_Each_Sorted_Meeting      | body('Get_Sorted_Meetings')?['value']                             | オフ     | varDocumentHtml/varMeetingIndexへの逐次更新 |
+| Apply_To_Each_Saved_Attachment    | json(coalesce(item()?['AttachmentsJson'], '[]'))（外側ループ内）  | オフ     | 同上（共通変数varDocumentHtmlへの逐次追記）|
+
+■ 11. Do until / Select / Filter array（該当なし）
+------------------------------------------------------------------------
+Do until   : 本セクションでは使用しない（ページングは04セクションで完了済み）
+Select     : 使用しない（AttachmentsJsonはjson()で直接配列化して使うため
+             Selectによる整形は不要）
+Filter array: 使用しない（対象は既にGet_Sorted_Meetingsで絞り込み・並び替え
+             済みのため、本セクションでの追加フィルタは不要）
+
+■ 12. Compose（作成する）一覧まとめ
+------------------------------------------------------------------------
+| アクション名               | 入力                                        | 出力                         |
+|-------------------------------|-----------------------------------------------|--------------------------------|
+| Compose_Page_Break            | 定数 `<div style="page-break-before:always"></div>` | 改ページHTML断片        |
+| Escape_Ampersand               | coalesce(item()?['BodyText'], '')            | &をエスケープした文字列       |
+| Escape_LessThan                | outputs('Escape_Ampersand')                  | <もエスケープした文字列       |
+| Escape_GreaterThan             | outputs('Escape_LessThan')                   | >もエスケープした文字列       |
+| Escape_DoubleQuote             | outputs('Escape_GreaterThan')                | "もエスケープした文字列       |
+| Escape_SingleQuote             | outputs('Escape_DoubleQuote')                | 'もエスケープした文字列       |
+| Compose_Body_With_Breaks       | outputs('Escape_SingleQuote')                | 改行を<br>化した最終本文       |
+
+■ 13. ページング（該当なし）
+------------------------------------------------------------------------
+本セクションはページングを行いません。Teams投稿・返信のページング
+（@odata.nextLink追跡）は04セクションで完了済みで、本セクションは
+既に確定した会議一覧（Get_Sorted_Meetings）に対する単純なApply to each
+のみです。
+
+■ 14. 並列実行に関する注意（varDocumentHtmlへの競合防止）
+------------------------------------------------------------------------
+Apply_To_Each_Sorted_Meeting と Apply_To_Each_Saved_Attachment は、
+いずれも共通変数 varDocumentHtml へ「読み取り→concatで追記→書き戻し」
+を行う。Power Automateの変数操作はスレッドセーフではないため、
+同時実行度をオンにすると複数反復が同時にvariables('varDocumentHtml')を
+読み取り、後勝ちの書き込みで一部の会議・添付の追記が失われる可能性が
+ある。したがって両ループとも**同時実行度＝オフ（既定の逐次実行）**を
+厳守する（正典§9）。varMeetingIndexの加算（Increment_MeetingIndex）も
+同じ理由で逐次実行が前提。
+
+■ 15. エラー処理
+------------------------------------------------------------------------
+本セクション全体はフロー3のScope_Try内にあるため、内部アクションの
+失敗はScope_Catchで捕捉される（正典§9 Scope_Try/Scope_Catch/
+Scope_Finally構成）。本セクション自体は外部コネクタを呼ばないため、
+典型的な失敗要因は「参照先の値がnull/型不一致」「json()のパース失敗」
+「配列添字エラー（dayOfWeek/json配列）」に限られる。1件の会議・1件の
+添付でエラーが起きても、正典の設計思想（1ファイル失敗で全体停止しない）
+に倣い、可能な限りCondition/coalesceで事前にガードする（本ファイルの
+各Compose/Setで実施済み）。
+
+■ 16. ログ
+------------------------------------------------------------------------
+本セクション自体はログ書き込み（Run_Child_Flow_Write_Run_Log_*）を
+行わない。ログはフロー3のScope_Catch/Scope_Finallyから、会議件数
+（varMeetingIndex）等をまとめて記録する（詳細は03/08セクション）。
+本セクションの各アクションの入力・出力に、投稿本文の生データや
+認証情報を含むログを別途出力しない（正典§9）。
+
+■ 17. HTML肥大化対策（2年分データのボリューム対策）
+------------------------------------------------------------------------
+過去2年分の会議（想定数十〜百件超）を1つの文字列変数varDocumentHtmlに
+逐次連結するため、以下のリスクと対策を明記する。
+  - Power Automateの文字列変数・アクション入出力にはサイズ上限がある
+    （フロー全体の実行ペイロードにも上限がある）。会議数・添付件数・
+    本文の長さによってはvarDocumentHtmlが肥大化し、Create_Word_Archive_
+    File（07セクション）でサイズ超過エラーとなる可能性がある
+    （要実環境確認）。
+  - 対策1（設計内で対応済み）: 1会議＝1ページで区切ることで、Wordを
+    開いた後の閲覧性を保ちつつ、HTML自体の構造をシンプルに保つ。
+  - 対策2（運用での回避策）: 初回は正典の推奨通りLookbackDays=7で
+    小規模テストを行い、varDocumentHtmlの実サイズ・所要時間を確認して
+    から730日（2年）の本番実行に進む（00_overview.txt「作成順序」参照）。
+  - 対策3（要実環境確認・任意）: 2年分で実際にサイズ上限へ抵触する場合、
+    HTMLを複数ファイルへ分割する（例: 四半期ごとに.docを分けて保存し、
+    Word側で目視突合する）、またはStaging本文（BodyText）を要約・
+    先頭N文字に短縮して1ページあたりの分量を抑える、のいずれかを
+    追加検討する。ただし本文の改変は仕様書1.2「投稿本文の生成AIによる
+    要約または内容改変は対象外」に抵触するため、要約による短縮は不採用
+    とし、分割保存のみを代替候補とする。
+
+■ 18. テスト手順
+------------------------------------------------------------------------
+ 1. フロー1（PA_Manual_Meeting_Archive_Start）をLookbackDays=7、
+    DryRun=はいで実行し、フロー3のGet_Sorted_Meetingsまで進める。
+ 2. フロー3の実行履歴で本セクション各アクションを開き、
+    Append_Meeting_Html・Append_Attachment_Html・Append_DocumentHtml_
+    Footerの「入力」「出力」を目視確認する。
+ 3. Append_DocumentHtml_Footerの出力（varDocumentHtml最終値）を
+    ピーク（値の確認）し、次を確認する:
+     - 会議が3件ある場合、meeting-titleが3回、日付が投稿日昇順に
+       出現するか
+     - 1件目のmeeting-titleの直前に改ページdivが**無い**か
+     - 2件目・3件目のmeeting-titleの直前に改ページdivが**ある**か
+     - 本文中に&, <, >, ", ' を含む投稿がある場合、&amp;/&lt;/&gt;/
+       &quot;/&#39;に変換されているか（元の記号のまま残っていないか）
+     - 添付ありの会議で`<a href="...">保存後ファイル名</a>`が出るか、
+       hrefの値がTeamsのURLではなくSharePointの保存先URLになっているか
+     - 添付なしの会議で「添付ファイルなし」が出るか
+     - 保存失敗（Status=Failed）の添付がある場合「（保存失敗）」表示に
+       なるか
+ 4. 上記に問題があれば該当アクションの式を見直し、再実行して確認する。
+
+■ 19. 完成条件
+------------------------------------------------------------------------
+ [ ] varDocumentHtmlが<html>...</html>で正しく開始・終了している
+ [ ] 会議ブロックが会議件数と同じ回数だけ出現する
+ [ ] 会議が開催日（投稿日JST）昇順に並ぶ（同日は投稿日時昇順。
+     Get_Sorted_Meetingsのソート順に依存）
+ [ ] 1件目の会議の前に改ページが無く、2件目以降の前には必ず改ページがある
+ [ ] 本文中の&, <, >, ", 'がすべてエスケープされている
+ [ ] 添付リンクのhrefが保存後SharePointファイルのURLである
+     （Teamsの元リンクではない）
+ [ ] 添付ファイル名（保存後/元ファイル名）もエスケープされている
+ [ ] 添付が0件の会議で「添付ファイルなし」と表示される
+ [ ] 保存失敗の添付が「（保存失敗）」と表示される
+
+■ 20. 式・型検査結果
+------------------------------------------------------------------------
+| チェック項目                                   | 結果 | 説明 |
+|--------------------------------------------------|------|------|
+| trimの使用                                       | 該当なし | 本セクションはtrim()を使用しない（coalesce/replace/concat/json/length/dayOfWeek/formatDateTimeのみ使用） |
+| coalesceの候補値が同一型か                       | Yes  | coalesce(item()?['BodyText'], '')、coalesce(item()?['AttachmentsJson'], '[]') 等、いずれも文字列同士 |
+| nullと空文字列の区別                             | Yes  | AttachmentsJsonがnullの場合と空配列'[]'の場合を区別せずどちらも0件として扱う設計（HTML表示上は同じ「添付ファイルなし」でよいため意図的に等価にしている） |
+| 空白だけの文字列                                 | 該当なし | 本セクションで空白判定は行わない（04セクションの投稿者処理側で対応済み） |
+| 配列の既定値がjson('[]')か                       | Yes  | Condition_Has_Attachments、Apply_To_Each_Saved_Attachmentの対象式で coalesce(item()?['AttachmentsJson'], '[]') |
+| オブジェクトの既定値がjson('{}')か               | 該当なし | 本セクションでオブジェクトのjson()変換は行わない（配列のみ） |
+| falseを未設定扱いしていないか                    | 該当なし | 本セクションにBoolean値の判定なし |
+| 0を未設定扱いしていないか                        | Yes  | Condition_Insert_Page_BreakでvarMeetingIndex=0（初回）を「有効な値」として正しく分岐に使用している |
+| Apply to eachへnullを渡していないか              | Yes  | 対象式は必ずcoalesce(...,'[]')でガードしてからjson()化 |
+| JSONプロパティの安全参照                         | Yes  | すべてitem()?['xxx']形式 |
+| HTMLへ入れる値をエスケープしているか             | Yes  | 本文（Escape_Ampersand〜Compose_Body_With_Breaks）、添付のSavedName/OriginalName（Append_Attachment_Html内の入れ子replace）をエスケープ済み |
+| 未定義の変数がないか                             | Yes  | varDocumentHtml、varMeetingIndexはフロー3トップレベルで初期化済み前提 |
+| 未定義のアクション参照がないか                   | Yes  | outputs()/items()参照先はすべて本ファイル内または同一フロー内で先に定義済み |
+| 式内のアクション名が実在するか                   | Yes  | Escape_*、Compose_Page_Break、Compose_Body_With_Breaks、Get_Sorted_Meetingsはいずれも正典または本ファイルで定義した名称 |
+
+■ 21. 監査表（正典§11・全17問）
+------------------------------------------------------------------------
+```
+式・型監査
+trim対象はすべて文字列か: 該当なし。本セクションはtrim()を使用しない。
+coalesceの候補値は同一型か: Yes。coalesce(item()?['BodyText'],'')等はすべて文字列同士。
+nullと空文字列を区別しているか: Yes（意図的に等価扱い）。AttachmentsJsonのnullと'[]'はどちらも「添付なし」として同一に扱う設計であり、区別が不要な箇所であることを確認済み。
+空白だけの文字列を考慮しているか: 該当なし。本セクションでは空白判定を行わない（対象外）。
+配列の既定値がjson('[]')になっているか: Yes。coalesce(item()?['AttachmentsJson'], '[]') をjson()化前に適用。
+オブジェクトの既定値がjson('{}')になっているか: 該当なし。本セクションでオブジェクトのjson変換は行わない。
+falseを未設定扱いしていないか: 該当なし。本セクションにBoolean判定なし。
+0を未設定扱いしていないか: Yes。varMeetingIndex=0（初回）を条件式で正しく判定し、改ページを入れない分岐に使用している。
+Apply to eachへnullを渡していないか: Yes。対象式はcoalesce(...,'[]')でガード済み。
+JSONプロパティを安全に参照しているか: Yes。すべてitem()?['プロパティ名']形式。
+HTMLへ入れる値をエスケープしているか: Yes。本文はEscape_Ampersand〜Escape_SingleQuote→Compose_Body_With_Breaksの順で&→<→>→"→'の順にエスケープ。添付のSavedName/OriginalNameもAppend_Attachment_Html内で同順序の入れ子replace()でエスケープしている。
+未定義の変数がないか: Yes。varDocumentHtml、varMeetingIndexはフロー3トップレベルで初期化済み（正典§13）。
+未定義のアクション参照がないか: Yes。outputs()/items()の参照先はすべて本セクション内または直前セクション（04のGet_Sorted_Meetings）で定義済み。
+式内のアクション名が実在するか: Yes。Escape_Ampersand等5つ、Compose_Page_Break、Compose_Body_With_Breaks、Get_Sorted_Meetingsはいずれも正典または本ファイルで新規定義した実在アクション。
+添付リンクが保存後SharePointファイルを指しているか: Yes。item()?['SavedFileUrl']は04セクションでGet_Saved_File_Properties経由の「Link to item」から得たSharePoint上の保存後ファイルURLであり、TeamsMessageUrl（Teams元投稿リンク）ではない。
+会議が日付順に並ぶか: Yes。Apply_To_Each_Sorted_Meetingの対象はGet_Sorted_MeetingsのSortKey（yyyyMMddHHmmss_メッセージID）昇順取得結果であり、開催日（投稿日JST）昇順・同日は投稿日時昇順になる。
+各会議が新しいページから開始するか: Yes。Condition_Insert_Page_BreakによりvarMeetingIndex>0（2件目以降）の直前にのみ改ページdivを挿入し、1件目には挿入しない（空白ページ防止）。
+```
+
+■ 22. 想定エラー（正典§12書式）
+------------------------------------------------------------------------
+```
+想定エラー: HTML文字列（varDocumentHtml）が肥大化しサイズ上限に抵触する
+原因: 2年分・数十〜百件超の会議・添付を1つの文字列変数に連結するため
+確認するアクション: Append_DocumentHtml_Footer
+確認する入力: variables('varDocumentHtml')の実サイズ（ピーク機能で確認）
+修正方法: LookbackDaysを7に縮小して段階的にテストする。本番は730日で
+  実行しつつ、サイズ超過が確認された場合はHTMLを分割保存する（§17参照）
+修正後の式: 変更なし（運用（LookbackDaysの値）で調整。式自体は変更不要）
+
+想定エラー: 会議日付（item()?['MeetingDate']）がnullまたは不正な日付文字列
+原因: 04セクションでMeetingDate列への書き込みが失敗、または想定外の
+  空文字列が保存された
+確認するアクション: Append_Meeting_Html
+確認する入力: item()?['MeetingDate']（yyyy-MM-dd形式であるか）
+修正方法: 04セクションのCompose_MeetingDate/Create_Staging_Itemの出力を
+  確認し、MeetingArchiveStaging側のMeetingDate列を修正する
+修正後の式: formatDateTime(coalesce(item()?['MeetingDate'], utcNow()),'yyyy年M月d日')
+  のようにcoalesceでフォールバックを追加する（要実環境確認：フォール
+  バック日付をどう扱うかは運用ルールとして別途決定）
+
+想定エラー: AttachmentsJsonがJSONとして不正な文字列でjson()が失敗する
+原因: 04セクションでの配列組み立て時にエスケープ漏れ・シリアライズ誤り
+確認するアクション: Condition_Has_Attachments、Apply_To_Each_Saved_Attachment
+確認する入力: item()?['AttachmentsJson']の文字列内容
+修正方法: 04セクション側でjson(variables('varMeetingAttachments'))を
+  文字列化する際の関数（string()）が正しく使われているか確認する
+修正後の式: length(json(coalesce(item()?['AttachmentsJson'], '[]'))) の
+  前提が崩れるため、04側の生成ロジックを修正する（本セクション側の式は
+  変更不要）
+
+想定エラー: 添付のOriginalName/SavedNameがnullでreplace()がエラーになる
+原因: 04セクションでオブジェクトの一部プロパティが欠落している
+確認するアクション: Append_Attachment_Html
+確認する入力: item()?['OriginalName']、item()?['SavedName']
+修正方法: 本セクションでは既にcoalesce(item()?['OriginalName'], '')等で
+  ガード済みのため通常発生しない。発生する場合は04側のオブジェクト組立
+  （フィールド名の綴り違い等）を確認する
+修正後の式: 変更不要（既にcoalesceでガード済み）
+
+想定エラー: 投稿者・主催者の表示名にHTML特殊文字（&, <, >など）が含まれ
+  レイアウトが崩れる
+原因: Author/Organizer/PostedDateTimeJstは本タスク指示の範囲外として
+  エスケープしていない（本文・ファイル名のみエスケープする設計のため）
+確認するアクション: Append_Meeting_Html
+確認する入力: item()?['Author']、item()?['Organizer']
+修正方法: 実運用でTeams表示名に特殊文字を含むケースが確認された場合、
+  本文と同じEscape_*チェーンをAuthor/Organizerにも適用するよう本セクション
+  を拡張する（要実環境確認）
+修正後の式: 例: replace(replace(replace(replace(replace(
+  coalesce(item()?['Author'],'不明'),'&','&amp;'),'<','&lt;'),'>','&gt;'),
+  '"','&quot;'),'''','&#39;')
+
+想定エラー: dayOfWeek()やjson配列添字がエラーになる（MeetingDateが日付
+  として解釈できない）
+原因: item()?['MeetingDate']が'yyyy-MM-dd'以外の形式、または空文字列
+確認するアクション: Append_Meeting_Html
+確認する入力: item()?['MeetingDate']
+修正方法: 04セクションのMeetingDate生成式（正典§7.4）を確認し、常に
+  'yyyy-MM-dd'形式の文字列になっているか検証する
+修正後の式: 変更不要（04側のデータ品質の問題）
+
+想定エラー: 並列実行設定を誤ってオンにし、varDocumentHtmlの一部会議・
+  添付が欠落する
+原因: Apply_To_Each_Sorted_MeetingまたはApply_To_Each_Saved_Attachmentの
+  「同時実行を有効にする」を誤ってオンにした
+確認するアクション: 両ループの設定（…→設定）
+確認する入力: 同時実行の有効/無効設定値
+修正方法: 両ループとも同時実行をオフに戻す（既定のオフのまま変更しない）
+修正後の式: 変更不要（設定項目の修正のみ）
+
+想定エラー: 2年分の処理でApply_To_Each_Sorted_Meetingがフロー全体の
+  タイムアウトに抵触する
+原因: 会議件数・添付件数が多く、HTML生成に時間がかかる
+確認するアクション: フロー実行履歴全体の所要時間
+確認する入力: 会議件数（varMeetingIndex最終値）、添付件数合計
+修正方法: 00_overview.txtの推奨手順通り7日間テスト→2年間本番の段階実行
+  とし、必要に応じてフローのタイムアウト設定を確認・延長する
+  （要実環境確認）
+修正後の式: 変更なし（実行方式・スケジュールの調整で対応）
+```
+========================================================================

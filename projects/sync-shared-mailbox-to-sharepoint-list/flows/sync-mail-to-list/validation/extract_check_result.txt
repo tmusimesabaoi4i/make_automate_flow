@@ -1,0 +1,24 @@
+=== ZIP再展開検査 ===
+対象ZIP : release/SyncSharedMailboxToSharePointList_20260803233000.zip
+エントリ数: 5
+    Microsoft.Flow/flows/9e5b28d1-7c34-4af0-b962-13d8e7a05c6f/apisMap.json
+    Microsoft.Flow/flows/9e5b28d1-7c34-4af0-b962-13d8e7a05c6f/connectionsMap.json
+    Microsoft.Flow/flows/9e5b28d1-7c34-4af0-b962-13d8e7a05c6f/definition.json
+    Microsoft.Flow/flows/manifest.json
+    manifest.json
+
+  OK: パッケージGUID 3点一致: 9e5b28d1-7c34-4af0-b962-13d8e7a05c6f
+  OK: 接続参照キー一致: ['shared_conversionservice', 'shared_office365', 'shared_sharepointonline']
+  OK: 既定ビューは ReceivedDateTime の降順
+  OK: MessageId は一意制約＋インデックス付き
+  OK: GetByTitle( の出現 0 件（対象はリストIDでのみ特定）
+  OK: 破壊的REST（削除・ごみ箱）の出現 0 件
+  OK: メール変更操作（既読化・移動・削除・送信）の出現 0 件
+  OK: サイトURLの実値埋め込み 0 件（実行時にURLから解決）
+  OK: メールアドレスの実値埋め込み 0 件（実行時に入力から取得）
+  OK: displayName: 共有メールボックスのメールをSharePointリストへ同期
+  OK: 展開結果は source/package とバイト単位で一致
+
+=== ERRORS ===
+(0 errors)
+展開先: validation/extracted （検証用コピー。正典は source/package）

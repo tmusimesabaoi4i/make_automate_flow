@@ -1,0 +1,52 @@
+{
+  "schema": "1.0",
+  "details": {
+    "displayName": "CreateInitializedSharePointList",
+    "description": "指定サイトに同名リストが無い場合だけ、初期化済みリスト（sample_rawのみ）を作成する",
+    "createdTime": "2026-07-24T00:00:00.0000000Z",
+    "packageTelemetryId": "12f6c4b8-70d3-49ea-8b52-c9107e6a3f5d",
+    "creator": "N/A",
+    "sourceEnvironment": ""
+  },
+  "resources": {
+    "d07c8e5a-3f92-4b61-a8d4-15e69c2f0b73": {
+      "type": "Microsoft.Flow/flows",
+      "suggestedCreationType": "New",
+      "creationType": "Existing, New, Update",
+      "details": {
+        "displayName": "SharePointリスト新規作成＋初期化（既存リスト保護）"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Root",
+      "dependsOn": [
+        "4a82f61d-9c37-40e5-b273-8f0d61a95c48",
+        "e93b7d04-6a51-4c82-9e37-b0f5142d68ac"
+      ]
+    },
+    "4a82f61d-9c37-40e5-b273-8f0d61a95c48": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "name": "shared_sharepointonline",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "SharePoint"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "e93b7d04-6a51-4c82-9e37-b0f5142d68ac": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "SharePoint への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "4a82f61d-9c37-40e5-b273-8f0d61a95c48"
+      ]
+    }
+  }
+}

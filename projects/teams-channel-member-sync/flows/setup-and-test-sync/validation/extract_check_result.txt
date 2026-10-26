@@ -1,0 +1,9 @@
+=== TeamsChannelMemberSync_Setup ZIP再展開検査 ===
+zip                   : TeamsChannelMemberSync_Setup_20260804180000.zip
+entries               : 5
+packageGuid           : 1f7ac52d-6390-4b81-a4e7-92c0d3865fe1
+connectionReferences  : ['shared_sharepointonline', 'shared_teams']
+displayName           : Teamsチャネルメンバー同期 初期設定・テスト
+
+=== ERRORS ===
+  (0 errors)

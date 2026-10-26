@@ -1,0 +1,22 @@
+=== TeamsChannelMemberSync_Daily 静的検証 ===
+packageGuid           : b8365e01-9d47-42fa-a06c-3e57192db4c8
+displayName           : Teamsチャネルメンバー同期 日次実行
+connectionReferences  : ['shared_sharepointonline', 'shared_teams']
+authMode              : embedded
+actions               : 334
+maxDepth              : 7
+maxExpr               : 1120
+expressionsChecked    : 322
+substringCalls        : 4
+spoActions            : 19
+graphActions          : 4
+listMembers           : 1
+writeActions          : 8
+memberSourceMode      : connector_first
+configListTitle       : Teamsチャネルメンバー同期設定
+schedule              : 毎日 07:00 / Tokyo Standard Time
+
+=== ERRORS ===
+  (0 errors)
+=== WARNINGS ===
+  (0 warnings)

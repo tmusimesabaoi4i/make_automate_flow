@@ -1,0 +1,584 @@
+========================================================================
+01_manual_archive_trigger.txt
+PA_Manual_Meeting_Archive_Start — 手動トリガー実行フロー（本プロジェクトの主役）
+本ファイルは CANONICAL_REFERENCE.md（正典）と 00_overview.txt に基づく詳細設計です。
+名称・型・式は正典からコピーしており、勝手な変更はしていません。
+========================================================================
+
+■ このフローについて
+------------------------------------------------------------------------
+表示名: PA_Manual_Meeting_Archive_Start
+推奨名(英語): PA_Manual_Meeting_Archive_Start
+ファイル名(本TXT): 01_manual_archive_trigger.txt
+フロー種別: インスタント（手動トリガー）クラウドフロー
+作成場所: [3]PA_Meeting_Archive_Orchestrator、[4]PA_Save_Meeting_Attachment、
+  [5]PA_Write_Run_Log と同一のPower Platformソリューション内
+役割: 利用者が画面から取得期間・DryRun・強制再処理を指定し、RunId(guid)を
+  発番してオーケストレータ(PA_Meeting_Archive_Orchestrator)を1回呼び出す。
+  本プロジェクトの主目的である「過去2年分の一発アーカイブ」を実行する
+  主役フロー。7日間のテスト実行 → 本番の2年間実行、の順で本フローを使う。
+呼出元: なし（利用者がPower Automate画面/モバイルアプリから手動実行）
+呼出先: PA_Meeting_Archive_Orchestrator（Run a Child Flow）
+
+使用するコネクタ:
+  - Microsoft Teams（チャットまたはチャネルでメッセージを投稿する）※Notify_Manual_Resultのみ、省略可
+  - 変数を初期化する／作成(Compose)／Run a Child Flow は組み込み(built-in)アクションでありコネクタ接続を必要としない
+使用する接続:
+  - Teams: 実行者（または共有された「マイフロー」実行アカウント）のTeams接続。
+    Notify_Manual_Resultで通知先チーム/チャネルへの投稿権限が必要。
+必要な権限:
+  - 対象チーム/チャネルへのメッセージ投稿権限（Notify_Manual_Result使用時のみ）
+  - 同一ソリューション内の子フロー(PA_Meeting_Archive_Orchestrator)を呼び出す権限
+    （要ライセンス確認: 子フロー機能はテナントのプラン・ポリシーにより制限される場合がある）
+プレミアムコネクタの有無: なし（Teams・組み込みアクションはいずれも標準）
+管理者承認の必要性: 原則不要（標準コネクタのみ使用）。ただし組織のDLPポリシーで
+  Teamsコネクタの利用が制限されている場合は管理者確認が必要（要DLP確認）。
+
+■ 入力引数（トリガー: フローを手動でトリガーする）
+------------------------------------------------------------------------
+| 引数名 | PA表示名(入力ラベル) | 型 | 必須/任意 | 既定値 | 用途 |
+|---|---|---|---|---|---|
+| StartDateUtc | StartDateUtc | テキスト | 任意 | 空 | 取得開始UTC(ISO8601)。空ならEndDateUtcとLookbackDaysから逆算 |
+| EndDateUtc | EndDateUtc | テキスト | 任意 | 空 | 取得終了UTC(ISO8601)。空ならutcNow() |
+| LookbackDays | LookbackDays | 数値 | 任意 | 7 | 逆算日数（7=7日間テスト、730=2年間本番） |
+| DryRun | DryRun | はい/いいえ | 任意 | はい | はい＝Word生成・添付保存をスキップ（件数確認のみ） |
+| ForceReprocess | ForceReprocess | はい/いいえ | 任意 | いいえ | はい＝処理台帳を無視して再保存 |
+
+呼出元: なし（人手入力）。呼出元から渡す式: 該当なし。
+  Power Automateの「フローを実行」画面で利用者が直接値を入力する。
+  StartDateUtc/EndDateUtcは "2024-07-16T00:00:00Z" のようなISO8601形式の
+  文字列をテキスト欄にそのまま入力する（数式・関数は入力できない）。
+
+要実環境確認: 手動トリガーの入力欄は、追加した順序と型に応じて内部キー名が
+  自動採番される（例: 1番目のテキスト入力は text、2番目は text_1、最初の
+  数値入力は number、最初のYes/No入力は boolean、2番目のYes/No入力は
+  boolean_1、など）。本書では可読性のため triggerBody()?['StartDateUtc']
+  のように「入力名そのものがキーであるかのように」表記するが、実際の
+  内部キー名は環境・作成順序により異なる場合がある。式を直接入力する際は、
+  各アクションの入力欄で「動的なコンテンツの追加」パネルから該当の入力名を
+  クリックして挿入する方法を強く推奨する（内部キー名を意識せず正しい参照式
+  が自動挿入される）。式エディタの「コードの確認(Peek code)」から実際の
+  キー名を確認することもできる。
+
+■ 出力
+------------------------------------------------------------------------
+本フローは子フローではないため「Respond to a PowerApp or flow」を持たず、
+呼出元への戻り値はない。実行結果は次の2通りで確認する。
+  1) Notify_Manual_ResultによるTeams通知（省略可）
+  2) Power Automateの実行履歴画面（このフローの「実行の詳細」で
+     Run_Child_Flow_Orchestratorの出力を直接確認できる）
+
+呼出先（オーケストレータ）からの戻り値。Run_Child_Flow_Orchestratorの出力として
+本フロー内で参照できる:
+| 出力名 | 型 | 内容 | 本フロー内での参照方法 |
+|---|---|---|---|
+| Status | テキスト | Success/Failed等の実行結果 | body('Run_Child_Flow_Orchestrator')?['Status'] |
+| MeetingCount | 数値 | 取得会議数 | body('Run_Child_Flow_Orchestrator')?['MeetingCount'] |
+| SavedCount | 数値 | 保存成功添付数 | body('Run_Child_Flow_Orchestrator')?['SavedCount'] |
+| SkippedCount | 数値 | スキップ添付数 | body('Run_Child_Flow_Orchestrator')?['SkippedCount'] |
+| ArchiveUrl | テキスト | 生成されたWordファイルのURL | body('Run_Child_Flow_Orchestrator')?['ArchiveUrl'] |
+| ErrorMessage | テキスト | エラー概要 | body('Run_Child_Flow_Orchestrator')?['ErrorMessage'] |
+
+要実環境確認: 「Run a Child Flow」アクションの出力トークンは、通常は子フローの
+  「Respond to a PowerApp or flow」で定義した出力名がそのまま動的コンテンツと
+  して表示される（Dynamic contentパネルから選択するのが最も確実）。上表の
+  body('Run_Child_Flow_Orchestrator')?['Status'] は説明用の一般形であり、
+  実際にPeek codeで確認すると outputs('Run_Child_Flow_Orchestrator')?['body/Status']
+  のような形式になる場合もある。式を手入力する前に必ずDynamic contentパネルまたは
+  Peek codeで実際のトークンを確認すること。
+
+■ 環境変数
+------------------------------------------------------------------------
+本フローは環境変数を直接参照しない。取得期間・DryRun・ForceReprocessは
+すべてトリガー入力（手動）から決定する。
+参考: 正典の既定値 envLookbackDays=730 は、本フローのLookbackDays入力の
+「2年間本番実行時に指定する値」と一致させてある（本フロー側で環境変数を
+参照するのではなく、利用者がLookbackDays欄に730を直接入力する運用とする）。
+
+■ 内部変数
+------------------------------------------------------------------------
+| 変数名 | 型 | 初期値 | 用途 | 更新するアクション | 並列実行時の注意 |
+|---|---|---|---|---|---|
+| varRunId | 文字列 | guid() | 実行を一意に識別するID。オーケストレータ/台帳/ログ全体で串刺しキーとして使用 | Initialize_RunId | 本フローはApply to each/Do untilを使用しないため並列実行の考慮なし |
+| varDryRun | ブール型 | coalesce(triggerBody()?['DryRun'], true) | DryRun指定をオーケストレータへ渡す | Init_DryRun | 同上 |
+| varForceReprocess | ブール型 | coalesce(triggerBody()?['ForceReprocess'], false) | ForceReprocess指定をオーケストレータへ渡す | Init_ForceReprocess | 同上 |
+| varLookbackDays | 整数 | coalesce(triggerBody()?['LookbackDays'], 7) | StartDateUtc逆算に使用する日数 | Init_LookbackDays | 同上 |
+
+■ アクション一覧
+------------------------------------------------------------------------
+
+[0] トリガー: フローを手動でトリガーする
+コネクタ: 組み込み（Manually trigger a flow）
+PA上のアクション名: フローを手動でトリガーする
+配置場所: フロー先頭（唯一のトリガー）
+入力内容: 上記「入力引数」表のとおり5項目を追加する
+使用する式: なし
+出力: triggerBody()（各入力値）
+次のアクション: Initialize_RunId
+実行条件: 該当なし
+再試行: 適用外（トリガーに再試行の概念はない）
+タイムアウト: 適用外
+エラー時の処理: 適用外
+
+操作手順:
+ 1. Power Automateで「作成」→「インスタントクラウドフロー」を選択する。
+ 2. フロー名に「PA_Manual_Meeting_Archive_Start」と入力する。
+ 3. トリガーの選択で「フローを手動でトリガーする」を選び「作成」をクリックする。
+ 4. トリガーカードを開き「+入力の追加」をクリックする。
+ 5. 「テキスト」を選び、入力名を「StartDateUtc」に変更する。
+ 6. 再度「+入力の追加」→「テキスト」→入力名を「EndDateUtc」に変更する。
+ 7. 再度「+入力の追加」→「数値」→入力名を「LookbackDays」に変更する。
+    詳細オプションに「既定値」欄があれば 7 を入力する（欄が無い場合は
+    次のInit_LookbackDaysアクションのcoalese既定値7で担保する）。
+ 8. 再度「+入力の追加」→「はい/いいえ」→入力名を「DryRun」に変更する。
+    既定値のトグルを「はい」側にしておく。
+ 9. 再度「+入力の追加」→「はい/いいえ」→入力名を「ForceReprocess」に変更する。
+    既定値のトグルは「いいえ」のままにする。
+ 10. 入力の並び順は上記5〜9の順（StartDateUtc→EndDateUtc→LookbackDays→
+     DryRun→ForceReprocess）に揃える（内部キー採番の推測を本書の記載と
+     合わせるため。実際に一致するかはPeek codeで要確認）。
+ 11. 各入力の詳細オプションにある「説明(description)」欄に、ISO8601形式で
+     入力する旨（例: 2024-07-16T00:00:00Z）を記載しておくと入力ミスを防げる。
+
+[1] Initialize_RunId
+コネクタ: 組み込み（変数）
+PA上のアクション名: 変数を初期化する
+配置場所: トリガーの直後
+入力内容: 名前=varRunId／種類=文字列／値=下記式
+使用する式: guid()
+出力: variables('varRunId')
+次のアクション: Init_DryRun
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし（このアクション種別に再試行ポリシー設定はない）
+タイムアウト: 適用外
+エラー時の処理: なし（guid()は引数を取らず失敗しない組み込み関数）
+
+操作手順:
+ 1. 「+新しいステップ」をクリックする。
+ 2. 検索ボックスに「変数を初期化する」と入力する。
+ 3. 「変数を初期化する」(Initialize variable)を選択して追加する。
+ 4. アクション名の「...」（三点リーダー）→「名前の変更」で
+    「Initialize_RunId」に変更する。
+ 5. 「名前」欄に varRunId と入力する。
+ 6. 「種類」で「文字列」を選択する。
+ 7. 「値」欄をクリックし、雷アイコン(fx)/数式タブを開く。
+ 8. guid() と入力し「追加」をクリックする。
+
+[2] Init_DryRun
+コネクタ: 組み込み（変数）
+PA上のアクション名: 変数を初期化する
+配置場所: Initialize_RunIdの直後
+入力内容: 名前=varDryRun／種類=ブール型／値=下記式
+使用する式: coalesce(triggerBody()?['DryRun'], true)
+出力: variables('varDryRun')
+次のアクション: Init_ForceReprocess
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし
+タイムアウト: 適用外
+エラー時の処理: coalesceの両候補がブール型で不一致になることは通常ない。
+  想定エラー(1)を参照。
+
+操作手順:
+ 1. 「+新しいステップ」→検索ボックスに「変数を初期化する」と入力する。
+ 2. 「変数を初期化する」を選択して追加する。
+ 3. アクション名を「Init_DryRun」に変更する。
+ 4. 「名前」欄に varDryRun と入力する。
+ 5. 「種類」で「ブール型」を選択する。
+ 6. 「値」欄の数式タブを開き、次の式を入力する:
+    coalesce(triggerBody()?['DryRun'], true)
+    ※ triggerBody()?['DryRun'] の部分は「動的なコンテンツ」から
+      「DryRun」入力をクリックして挿入するのを推奨。
+
+[3] Init_ForceReprocess
+コネクタ: 組み込み（変数）
+PA上のアクション名: 変数を初期化する
+配置場所: Init_DryRunの直後
+入力内容: 名前=varForceReprocess／種類=ブール型／値=下記式
+使用する式: coalesce(triggerBody()?['ForceReprocess'], false)
+出力: variables('varForceReprocess')
+次のアクション: Init_LookbackDays
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし
+タイムアウト: 適用外
+エラー時の処理: 想定エラー(1)を参照。
+
+操作手順:
+ 1. 「+新しいステップ」→「変数を初期化する」を追加する。
+ 2. アクション名を「Init_ForceReprocess」に変更する。
+ 3. 「名前」欄に varForceReprocess と入力する。
+ 4. 「種類」で「ブール型」を選択する。
+ 5. 「値」欄の数式タブに次の式を入力する:
+    coalesce(triggerBody()?['ForceReprocess'], false)
+
+[4] Init_LookbackDays
+コネクタ: 組み込み（変数）
+PA上のアクション名: 変数を初期化する
+配置場所: Init_ForceReprocessの直後
+入力内容: 名前=varLookbackDays／種類=整数／値=下記式
+使用する式: coalesce(triggerBody()?['LookbackDays'], 7)
+出力: variables('varLookbackDays')
+次のアクション: Compose_EndDateUtc
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし
+タイムアウト: 適用外
+エラー時の処理: 想定エラー(2)を参照（数値以外が渡った場合）。
+
+操作手順:
+ 1. 「+新しいステップ」→「変数を初期化する」を追加する。
+ 2. アクション名を「Init_LookbackDays」に変更する。
+ 3. 「名前」欄に varLookbackDays と入力する。
+ 4. 「種類」で「整数」を選択する。
+ 5. 「値」欄の数式タブに次の式を入力する:
+    coalesce(triggerBody()?['LookbackDays'], 7)
+
+[5] Compose_EndDateUtc
+コネクタ: 組み込み（データ操作）
+PA上のアクション名: 作成（Compose）
+配置場所: Init_LookbackDaysの直後
+入力内容: 入力欄に下記式
+使用する式:
+  if(empty(trim(coalesce(triggerBody()?['EndDateUtc'], ''))), utcNow(), triggerBody()?['EndDateUtc'])
+出力: outputs('Compose_EndDateUtc')（文字列、ISO8601日時）
+次のアクション: Compose_StartDateUtc
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし
+タイムアウト: 適用外
+エラー時の処理: EndDateUtcに不正な日時文字列が入力された場合、後続の
+  addDatsや子フロー側日付比較でエラーとなる可能性がある（想定エラー(3)参照）。
+
+操作手順:
+ 1. 「+新しいステップ」→検索ボックスに「作成」と入力する。
+ 2. 「作成」(Compose)を選択して追加する。
+ 3. アクション名を「Compose_EndDateUtc」に変更する。
+ 4. 「入力」欄をクリックし、数式タブを開く。
+ 5. 次の式を入力する:
+    if(empty(trim(coalesce(triggerBody()?['EndDateUtc'], ''))), utcNow(), triggerBody()?['EndDateUtc'])
+    ※ triggerBody()?['EndDateUtc'] は「動的なコンテンツ」タブから
+      入力欄「EndDateUtc」をクリックして挿入する方法を推奨する
+      （内部キー名の推測ミスを避けられる）。
+
+[6] Compose_StartDateUtc
+コネクタ: 組み込み（データ操作）
+PA上のアクション名: 作成（Compose）
+配置場所: Compose_EndDateUtcの直後
+入力内容: 入力欄に下記式
+使用する式:
+  if(empty(trim(coalesce(triggerBody()?['StartDateUtc'], ''))), addDays(outputs('Compose_EndDateUtc'), mul(variables('varLookbackDays'), -1)), triggerBody()?['StartDateUtc'])
+代替式（2年間をより厳密に「暦上の2年前」としたい場合。任意）:
+  addDaysの部分を addToTime(outputs('Compose_EndDateUtc'), -2, 'Year') に
+  置き換える。LookbackDays=730は概算値（うるう年の分だけ最大1日短くなる
+  場合がある）だが、テスト観点で問題なければ既定のLookbackDays方式でよい。
+出力: outputs('Compose_StartDateUtc')（文字列、ISO8601日時）
+次のアクション: Run_Child_Flow_Orchestrator
+実行条件: 直前のアクションが成功した場合
+再試行: 既定なし
+タイムアウト: 適用外
+エラー時の処理: 想定エラー(3)を参照。
+
+操作手順:
+ 1. 「+新しいステップ」→「作成」を追加する。
+ 2. アクション名を「Compose_StartDateUtc」に変更する。
+ 3. 「入力」欄の数式タブに次の式を入力する:
+    if(empty(trim(coalesce(triggerBody()?['StartDateUtc'], ''))), addDays(outputs('Compose_EndDateUtc'), mul(variables('varLookbackDays'), -1)), triggerBody()?['StartDateUtc'])
+ 4. 2年間をより厳密にしたい場合は、上記式のaddDays(...)の部分だけを
+    addToTime(outputs('Compose_EndDateUtc'), -2, 'Year') に書き換える
+    （if/coalesce/trim/empty部分はそのまま）。
+
+[7] Run_Child_Flow_Orchestrator
+コネクタ: 組み込み（Run a Child Flow）
+PA上のアクション名: Run a Child Flow（子フローの実行）
+配置場所: Compose_StartDateUtcの直後
+前提条件: PA_Meeting_Archive_Orchestratorが同一ソリューション内に先に
+  作成済みであること（00_overview.txtの作成順序どおり、子フロー3→4→5を
+  先に作成してから本フロー1を作成する）。
+入力内容:
+  呼び出す子フロー: PA_Meeting_Archive_Orchestrator
+  RunId = variables('varRunId')
+  StartDateUtc = outputs('Compose_StartDateUtc')
+  EndDateUtc = outputs('Compose_EndDateUtc')
+  DryRun = variables('varDryRun')
+  ForceReprocess = variables('varForceReprocess')
+使用する式: 上記5項目（いずれも既存の変数/Compose出力の参照のみ。新規の式は組まない）
+出力: body('Run_Child_Flow_Orchestrator')?['Status'] ほか（「出力」章の表を参照）
+次のアクション: Notify_Manual_Result
+実行条件: 直前のアクションが成功した場合
+再試行: 既定は自動リトライが有効な場合があるが、本フローでは
+  「設定(Settings)」→「再試行ポリシー」を「なし」に変更することを推奨する。
+  理由: 自動リトライにより子フロー全体（メッセージ収集からWord生成まで）が
+  再実行されると、Wordファイル名はタイムスタンプ付きのため重複ファイルが
+  複数生成される（添付は台帳のIdempotencyKeyで二重保存を防止できるが、
+  総括Wordファイルには冪等キーがない）。手動トリガーであるため失敗時は
+  利用者が内容を確認したうえで再実行する運用とする。
+タイムアウト: 「設定(Settings)」→「アクションのタイムアウト」を
+  長めのISO8601期間（例: P1D）に延長することを推奨する（2年一括処理は
+  メッセージ・返信・添付件数によっては既定タイムアウトを超える可能性が
+  あるため。想定エラー(6)参照。要実環境確認: 子フロー呼出しの既定
+  タイムアウト値および設定可否は環境・コネクタのバージョンにより異なる
+  場合がある）。
+エラー時の処理: 本フロー自体が失敗として終了する（Scopeで囲っていない
+  ため）。Notify_Manual_Resultは既定では実行されない。失敗時にも通知したい
+  場合はNotify_Manual_Resultの「実行条件の構成(Configure run after)」で
+  「失敗した場合」「スキップされた場合」「タイムアウトした場合」にも
+  チェックを入れる（新規アクション追加ではなく既存アクションの設定変更）。
+
+操作手順:
+ 1. 「+新しいステップ」→検索ボックスに「Run a Child Flow」と入力する。
+ 2. 表示された一覧から「PA_Meeting_Archive_Orchestrator」を選択する
+    （子フロー名の一覧に出ない場合は、子フローが同一ソリューションに
+    存在し、トリガーが「フローを手動でトリガーする」であることを確認する。
+    要実環境確認: 子フローとして呼び出し可能にするための特別な設定が
+    別途必要な場合がある）。
+ 3. アクション名を「Run_Child_Flow_Orchestrator」に変更する。
+ 4. 表示されたカードの「RunId」欄をクリックし、動的なコンテンツから
+    「varRunId」を選択する（式表示は variables('varRunId')）。
+ 5. 「StartDateUtc」欄に、動的なコンテンツから「Compose_StartDateUtcの出力」
+    を選択する（式表示は outputs('Compose_StartDateUtc')）。
+ 6. 「EndDateUtc」欄に、動的なコンテンツから「Compose_EndDateUtcの出力」
+    を選択する（式表示は outputs('Compose_EndDateUtc')）。
+ 7. 「DryRun」欄に、動的なコンテンツから「varDryRun」を選択する。
+ 8. 「ForceReprocess」欄に、動的なコンテンツから「varForceReprocess」を選択する。
+ 9. アクション右上の「...」→「設定」を開き、「再試行ポリシー」を「なし」に、
+    「アクションのタイムアウト」をP1D程度に変更する。
+
+[8] Notify_Manual_Result（省略可）
+コネクタ: Microsoft Teams
+PA上のアクション名: チャットまたはチャネルでメッセージを投稿する
+配置場所: Run_Child_Flow_Orchestratorの直後
+入力内容:
+  投稿先: チームとチャネル（対象チーム=envTeamId相当のチーム、任意の
+    通知先チャネルを選択。アーカイブ対象と同じ「03_課内会議」チャネルに
+    投稿すると通知が紛れる場合は、別の管理用チャネルを推奨）
+  メッセージ本文（例）:
+    課内会議アーカイブ実行結果
+    Status: {Status}
+    取得会議数: {MeetingCount}
+    保存成功: {SavedCount} / スキップ: {SkippedCount}
+    総括URL: {ArchiveUrl}
+    エラー: {ErrorMessage}
+使用する式:
+  body('Run_Child_Flow_Orchestrator')?['Status']
+  body('Run_Child_Flow_Orchestrator')?['MeetingCount']
+  body('Run_Child_Flow_Orchestrator')?['SavedCount']
+  body('Run_Child_Flow_Orchestrator')?['SkippedCount']
+  body('Run_Child_Flow_Orchestrator')?['ArchiveUrl']
+  body('Run_Child_Flow_Orchestrator')?['ErrorMessage']
+  （いずれもDynamic contentパネルから選択するのが確実。要実環境確認:
+  実際のトークン形式は環境により異なる場合がある。「出力」章を参照）
+出力: 投稿されたメッセージのID等（本フローでは未使用）
+次のアクション: なし（最終アクション）
+実行条件: 直前のアクションが成功した場合（既定）。失敗時にも通知したい
+  場合は「実行条件の構成」で失敗/スキップ/タイムアウトも追加する。
+再試行: 既定のまま（Teamsコネクタの標準リトライポリシー）で問題ない。
+タイムアウト: 既定のまま。
+エラー時の処理: 本アクションの失敗はフロー全体の失敗として記録される。
+  通知は必須要件ではないため、運用上省略してもよい（その場合はこの
+  アクションを作成せず、実行履歴の目視確認のみとする）。
+
+操作手順:
+ 1. 「+新しいステップ」→検索ボックスに「メッセージを投稿する」と入力する。
+ 2. Microsoft Teamsコネクタの「チャットまたはチャネルでメッセージを
+    投稿する」を選択して追加する。
+ 3. アクション名を「Notify_Manual_Result」に変更する。
+ 4. 「投稿先」で「チャネル」を選択する。
+ 5. 「チーム」欄で通知先のチームを選択する。
+ 6. 「チャネル」欄で通知先のチャネルを選択する。
+ 7. 「メッセージ」欄に上記のような文言を入力し、{Status}等の位置に
+    カーソルを置いた状態で「動的なコンテンツ」パネルから
+    Run_Child_Flow_Orchestratorの各出力（Status/MeetingCount/SavedCount/
+    SkippedCount/ArchiveUrl/ErrorMessage）を選択して挿入する。
+ 8. 本アクションが不要な場合は追加しなくてもよい（省略可）。
+
+■ 条件・ループ等の使用状況
+------------------------------------------------------------------------
+条件(Condition): 未使用（DryRun/ForceReprocessは値としてそのまま子フローへ
+  渡すのみで、本フロー内での分岐は行わない。分岐判定はオーケストレータ側で実施）。
+Apply to each: 未使用。
+Do until: 未使用。
+Select: 未使用。
+Filter array: 未使用。
+Compose: Compose_EndDateUtc, Compose_StartDateUtc の2件（上記参照）。
+ページング: 該当なし（本フローはGraph/SharePoint一覧取得を行わない）。
+並列実行: 該当なし（ループを持たないため同時実行度の設定はない）。
+エラー処理: Scope（Try/Catch/Finally）は未使用（正典の統一アクション表示名
+  一覧で本フローにはScope系アクションが定義されていないため）。子フロー呼出が
+  失敗した場合、本フロー自体が失敗として終了し、Notify_Manual_Resultは既定
+  では実行されない。失敗を確実に検知したい場合はNotify_Manual_Resultの
+  「実行条件の構成(Configure run after)」でRun_Child_Flow_Orchestratorの
+  「失敗した場合」「スキップされた場合」「タイムアウトした場合」にもチェック
+  を入れる設定変更を推奨する（新規アクション追加なし）。
+ログ: 本フロー自体はMeetingArchiveRunLogへ直接書き込まない（ログ書き込みは
+  オーケストレータ内のRun_Child_Flow_Write_Run_Log_Info/Errorが担当する）。
+
+■ 想定されるエラーと修正方法
+------------------------------------------------------------------------
+(1)
+想定エラー: Init_DryRun/Init_ForceReprocessでcoalesceの型不一致
+原因: coalesceの第1候補と第2候補（既定値）の型が異なる
+確認するアクション: Init_DryRun, Init_ForceReprocess
+確認する入力: トリガーのDryRun/ForceReprocess入力の型が「はい/いいえ」に
+  なっているか
+修正方法: トリガー入力の型を「はい/いいえ」に統一する
+修正後の式: coalesce(triggerBody()?['DryRun'], true)（両方ブール型で統一）
+
+(2)
+想定エラー: Init_LookbackDaysで数値以外の値が渡りaddDaysでエラー
+原因: LookbackDaysに数値以外（空文字列やテキスト）が渡った
+確認するアクション: Init_LookbackDays, Compose_StartDateUtc
+確認する入力: トリガーのLookbackDays欄の型が「数値」になっているか
+修正方法: 型を数値に統一し、coalesceの既定値7も数値リテラルにする
+修正後の式: coalesce(triggerBody()?['LookbackDays'], 7)
+
+(3)
+想定エラー: 日付式エラー（addDays/addToTimeで不正な日時文字列）
+原因: StartDateUtc/EndDateUtcにISO8601以外の形式の文字列を人手入力した
+確認するアクション: Compose_EndDateUtc, Compose_StartDateUtc
+確認する入力: StartDateUtc/EndDateUtc欄の文字列形式
+修正方法: "yyyy-MM-ddTHH:mm:ssZ" 形式（例: 2024-07-16T00:00:00Z）で入力する
+  よう入力欄の説明(description)に明記する
+修正後の式: 式自体は変更不要。入力値の形式を是正する
+
+(4)
+想定エラー: 子フロー呼出失敗（Run_Child_Flow_Orchestrator）
+原因: オーケストレータ側の内部エラー、権限不足、2年分処理でのタイムアウト、
+  Graph呼出のスロットリング(429)等
+確認するアクション: Run_Child_Flow_Orchestrator
+確認する入力: RunId/StartDateUtc/EndDateUtc/DryRun/ForceReprocessが正しく
+  渡っているか。オーケストレータ側の実行履歴でエラー詳細を確認する
+修正方法: オーケストレータの実行履歴で失敗アクションを特定し対処する。
+  2年一括処理で頻発する場合はLookbackDaysを分割し複数回に分けて手動実行する
+修正後の式: 該当なし（呼出元の式に問題はない。子フロー側で対処する）
+
+(5)
+想定エラー: 手動トリガー入力の内部キー名相違により式が値を取得できない
+原因: 「入力引数」章の要実環境確認欄で述べたとおり、text/text_1/number/
+  boolean/boolean_1等の内部キー名は入力追加順序に依存し、本書の想定と
+  実際の環境で一致しない場合がある
+確認するアクション: Compose_EndDateUtc, Compose_StartDateUtc, Init_DryRun,
+  Init_ForceReprocess, Init_LookbackDays
+確認する入力: 各アクションの式をPeek codeで開き、triggerBody()?['...']の
+  実際のキー名を確認する
+修正方法: 各式内のキー名を実際のキー名に置き換える。安全策として式は
+  手入力せず「動的なコンテンツ」パネルから入力欄名をクリックして挿入する
+修正後の式: 実際のキー名に応じて個別に置換する
+
+(6)
+想定エラー: 2年一括処理でRun_Child_Flow_Orchestratorがタイムアウトする
+原因: 過去2年分のメッセージ・返信・添付件数が多く、既定のアクション
+  タイムアウト内に処理が収まらない
+確認するアクション: Run_Child_Flow_Orchestrator
+確認する入力: 実行履歴の所要時間、オーケストレータ内Graph呼出のページ数・
+  429発生回数
+修正方法: Run_Child_Flow_Orchestratorの設定(Settings)でタイムアウトを
+  長いISO8601期間（例 P1D）に延長する。それでも収まらない場合は
+  LookbackDaysを分割し、四半期・半期単位で複数回手動実行する
+  （ForceReprocess=いいえのまま実行すれば台帳により添付の二重保存は
+  防止される。ただしWordファイルは実行毎に新規作成される点に留意する）
+修正後の式: 該当なし（設定変更で対応する）
+
+■ テスト手順
+------------------------------------------------------------------------
+[手順A] 7日間テスト（まず必ずこちらを実施する）
+ 1. 「PA_Manual_Meeting_Archive_Start」を開き「テスト」→「手動」→「実行」。
+ 2. StartDateUtc, EndDateUtc は空欄のまま。
+ 3. LookbackDays に 7 を入力する（既定のままなら未入力でも可）。
+ 4. DryRun は「はい」のまま（Word生成・添付保存をスキップし、件数だけ確認）。
+ 5. ForceReprocess は「いいえ」のまま。
+ 6. 「実行」をクリックする。
+ 7. 実行後、Run_Child_Flow_Orchestratorの出力でMeetingCount等を確認する。
+ 8. 問題なければ同じ7日間条件でDryRunを「いいえ」に変えて再実行し、実際に
+    Word・添付が保存されることを確認する（会議3件程度のサンプルで添付名・
+    日付・本文・リンク・改ページを目視確認する。仕様書10章の受入条件に対応）。
+
+[手順B] 2年間本番実行（手順Aで問題がないことを確認した後に実施する）
+ 1. 方式1: LookbackDaysに730を入力し、StartDateUtc・EndDateUtcは空欄のまま、
+    DryRunを「いいえ」、ForceReprocessを「いいえ」にして実行する。
+ 2. 方式2（より正確に「暦上の2年前」を指定したい場合）: Compose_StartDateUtc
+    の式のaddDays部分をaddToTime(outputs('Compose_EndDateUtc'), -2, 'Year')
+    に変更してから、LookbackDays欄は使わず実行する。
+ 3. 実行に時間がかかる、またはタイムアウトする場合は「想定されるエラーと
+    修正方法」(6)に従い分割実行する。
+ 4. 実行後、Notify_Manual_ResultのTeams通知またはRun_Child_Flow_
+    Orchestratorの出力でStatus/MeetingCount/SavedCount/SkippedCount/
+    ArchiveUrlを確認する。
+
+■ 完成条件
+------------------------------------------------------------------------
+- 手動トリガーの5入力（StartDateUtc/EndDateUtc/LookbackDays/DryRun/
+  ForceReprocess）が仕様通りの型・既定値で作成されている。
+- Initialize_RunId〜Notify_Manual_Resultまでの各アクションが正典§6の
+  順序・表示名で作成されている。
+- 7日間テスト（DryRun=はい→いいえ）で意図した件数・保存結果が得られる。
+- 2年間本番実行（LookbackDays=730、またはaddToTime代替）でタイムアウトせず
+  完走する、または分割実行の運用手順が明確になっている。
+- Run_Child_Flow_Orchestratorの戻り値（Status等）が本フロー内で参照できる。
+
+■ 式・型検査結果
+------------------------------------------------------------------------
+| 式 | 使用アクション | 型 | 検査結果 |
+|---|---|---|---|
+| guid() | Initialize_RunId | 文字列 | OK（引数なし、失敗しない） |
+| coalesce(triggerBody()?['DryRun'], true) | Init_DryRun | ブール型 | OK（両候補ブール型で一致） |
+| coalesce(triggerBody()?['ForceReprocess'], false) | Init_ForceReprocess | ブール型 | OK（同上） |
+| coalesce(triggerBody()?['LookbackDays'], 7) | Init_LookbackDays | 数値 | OK（両候補数値型で一致） |
+| if(empty(trim(coalesce(triggerBody()?['EndDateUtc'], ''))), utcNow(), triggerBody()?['EndDateUtc']) | Compose_EndDateUtc | 文字列 | OK（trim対象は文字列のみ、coalesce候補は文字列で一致） |
+| if(empty(trim(coalesce(triggerBody()?['StartDateUtc'], ''))), addDays(outputs('Compose_EndDateUtc'), mul(variables('varLookbackDays'), -1)), triggerBody()?['StartDateUtc']) | Compose_StartDateUtc | 文字列 | OK（addDaysの第2引数はmul()で整数×-1のまま整数型を維持） |
+| addToTime(outputs('Compose_EndDateUtc'), -2, 'Year') | Compose_StartDateUtc（代替） | 文字列 | OK（有効な式。本番採用は任意） |
+| body('Run_Child_Flow_Orchestrator')?['Status'] 等 | Notify_Manual_Result | 文字列/数値 | 要実環境確認（実際のトークン形式はPeek codeで確認要） |
+
+------------------------------------------------------------------------
+以下、正典§11の監査表（17問）と正典§12の想定エラー分類の総括を記載する。
+------------------------------------------------------------------------
+
+■ 式・型監査（正典§11 / 全17問）
+------------------------------------------------------------------------
+trim対象はすべて文字列か:
+  Yes。Compose_EndDateUtc/Compose_StartDateUtcのtrim(coalesce(triggerBody()?['...'], ''))
+  はいずれもテキスト入力欄が対象であり、既定値''も文字列。
+coalesceの候補値は同一型か:
+  Yes。DryRun/ForceReprocessはブール型同士、LookbackDaysは数値同士、
+  StartDateUtc/EndDateUtcは文字列同士で統一している。
+nullと空文字列を区別しているか:
+  Yes。未入力の場合にnullまたは''のどちらが返っても吸収できるよう
+  coalesce(x,'')で文字列既定値に正規化したうえでtrim().emptyで判定している。
+空白だけの文字列を考慮しているか:
+  Yes。trim()を挟んでからempty()判定しているため、半角空白のみの入力も
+  空扱いになる。全角スペースの扱いは要実環境確認。
+配列の既定値がjson('[]')になっているか:
+  該当なし。本フローは配列変数を使用しない。
+オブジェクトの既定値がjson('{}')になっているか:
+  該当なし。本フローはオブジェクト変数を使用しない。
+falseを未設定扱いしていないか:
+  Yes。DryRun=いいえ、ForceReprocess=いいえはいずれも明示的な値として
+  そのままvariables/子フローへ渡す。coalesceは値がnullの場合のみ既定値に
+  置換するため、falseが既定値に上書きされることはない。
+0を未設定扱いしていないか:
+  Yes。LookbackDays=0が入力された場合もcoalesceはnullのときのみ7に置換
+  するため、0はそのまま0として扱われる（0を指定した場合の挙動＝
+  StartDateUtc=EndDateUtcとなる点は利用者の入力ミスとして許容する仕様）。
+Apply to eachへnullを渡していないか:
+  該当なし。本フローはApply to each/Do untilを使用しない。
+JSONプロパティを安全に参照しているか:
+  Yes。すべてtriggerBody()?['...']およびbody('Run_Child_Flow_Orchestrator')?['...']
+  の?[]安全参照を使用している。
+HTMLへ入れる値をエスケープしているか:
+  該当なし。本フローはHTMLを生成しない（HTML生成はオーケストレータの責務）。
+未定義の変数がないか:
+  Yes。varRunId/varDryRun/varForceReprocess/varLookbackDaysはすべて使用前に
+  Initialize_RunId〜Init_LookbackDaysで初期化済み。
+未定義のアクション参照がないか:
+  Yes。outputs('Compose_EndDateUtc')はCompose_StartDateUtcより前に定義済み。
+  body('Run_Child_Flow_Orchestrator')はNotify_Manual_Resultより前に実行済み。
+式内のアクション名が実在するか:
+  Yes。Initialize_RunId, Init_DryRun, Init_ForceReprocess, Init_LookbackDays,
+  Compose_EndDateUtc, Compose_StartDateUtc, Run_Child_Flow_Orchestrator,
+  Notify_Manual_Resultは本ファイル内で作成した実在アクション名と一致する。
+添付リンクが保存後SharePointファイルを指しているか:
+  該当なし。本フローは添付保存を行わない（オーケストレータ/子フロー4の責務）。
+会議が日付順に並ぶか:
+  該当なし。本フローは会議の並び替えを行わない。
+各会議が新しいページから開始するか:
+  該当なし。本フローはWord/HTML生成を行わない。
+
+========================================================================
+以上
+========================================================================

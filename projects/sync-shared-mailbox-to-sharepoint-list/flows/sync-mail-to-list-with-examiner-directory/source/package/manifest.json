@@ -1,0 +1,106 @@
+{
+  "schema": "1.0",
+  "details": {
+    "displayName": "SyncMailToListWithExaminerDirectory",
+    "description": "共有メールボックスの最新メールを、審査官名・出願番号の推定付きでSharePointリストへ登録／更新する",
+    "createdTime": "2026-08-03T00:00:00.0000000Z",
+    "packageTelemetryId": "1a1aa5bd-a8ab-43ad-b000-5af286df111b",
+    "creator": "N/A",
+    "sourceEnvironment": ""
+  },
+  "resources": {
+    "a294f628-5f49-4860-8733-1cafa584ec01": {
+      "type": "Microsoft.Flow/flows",
+      "suggestedCreationType": "New",
+      "creationType": "Existing, New, Update",
+      "details": {
+        "displayName": "共有メールボックスのメールをSharePointリストへ同期（審査官名・出願番号の推定＋名簿突合）"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Root",
+      "dependsOn": [
+        "e210764f-df64-4d5d-b512-9d712b3992f7",
+        "9a7ada7f-1d62-4151-abd7-ee1ce6d3305d",
+        "ba8d1540-a095-4214-8eeb-b08b45b9b819",
+        "ffc66190-1e87-431d-9bb0-7692b9b8923a",
+        "14f9d08e-a1d5-4b62-b635-669497c866de",
+        "43d3c6ee-53a1-4ce4-9096-b329a892f63f"
+      ]
+    },
+    "e210764f-df64-4d5d-b512-9d712b3992f7": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "name": "shared_sharepointonline",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "SharePoint"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "9a7ada7f-1d62-4151-abd7-ee1ce6d3305d": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "SharePoint への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "e210764f-df64-4d5d-b512-9d712b3992f7"
+      ]
+    },
+    "ba8d1540-a095-4214-8eeb-b08b45b9b819": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "name": "shared_office365",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "Office 365 Outlook"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "ffc66190-1e87-431d-9bb0-7692b9b8923a": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "Office 365 Outlook への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "ba8d1540-a095-4214-8eeb-b08b45b9b819"
+      ]
+    },
+    "14f9d08e-a1d5-4b62-b635-669497c866de": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_conversionservice",
+      "name": "shared_conversionservice",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "Content Conversion"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "43d3c6ee-53a1-4ce4-9096-b329a892f63f": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "Content Conversion への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "14f9d08e-a1d5-4b62-b635-669497c866de"
+      ]
+    }
+  }
+}

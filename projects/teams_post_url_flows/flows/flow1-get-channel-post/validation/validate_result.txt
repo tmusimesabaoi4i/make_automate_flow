@@ -1,0 +1,17 @@
+=== Flow1_GetTeamsChannelPostFromUrl 静的検証 ===
+package folder GUID : 5d2b8f31-7a46-49c0-b8e2-1f93c65a0d87
+flow displayName    : Flow1 Teams投稿URLから投稿を取得
+operationIds        : ['HttpRequest']
+connectionReferences: ['shared_teams']
+アクション総数      : 67
+初期化変数          : 15 ['varChannelId', 'varErrorCode', 'varErrorMessage', 'varErrorMessages', 'varInputUrl', 'varIsValid', 'varLastStatusCode', 'varParentMessageId', 'varResultJson', 'varResultObject', 'varStage', 'varTargetMessageId', 'varTeamId', 'varTenantId', 'varUrlMessageId']
+SetVariable         : 21 （うち自己参照 0 ）
+AppendToArray       : 2
+Foreach / Until     : 0 / 0
+使用関数            : ['body', 'coalesce', 'concat', 'contains', 'createArray', 'decodeBase64', 'decodeUriComponent', 'empty', 'endsWith', 'equals', 'first', 'if', 'join', 'json', 'last', 'length', 'not', 'or', 'outputs', 'split', 'string', 'sub', 'take', 'triggerBody', 'triggerOutputs', 'trim', 'union', 'uriComponent', 'utcNow', 'variables']
+トリガー入力        : ['TeamsPostUrl']
+
+=== ERRORS ===
+(0 errors)
+=== WARNINGS ===
+(0 warnings)

@@ -1,0 +1,2199 @@
+{
+  "name": "2fe554b1-6ba6-4ce0-962c-07bde4bdb6ee",
+  "id": "/providers/Microsoft.Flow/flows/2fe554b1-6ba6-4ce0-962c-07bde4bdb6ee",
+  "type": "Microsoft.Flow/flows",
+  "properties": {
+    "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+    "displayName": "Teams課内会議アーカイブ",
+    "definition": {
+      "metadata": {
+        "creator": {},
+        "provisioningMethod": "FromDefinition",
+        "creationSource": "Portal",
+        "modifiedSources": "Portal"
+      },
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "LookbackDays": {
+                  "title": "取得対象日数",
+                  "type": "number",
+                  "description": "実行日時から何日前までのTeams投稿を取得するか（7/30/365/730）",
+                  "default": 7
+                },
+                "DryRun": {
+                  "title": "テスト実行",
+                  "type": "boolean",
+                  "description": "はい=本番保存せずテスト",
+                  "default": true
+                },
+                "ForceReprocess": {
+                  "title": "処理済みファイルを再処理する",
+                  "type": "boolean",
+                  "description": "はい=台帳を無視して再保存",
+                  "default": false
+                }
+              },
+              "required": []
+            }
+          }
+        }
+      },
+      "actions": {
+        "Compose_EffectiveLookbackDays": {
+          "type": "Compose",
+          "inputs": "@if(greater(int(coalesce(triggerBody()?['LookbackDays'], 0)), 0), int(coalesce(triggerBody()?['LookbackDays'], 7)), 7)",
+          "runAfter": {}
+        },
+        "Initialize_RunId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varRunId",
+                "type": "string",
+                "value": "@guid()"
+              }
+            ]
+          },
+          "runAfter": {
+            "Compose_EffectiveLookbackDays": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_LookbackDays": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLookbackDays",
+                "type": "integer",
+                "value": "@outputs('Compose_EffectiveLookbackDays')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_EndDateUtc": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varEndDateUtc",
+                "type": "string",
+                "value": "@utcNow()"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_LookbackDays": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_StartDateUtc": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varStartDateUtc",
+                "type": "string",
+                "value": "@addDays(variables('varEndDateUtc'), sub(0, variables('varLookbackDays')))"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_EndDateUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_TeamId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varTeamId",
+                "type": "string",
+                "value": "a7ac0c68-87ba-4613-8960-13660f0f5f56"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_StartDateUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ChannelId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varChannelId",
+                "type": "string",
+                "value": "19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_TeamId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SiteAddress": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSiteAddress",
+                "type": "string",
+                "value": "https://metijapan.sharepoint.com/sites/mROOM_240600018"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ChannelId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ListSiteAddress": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varListSiteAddress",
+                "type": "string",
+                "value": "https://metijapan.sharepoint.com/teams/pjteam_220400119"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SiteAddress": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_Library": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLibrary",
+                "type": "string",
+                "value": "Shared Documents"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ListSiteAddress": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_DestinationPath": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varDestinationPath",
+                "type": "string",
+                "value": "123_伝送システム/00_共用フォルダ/60_庶務担当/99_過去の課内会議"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Library": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_LedgerList": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLedgerList",
+                "type": "string",
+                "value": "MeetingArchiveLedger"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_DestinationPath": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_RunLogList": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varRunLogList",
+                "type": "string",
+                "value": "MeetingArchiveRunLog"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_LedgerList": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_MessagesArray": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMessagesArray",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RunLogList": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_NextLink": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varNextLink",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MessagesArray": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_RepliesArray": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varRepliesArray",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_NextLink": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ReplyNextLink": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varReplyNextLink",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RepliesArray": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_AttachmentCandidates": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAttachmentCandidates",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ReplyNextLink": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_MeetingAttachments": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMeetingAttachments",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_AttachmentCandidates": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_Meetings": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMeetings",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MeetingAttachments": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SortedMeetings": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSortedMeetings",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Meetings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_DocumentHtml": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varDocumentHtml",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SortedMeetings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_MeetingIndex": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMeetingIndex",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_DocumentHtml": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SavedCount": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSavedCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MeetingIndex": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SkippedCount": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSkippedCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SavedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_FailedCount": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFailedCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SkippedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ArchiveUrl": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varArchiveUrl",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_FailedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_RunStatus": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varRunStatus",
+                "type": "string",
+                "value": "Failed"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ArchiveUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ErrorMessage": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varErrorMessage",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RunStatus": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_05_Ensure_Destination_Folder": {
+          "type": "Scope",
+          "actions": {
+            "Condition_Provision_Destination": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "not": {
+                      "equals": [
+                        "@coalesce(triggerBody()?['DryRun'], true)",
+                        true
+                      ]
+                    }
+                  }
+                ]
+              },
+              "actions": {
+                "Create_Destination_Folder_L1": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteAddress')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/folders",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=verbose",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "{\"__metadata\": {\"type\": \"SP.Folder\"}, \"ServerRelativeUrl\": \"@{concat(uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', join(take(split(variables('varDestinationPath'), '/'), 1), '/'))}\"}"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Create_Destination_Folder_L2": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteAddress')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/folders",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=verbose",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "{\"__metadata\": {\"type\": \"SP.Folder\"}, \"ServerRelativeUrl\": \"@{concat(uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', join(take(split(variables('varDestinationPath'), '/'), 2), '/'))}\"}"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Create_Destination_Folder_L1": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Create_Destination_Folder_L3": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteAddress')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/folders",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=verbose",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "{\"__metadata\": {\"type\": \"SP.Folder\"}, \"ServerRelativeUrl\": \"@{concat(uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', join(take(split(variables('varDestinationPath'), '/'), 3), '/'))}\"}"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Create_Destination_Folder_L2": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Create_Destination_Folder_L4": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteAddress')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/folders",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=verbose",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "{\"__metadata\": {\"type\": \"SP.Folder\"}, \"ServerRelativeUrl\": \"@{concat(uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', join(take(split(variables('varDestinationPath'), '/'), 4), '/'))}\"}"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Create_Destination_Folder_L3": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Verify_Destination_Folder": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteAddress')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "@concat('_api/web/GetFolderByServerRelativeUrl(''', uriPath(variables('varSiteAddress')), '/', variables('varLibrary'), '/', variables('varDestinationPath'), ''')')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Create_Destination_Folder_L4": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Initialize_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_10_Get_Channel_Messages": {
+          "type": "Scope",
+          "actions": {
+            "Set_NextLink_First": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varNextLink",
+                "value": "@concat('https://graph.microsoft.com/v1.0/teams/', variables('varTeamId'), '/channels/', uriComponent(variables('varChannelId')), '/messages?$top=50')"
+              },
+              "runAfter": {}
+            },
+            "Do_Until_Messages_Paging": {
+              "type": "Until",
+              "expression": "@empty(variables('varNextLink'))",
+              "limit": {
+                "count": 5000,
+                "timeout": "PT1H"
+              },
+              "actions": {
+                "Get_Channel_Messages": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "Uri": "@variables('varNextLink')",
+                      "Method": "GET",
+                      "ContentType": "application/json"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "connectionName": "shared_teams",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Process_Retrieved_Messages": {
+                  "type": "Foreach",
+                  "foreach": "@coalesce(body('Get_Channel_Messages')?['value'], json('[]'))",
+                  "actions": {
+                    "Append_Message_To_MessagesArray": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varMessagesArray",
+                        "value": "@item()"
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
+                  "runAfter": {
+                    "Get_Channel_Messages": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_NextLink": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varNextLink",
+                    "value": "@coalesce(body('Get_Channel_Messages')?['@odata.nextLink'], '')"
+                  },
+                  "runAfter": {
+                    "Process_Retrieved_Messages": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_NextLink_First": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_05_Ensure_Destination_Folder": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_20_Process_Meetings": {
+          "type": "Scope",
+          "actions": {
+            "Filter_Messages_By_Period": {
+              "type": "Query",
+              "inputs": {
+                "from": "@variables('varMessagesArray')",
+                "where": "@and(equals(item()?['messageType'], 'message'), and(greaterOrEquals(item()?['createdDateTime'], variables('varStartDateUtc')), lessOrEquals(item()?['createdDateTime'], variables('varEndDateUtc'))))"
+              },
+              "runAfter": {}
+            },
+            "Process_Each_Parent_Message": {
+              "type": "Foreach",
+              "foreach": "@body('Filter_Messages_By_Period')",
+              "actions": {
+                "Compose_Author": {
+                  "type": "Compose",
+                  "inputs": "@if(empty(trim(coalesce(items('Process_Each_Parent_Message')?['from']?['user']?['displayName'], ''))), '不明', trim(coalesce(items('Process_Each_Parent_Message')?['from']?['user']?['displayName'], '')))",
+                  "runAfter": {}
+                },
+                "Compose_Organizer": {
+                  "type": "Compose",
+                  "inputs": "不明",
+                  "runAfter": {
+                    "Compose_Author": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_MeetingDate": {
+                  "type": "Compose",
+                  "inputs": "@formatDateTime(convertFromUtc(items('Process_Each_Parent_Message')?['createdDateTime'], 'Tokyo Standard Time'), 'yyyy-MM-dd')",
+                  "runAfter": {
+                    "Compose_Organizer": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_PostedDateTimeJst": {
+                  "type": "Compose",
+                  "inputs": "@concat(formatDateTime(convertFromUtc(items('Process_Each_Parent_Message')?['createdDateTime'], 'Tokyo Standard Time'), 'yyyy-MM-ddTHH:mm:ss'), '+09:00')",
+                  "runAfter": {
+                    "Compose_MeetingDate": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Convert_Body_Html_To_Text": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "Content": "@coalesce(items('Process_Each_Parent_Message')?['body']?['content'], '')"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_conversionservice",
+                      "connectionName": "shared_conversionservice",
+                      "operationId": "HtmlToText"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_PostedDateTimeJst": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_ReplyNextLink_First": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varReplyNextLink",
+                    "value": "@concat('https://graph.microsoft.com/v1.0/teams/', variables('varTeamId'), '/channels/', uriComponent(variables('varChannelId')), '/messages/', uriComponent(items('Process_Each_Parent_Message')?['id']), '/replies?$top=50')"
+                  },
+                  "runAfter": {
+                    "Convert_Body_Html_To_Text": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_RepliesArray_Reset": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varRepliesArray",
+                    "value": "@json('[]')"
+                  },
+                  "runAfter": {
+                    "Set_ReplyNextLink_First": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Do_Until_Replies_Paging": {
+                  "type": "Until",
+                  "expression": "@empty(variables('varReplyNextLink'))",
+                  "limit": {
+                    "count": 5000,
+                    "timeout": "PT1H"
+                  },
+                  "actions": {
+                    "Get_Message_Replies": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "Uri": "@variables('varReplyNextLink')",
+                          "Method": "GET",
+                          "ContentType": "application/json"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                          "connectionName": "shared_teams",
+                          "operationId": "HttpRequest"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "Process_Retrieved_Replies": {
+                      "type": "Foreach",
+                      "foreach": "@coalesce(body('Get_Message_Replies')?['value'], json('[]'))",
+                      "actions": {
+                        "Append_Reply_To_RepliesArray": {
+                          "type": "AppendToArrayVariable",
+                          "inputs": {
+                            "name": "varRepliesArray",
+                            "value": "@item()"
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {
+                        "Get_Message_Replies": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Set_ReplyNextLink": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varReplyNextLink",
+                        "value": "@coalesce(body('Get_Message_Replies')?['@odata.nextLink'], '')"
+                      },
+                      "runAfter": {
+                        "Process_Retrieved_Replies": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Set_RepliesArray_Reset": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_AttachmentCandidates_Parent": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varAttachmentCandidates",
+                    "value": "@body('Select_Parent_Attachments')"
+                  },
+                  "runAfter": {
+                    "Select_Parent_Attachments": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Select_Parent_Attachments": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@coalesce(items('Process_Each_Parent_Message')?['attachments'], json('[]'))",
+                    "select": {
+                      "attachment": "@item()",
+                      "sourceReplyId": ""
+                    }
+                  },
+                  "runAfter": {
+                    "Do_Until_Replies_Paging": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Process_Each_Reply": {
+                  "type": "Foreach",
+                  "foreach": "@variables('varRepliesArray')",
+                  "actions": {
+                    "Select_Reply_Attachments": {
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@coalesce(items('Process_Each_Reply')?['attachments'], json('[]'))",
+                        "select": {
+                          "attachment": "@item()",
+                          "sourceReplyId": "@items('Process_Each_Reply')?['id']"
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "Process_Each_Reply_Attachment": {
+                      "type": "Foreach",
+                      "foreach": "@body('Select_Reply_Attachments')",
+                      "actions": {
+                        "Append_Reply_Attachment_Candidate": {
+                          "type": "AppendToArrayVariable",
+                          "inputs": {
+                            "name": "varAttachmentCandidates",
+                            "value": "@item()"
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {
+                        "Select_Reply_Attachments": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
+                  "runAfter": {
+                    "Set_AttachmentCandidates_Parent": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Filter_File_Attachments": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@variables('varAttachmentCandidates')",
+                    "where": "@and(and(equals(item()?['attachment']?['contentType'], 'reference'), not(empty(coalesce(item()?['attachment']?['contentUrl'], '')))), or(contains(coalesce(item()?['attachment']?['contentUrl'], ''), '/Shared Documents/'), contains(coalesce(item()?['attachment']?['contentUrl'], ''), '/Shared%20Documents/')))"
+                  },
+                  "runAfter": {
+                    "Process_Each_Reply": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_MeetingAttachments_Reset": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varMeetingAttachments",
+                    "value": "@json('[]')"
+                  },
+                  "runAfter": {
+                    "Filter_File_Attachments": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Condition_Has_File_Attachments": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "greater": [
+                          "@length(body('Filter_File_Attachments'))",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Process_Each_Attachment": {
+                      "type": "Foreach",
+                      "foreach": "@body('Filter_File_Attachments')",
+                      "actions": {
+                        "Compose_IdempotencyKey": {
+                          "type": "Compose",
+                          "inputs": "@if(empty(trim(coalesce(items('Process_Each_Attachment')?['sourceReplyId'], ''))), concat(items('Process_Each_Parent_Message')?['id'], '_', items('Process_Each_Attachment')?['attachment']?['id']), concat(items('Process_Each_Parent_Message')?['id'], '_', items('Process_Each_Attachment')?['sourceReplyId'], '_', items('Process_Each_Attachment')?['attachment']?['id']))",
+                          "runAfter": {}
+                        },
+                        "Get_Ledger_Existing": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "parameters": {
+                              "dataset": "@variables('varListSiteAddress')",
+                              "table": "@variables('varLedgerList')",
+                              "$filter": "@concat('IdempotencyKey eq ''', outputs('Compose_IdempotencyKey'), ''' and Status eq ''Saved''')",
+                              "$top": 1
+                            },
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "GetItems"
+                            },
+                            "authentication": {
+                              "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                              "type": "Raw"
+                            }
+                          },
+                          "runAfter": {
+                            "Compose_IdempotencyKey": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Condition_Already_Saved": {
+                          "type": "If",
+                          "expression": {
+                            "and": [
+                              {
+                                "greater": [
+                                  "@length(coalesce(body('Get_Ledger_Existing')?['value'], json('[]')))",
+                                  0
+                                ]
+                              },
+                              {
+                                "not": {
+                                  "equals": [
+                                    "@coalesce(triggerBody()?['ForceReprocess'], false)",
+                                    true
+                                  ]
+                                }
+                              }
+                            ]
+                          },
+                          "actions": {
+                            "Append_Existing_Meeting_Attachment": {
+                              "type": "AppendToArrayVariable",
+                              "inputs": {
+                                "name": "varMeetingAttachments",
+                                "value": {
+                                  "originalName": "@coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')",
+                                  "savedName": "@first(body('Get_Ledger_Existing')?['value'])?['SavedFileName']",
+                                  "savedFileUrl": "@first(body('Get_Ledger_Existing')?['value'])?['SavedFileUrl']",
+                                  "status": "Skipped"
+                                }
+                              },
+                              "runAfter": {}
+                            },
+                            "Increment_SkippedCount_Existing": {
+                              "type": "IncrementVariable",
+                              "inputs": {
+                                "name": "varSkippedCount",
+                                "value": 1
+                              },
+                              "runAfter": {
+                                "Append_Existing_Meeting_Attachment": [
+                                  "Succeeded"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {
+                              "Compose_Extension": {
+                                "type": "Compose",
+                                "inputs": "@if(contains(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'), '.'), concat('.', last(split(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'), '.'))), '')",
+                                "runAfter": {}
+                              },
+                              "Compose_BaseName": {
+                                "type": "Compose",
+                                "inputs": "@if(contains(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'), '.'), substring(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'), 0, sub(length(coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')), length(outputs('Compose_Extension')))), coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file'))",
+                                "runAfter": {
+                                  "Compose_Extension": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Quote": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Compose_BaseName'), '\"', '_')",
+                                "runAfter": {
+                                  "Compose_BaseName": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Star": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Quote'), '*', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Quote": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Colon": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Star'), ':', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Star": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Lt": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Colon'), '<', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Colon": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Gt": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Lt'), '>', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Lt": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Question": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Gt'), '?', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Gt": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Slash": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Question'), '/', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Question": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Backslash": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Slash'), '\\', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Slash": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Pipe": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Backslash'), '|', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Backslash": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Hash": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Pipe'), '#', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Pipe": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Replace_Invalid_Percent": {
+                                "type": "Compose",
+                                "inputs": "@replace(outputs('Replace_Invalid_Hash'), '%', '_')",
+                                "runAfter": {
+                                  "Replace_Invalid_Hash": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Compose_TrimTrailing": {
+                                "type": "Compose",
+                                "inputs": "@if(endsWith(trim(outputs('Replace_Invalid_Percent')), '.'), trim(substring(trim(outputs('Replace_Invalid_Percent')), 0, sub(length(trim(outputs('Replace_Invalid_Percent'))), 1))), trim(outputs('Replace_Invalid_Percent')))",
+                                "runAfter": {
+                                  "Replace_Invalid_Percent": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Compose_SavedName": {
+                                "type": "Compose",
+                                "inputs": "@concat(formatDateTime(items('Process_Each_Parent_Message')?['createdDateTime'], 'yyyyMMdd'), '_', if(greater(length(outputs('Compose_TrimTrailing')), 100), substring(outputs('Compose_TrimTrailing'), 0, 100), outputs('Compose_TrimTrailing')), outputs('Compose_Extension'))",
+                                "runAfter": {
+                                  "Compose_TrimTrailing": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Condition_DryRun": {
+                                "type": "If",
+                                "expression": {
+                                  "and": [
+                                    {
+                                      "equals": [
+                                        "@coalesce(triggerBody()?['DryRun'], true)",
+                                        true
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "actions": {
+                                  "Append_DryRun_Meeting_Attachment": {
+                                    "type": "AppendToArrayVariable",
+                                    "inputs": {
+                                      "name": "varMeetingAttachments",
+                                      "value": {
+                                        "originalName": "@coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')",
+                                        "savedName": "",
+                                        "savedFileUrl": "",
+                                        "status": "Skipped"
+                                      }
+                                    },
+                                    "runAfter": {}
+                                  },
+                                  "Increment_SkippedCount_DryRun": {
+                                    "type": "IncrementVariable",
+                                    "inputs": {
+                                      "name": "varSkippedCount",
+                                      "value": 1
+                                    },
+                                    "runAfter": {
+                                      "Append_DryRun_Meeting_Attachment": [
+                                        "Succeeded"
+                                      ]
+                                    }
+                                  }
+                                },
+                                "else": {
+                                  "actions": {
+                                    "Compose_Saved_File_Url": {
+                                      "type": "Compose",
+                                      "inputs": "@replace(concat(variables('varSiteAddress'), '/', variables('varLibrary'), '/', variables('varDestinationPath'), '/', outputs('Compose_SavedName')), ' ', '%20')",
+                                      "runAfter": {}
+                                    },
+                                    "Scope_Save_File": {
+                                      "type": "Scope",
+                                      "runAfter": {
+                                        "Compose_Saved_File_Url": [
+                                          "Succeeded"
+                                        ]
+                                      },
+                                      "actions": {
+                                        "Compose_Source_Url": {
+                                          "type": "Compose",
+                                          "inputs": "@if(contains(coalesce(items('Process_Each_Attachment')?['attachment']?['contentUrl'], ''), '/Shared%20Documents/'), decodeUriComponent(items('Process_Each_Attachment')?['attachment']?['contentUrl']), items('Process_Each_Attachment')?['attachment']?['contentUrl'])",
+                                          "runAfter": {}
+                                        },
+                                        "Compose_Source_Site": {
+                                          "type": "Compose",
+                                          "inputs": "@substring(outputs('Compose_Source_Url'), 0, indexOf(outputs('Compose_Source_Url'), '/Shared Documents/'))",
+                                          "runAfter": {
+                                            "Compose_Source_Url": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        },
+                                        "Compose_Source_Path": {
+                                          "type": "Compose",
+                                          "inputs": "@replace(substring(outputs('Compose_Source_Url'), indexOf(outputs('Compose_Source_Url'), '/Shared Documents/')), '%20', ' ')",
+                                          "runAfter": {
+                                            "Compose_Source_Site": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        },
+                                        "Get_Source_File_Content": {
+                                          "type": "OpenApiConnection",
+                                          "inputs": {
+                                            "parameters": {
+                                              "dataset": "@outputs('Compose_Source_Site')",
+                                              "path": "@outputs('Compose_Source_Path')",
+                                              "inferContentType": true
+                                            },
+                                            "host": {
+                                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                              "connectionName": "shared_sharepointonline",
+                                              "operationId": "GetFileContentByPath"
+                                            },
+                                            "authentication": {
+                                              "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                                              "type": "Raw"
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "Compose_Source_Path": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        },
+                                        "Create_Attachment_File": {
+                                          "type": "OpenApiConnection",
+                                          "inputs": {
+                                            "parameters": {
+                                              "dataset": "@variables('varSiteAddress')",
+                                              "folderPath": "@concat('/', variables('varLibrary'), '/', variables('varDestinationPath'))",
+                                              "name": "@outputs('Compose_SavedName')",
+                                              "body": "@body('Get_Source_File_Content')"
+                                            },
+                                            "host": {
+                                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                              "connectionName": "shared_sharepointonline",
+                                              "operationId": "CreateFile"
+                                            },
+                                            "authentication": {
+                                              "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                                              "type": "Raw"
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "Get_Source_File_Content": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "Compose_Ledger_Body": {
+                                      "type": "Compose",
+                                      "inputs": {
+                                        "Title": "@outputs('Compose_IdempotencyKey')",
+                                        "IdempotencyKey": "@outputs('Compose_IdempotencyKey')",
+                                        "RunId": "@variables('varRunId')",
+                                        "MessageId": "@items('Process_Each_Parent_Message')?['id']",
+                                        "ReplyId": "@coalesce(items('Process_Each_Attachment')?['sourceReplyId'], '')",
+                                        "AttachmentId": "@items('Process_Each_Attachment')?['attachment']?['id']",
+                                        "OriginalFileName": "@coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')",
+                                        "SavedFileName": "@outputs('Compose_SavedName')",
+                                        "SavedFileUrl": "@outputs('Compose_Saved_File_Url')",
+                                        "Status": "Saved",
+                                        "ErrorMessage": "",
+                                        "ProcessedDateTimeUtc": "@utcNow()"
+                                      },
+                                      "runAfter": {
+                                        "Scope_Save_File": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "Create_Ledger_Item": {
+                                      "type": "OpenApiConnection",
+                                      "inputs": {
+                                        "parameters": {
+                                          "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                                          "parameters/method": "POST",
+                                          "parameters/uri": "@concat('_api/web/lists/getbytitle(''', variables('varLedgerList'), ''')/items')",
+                                          "parameters/headers": {
+                                            "Accept": "application/json;odata=nometadata",
+                                            "Content-Type": "application/json;odata=nometadata"
+                                          },
+                                          "parameters/body": "@string(outputs('Compose_Ledger_Body'))"
+                                        },
+                                        "host": {
+                                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                          "connectionName": "shared_sharepointonline",
+                                          "operationId": "HttpRequest"
+                                        },
+                                        "authentication": {
+                                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                                          "type": "Raw"
+                                        }
+                                      },
+                                      "runAfter": {
+                                        "Compose_Ledger_Body": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "Append_Saved_Meeting_Attachment": {
+                                      "type": "AppendToArrayVariable",
+                                      "inputs": {
+                                        "name": "varMeetingAttachments",
+                                        "value": {
+                                          "originalName": "@coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')",
+                                          "savedName": "@outputs('Compose_SavedName')",
+                                          "savedFileUrl": "@outputs('Compose_Saved_File_Url')",
+                                          "status": "Saved"
+                                        }
+                                      },
+                                      "runAfter": {
+                                        "Create_Ledger_Item": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "Increment_SavedCount": {
+                                      "type": "IncrementVariable",
+                                      "inputs": {
+                                        "name": "varSavedCount",
+                                        "value": 1
+                                      },
+                                      "runAfter": {
+                                        "Append_Saved_Meeting_Attachment": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "Append_Failed_Meeting_Attachment": {
+                                      "type": "AppendToArrayVariable",
+                                      "inputs": {
+                                        "name": "varMeetingAttachments",
+                                        "value": {
+                                          "originalName": "@coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')",
+                                          "savedName": "",
+                                          "savedFileUrl": "",
+                                          "status": "Failed"
+                                        }
+                                      },
+                                      "runAfter": {
+                                        "Scope_Save_File": [
+                                          "Failed",
+                                          "TimedOut"
+                                        ]
+                                      }
+                                    },
+                                    "Compose_LedgerFailed_Body": {
+                                      "type": "Compose",
+                                      "inputs": {
+                                        "Title": "@outputs('Compose_IdempotencyKey')",
+                                        "IdempotencyKey": "@outputs('Compose_IdempotencyKey')",
+                                        "RunId": "@variables('varRunId')",
+                                        "MessageId": "@items('Process_Each_Parent_Message')?['id']",
+                                        "ReplyId": "@coalesce(items('Process_Each_Attachment')?['sourceReplyId'], '')",
+                                        "AttachmentId": "@items('Process_Each_Attachment')?['attachment']?['id']",
+                                        "OriginalFileName": "@coalesce(items('Process_Each_Attachment')?['attachment']?['name'], 'file')",
+                                        "SavedFileName": "",
+                                        "SavedFileUrl": "",
+                                        "Status": "Failed",
+                                        "ErrorMessage": "@concat('添付の保存に失敗しました: ', outputs('Compose_SavedName'), ' 元URL=', coalesce(items('Process_Each_Attachment')?['attachment']?['contentUrl'], '(なし)'), ' 保存先=/', variables('varLibrary'), '/', variables('varDestinationPath'))",
+                                        "ProcessedDateTimeUtc": "@utcNow()"
+                                      },
+                                      "runAfter": {
+                                        "Append_Failed_Meeting_Attachment": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "Create_Ledger_Item_Failed": {
+                                      "type": "OpenApiConnection",
+                                      "inputs": {
+                                        "parameters": {
+                                          "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                                          "parameters/method": "POST",
+                                          "parameters/uri": "@concat('_api/web/lists/getbytitle(''', variables('varLedgerList'), ''')/items')",
+                                          "parameters/headers": {
+                                            "Accept": "application/json;odata=nometadata",
+                                            "Content-Type": "application/json;odata=nometadata"
+                                          },
+                                          "parameters/body": "@string(outputs('Compose_LedgerFailed_Body'))"
+                                        },
+                                        "host": {
+                                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                          "connectionName": "shared_sharepointonline",
+                                          "operationId": "HttpRequest"
+                                        },
+                                        "authentication": {
+                                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                                          "type": "Raw"
+                                        }
+                                      },
+                                      "runAfter": {
+                                        "Compose_LedgerFailed_Body": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "Increment_FailedCount": {
+                                      "type": "IncrementVariable",
+                                      "inputs": {
+                                        "name": "varFailedCount",
+                                        "value": 1
+                                      },
+                                      "runAfter": {
+                                        "Create_Ledger_Item_Failed": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    }
+                                  }
+                                },
+                                "runAfter": {
+                                  "Compose_SavedName": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "runAfter": {
+                            "Get_Ledger_Existing": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {
+                    "Set_MeetingAttachments_Reset": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_SortKey": {
+                  "type": "Compose",
+                  "inputs": "@concat(formatDateTime(convertFromUtc(items('Process_Each_Parent_Message')?['createdDateTime'], 'Tokyo Standard Time'), 'yyyyMMddHHmmss'), '_', items('Process_Each_Parent_Message')?['id'])",
+                  "runAfter": {
+                    "Condition_Has_File_Attachments": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Append_Normalized_Meeting": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varMeetings",
+                    "value": {
+                      "meetingDate": "@outputs('Compose_MeetingDate')",
+                      "postedDateTimeJst": "@outputs('Compose_PostedDateTimeJst')",
+                      "messageId": "@items('Process_Each_Parent_Message')?['id']",
+                      "author": "@outputs('Compose_Author')",
+                      "organizer": "@outputs('Compose_Organizer')",
+                      "bodyText": "@body('Convert_Body_Html_To_Text')",
+                      "teamsMessageUrl": "@coalesce(items('Process_Each_Parent_Message')?['webUrl'], '')",
+                      "attachments": "@variables('varMeetingAttachments')",
+                      "sortKey": "@outputs('Compose_SortKey')"
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_SortKey": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "runAfter": {
+                "Filter_Messages_By_Period": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_10_Get_Channel_Messages": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_40_Sort_Meetings": {
+          "type": "Scope",
+          "actions": {
+            "Sort_Meetings": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varSortedMeetings",
+                "value": "@sort(variables('varMeetings'), 'sortKey')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Scope_20_Process_Meetings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_50_Build_Word_Content": {
+          "type": "Scope",
+          "actions": {
+            "Append_DocumentHtml_Header": {
+              "type": "AppendToStringVariable",
+              "inputs": {
+                "name": "varDocumentHtml",
+                "value": "<html><head><meta charset=\"utf-8\"><style>@page { size: A4; margin: 20mm; } body { font-family: \"Yu Gothic\",\"Meiryo\",sans-serif; font-size: 10.5pt; } .page-break { page-break-before: always; } .meeting-title { font-size: 16pt; font-weight: bold; } .label { font-weight: bold; } .attachment-list { margin-top: 8px; }</style></head><body>"
+              },
+              "runAfter": {}
+            },
+            "Apply_To_Each_Sorted_Meeting": {
+              "type": "Foreach",
+              "foreach": "@variables('varSortedMeetings')",
+              "actions": {
+                "Condition_Insert_Page_Break": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "greater": [
+                          "@variables('varMeetingIndex')",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Append_Page_Break": {
+                      "type": "AppendToStringVariable",
+                      "inputs": {
+                        "name": "varDocumentHtml",
+                        "value": "<div style=\"page-break-before: always;\"></div>"
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Escape_Ampersand": {
+                  "type": "Compose",
+                  "inputs": "@replace(coalesce(item()?['bodyText'], ''), '&', '&amp;')",
+                  "runAfter": {
+                    "Condition_Insert_Page_Break": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Escape_LessThan": {
+                  "type": "Compose",
+                  "inputs": "@replace(coalesce(outputs('Escape_Ampersand'), ''), '<', '&lt;')",
+                  "runAfter": {
+                    "Escape_Ampersand": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Escape_GreaterThan": {
+                  "type": "Compose",
+                  "inputs": "@replace(coalesce(outputs('Escape_LessThan'), ''), '>', '&gt;')",
+                  "runAfter": {
+                    "Escape_LessThan": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Escape_DoubleQuote": {
+                  "type": "Compose",
+                  "inputs": "@replace(coalesce(outputs('Escape_GreaterThan'), ''), '\"', '&quot;')",
+                  "runAfter": {
+                    "Escape_GreaterThan": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Escape_SingleQuote": {
+                  "type": "Compose",
+                  "inputs": "@replace(coalesce(outputs('Escape_DoubleQuote'), ''), '''', '&#39;')",
+                  "runAfter": {
+                    "Escape_DoubleQuote": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Body_With_Breaks": {
+                  "type": "Compose",
+                  "inputs": "@replace(replace(outputs('Escape_SingleQuote'), decodeUriComponent('%0D%0A'), '<br>'), decodeUriComponent('%0A'), '<br>')",
+                  "runAfter": {
+                    "Escape_SingleQuote": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Meeting_Header_Html": {
+                  "type": "Compose",
+                  "inputs": "@concat('<div class=\"meeting-title\">', formatDateTime(item()?['meetingDate'], 'yyyy年M月d日'), '（', substring('日月火水木金土', dayOfWeek(item()?['meetingDate']), 1), '）</div>', '<div><span class=\"label\">投稿者：</span>', item()?['author'], '</div>', '<div><span class=\"label\">主催者：</span>', item()?['organizer'], '</div>', '<div><span class=\"label\">投稿日時：</span>', item()?['postedDateTimeJst'], '</div>', '<div><span class=\"label\">内容：</span></div>', '<div>', outputs('Compose_Body_With_Breaks'), '</div>', '<div class=\"attachment-list\"><span class=\"label\">添付ファイル：</span></div>')",
+                  "runAfter": {
+                    "Compose_Body_With_Breaks": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Append_Meeting_Header_Html": {
+                  "type": "AppendToStringVariable",
+                  "inputs": {
+                    "name": "varDocumentHtml",
+                    "value": "@outputs('Compose_Meeting_Header_Html')"
+                  },
+                  "runAfter": {
+                    "Compose_Meeting_Header_Html": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Condition_Has_Attachments": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "greater": [
+                          "@length(coalesce(item()?['attachments'], json('[]')))",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Apply_To_Each_Saved_Attachment": {
+                      "type": "Foreach",
+                      "foreach": "@coalesce(items('Apply_To_Each_Sorted_Meeting')?['attachments'], json('[]'))",
+                      "actions": {
+                        "Condition_Attachment_Saved": {
+                          "type": "If",
+                          "expression": {
+                            "and": [
+                              {
+                                "greater": [
+                                  "@length(coalesce(item()?['savedFileUrl'], ''))",
+                                  0
+                                ]
+                              }
+                            ]
+                          },
+                          "actions": {
+                            "Append_Attachment_Html": {
+                              "type": "AppendToStringVariable",
+                              "inputs": {
+                                "name": "varDocumentHtml",
+                                "value": "@concat('<div><a href=\"', replace(coalesce(item()?['savedFileUrl'], ''), '&', '&amp;'), '\">', replace(replace(replace(replace(replace(coalesce(item()?['savedName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</a></div>')"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {
+                              "Append_Attachment_Failed_Html": {
+                                "type": "AppendToStringVariable",
+                                "inputs": {
+                                  "name": "varDocumentHtml",
+                                  "value": "@concat('<div>', replace(replace(replace(replace(replace(coalesce(item()?['originalName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), if(equals(coalesce(item()?['status'], ''), 'Failed'), '（保存失敗）', '（テスト実行のため未保存）'), '</div>')"
+                                },
+                                "runAfter": {}
+                              }
+                            }
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Append_No_Attachments_Html": {
+                        "type": "AppendToStringVariable",
+                        "inputs": {
+                          "name": "varDocumentHtml",
+                          "value": "<div>添付ファイルなし</div>"
+                        },
+                        "runAfter": {}
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Append_Meeting_Header_Html": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Increment_MeetingIndex": {
+                  "type": "IncrementVariable",
+                  "inputs": {
+                    "name": "varMeetingIndex",
+                    "value": 1
+                  },
+                  "runAfter": {
+                    "Condition_Has_Attachments": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "runAfter": {
+                "Append_DocumentHtml_Header": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Append_DocumentHtml_Footer": {
+              "type": "AppendToStringVariable",
+              "inputs": {
+                "name": "varDocumentHtml",
+                "value": "</body></html>"
+              },
+              "runAfter": {
+                "Apply_To_Each_Sorted_Meeting": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_40_Sort_Meetings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_60_Create_Archive_File": {
+          "type": "Scope",
+          "actions": {
+            "Compose_ArchiveFileName": {
+              "type": "Compose",
+              "inputs": "@concat('課内会議総括_', formatDateTime(convertFromUtc(utcNow(), 'Tokyo Standard Time'), 'yyyyMMdd_HHmmss'), '.doc')",
+              "runAfter": {}
+            },
+            "Condition_DryRun_Archive": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@coalesce(triggerBody()?['DryRun'], true)",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Set_ArchiveUrl_DryRun": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varArchiveUrl",
+                    "value": "(DryRun: 総括Wordファイルは作成していません。DryRun=いいえで実行してください)"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {
+                  "Create_Archive_Document": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "parameters": {
+                        "dataset": "@variables('varSiteAddress')",
+                        "folderPath": "@concat('/', variables('varLibrary'), '/', variables('varDestinationPath'))",
+                        "name": "@outputs('Compose_ArchiveFileName')",
+                        "body": "@variables('varDocumentHtml')"
+                      },
+                      "host": {
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "CreateFile"
+                      },
+                      "authentication": {
+                        "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                        "type": "Raw"
+                      }
+                    },
+                    "runAfter": {}
+                  },
+                  "Set_ArchiveUrl": {
+                    "type": "SetVariable",
+                    "inputs": {
+                      "name": "varArchiveUrl",
+                      "value": "@replace(concat(variables('varSiteAddress'), '/', variables('varLibrary'), '/', variables('varDestinationPath'), '/', outputs('Compose_ArchiveFileName')), ' ', '%20')"
+                    },
+                    "runAfter": {
+                      "Create_Archive_Document": [
+                        "Succeeded"
+                      ]
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Compose_ArchiveFileName": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_50_Build_Word_Content": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_70_Write_Run_Log": {
+          "type": "Scope",
+          "actions": {
+            "Set_RunStatus_Success": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varRunStatus",
+                "value": "Success"
+              },
+              "runAfter": {}
+            },
+            "Compose_RunLog_Body": {
+              "type": "Compose",
+              "inputs": {
+                "Title": "@concat(variables('varRunId'), '_summary')",
+                "RunId": "@variables('varRunId')",
+                "FlowName": "PA_Migrate_Teams_Meeting_Archive_To_SPO",
+                "Level": "Info",
+                "MeetingCount": "@length(variables('varSortedMeetings'))",
+                "SavedCount": "@variables('varSavedCount')",
+                "SkippedCount": "@variables('varSkippedCount')",
+                "FailedCount": "@variables('varFailedCount')",
+                "ArchiveUrl": "@variables('varArchiveUrl')",
+                "Status": "@variables('varRunStatus')",
+                "OccurredDateTimeUtc": "@utcNow()"
+              },
+              "runAfter": {
+                "Set_RunStatus_Success": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Create_Run_Log": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/getbytitle(''', variables('varRunLogList'), ''')/items')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata"
+                  },
+                  "parameters/body": "@string(outputs('Compose_RunLog_Body'))"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": {
+                  "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                  "type": "Raw"
+                }
+              },
+              "runAfter": {
+                "Compose_RunLog_Body": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_60_Create_Archive_File": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_90_Catch": {
+          "type": "Scope",
+          "actions": {
+            "Set_RunStatus_Failed": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varRunStatus",
+                "value": "Failed"
+              },
+              "runAfter": {}
+            },
+            "Set_ErrorMessage": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varErrorMessage",
+                "value": "@concat('実行中にエラーが発生しました。RunId=', variables('varRunId'))"
+              },
+              "runAfter": {
+                "Set_RunStatus_Failed": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_ErrorLog_Body": {
+              "type": "Compose",
+              "inputs": {
+                "Title": "@concat(variables('varRunId'), '_error')",
+                "RunId": "@variables('varRunId')",
+                "FlowName": "PA_Migrate_Teams_Meeting_Archive_To_SPO",
+                "Level": "Error",
+                "ErrorMessage": "@variables('varErrorMessage')",
+                "Status": "Failed",
+                "OccurredDateTimeUtc": "@utcNow()"
+              },
+              "runAfter": {
+                "Set_ErrorMessage": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Create_Error_Log": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/getbytitle(''', variables('varRunLogList'), ''')/items')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata"
+                  },
+                  "parameters/body": "@string(outputs('Compose_ErrorLog_Body'))"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": {
+                  "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                  "type": "Raw"
+                }
+              },
+              "runAfter": {
+                "Compose_ErrorLog_Body": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_70_Write_Run_Log": [
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        },
+        "Scope_99_Finally": {
+          "type": "Scope",
+          "actions": {
+            "Compose_Finally_Summary": {
+              "type": "Compose",
+              "inputs": {
+                "RunId": "@variables('varRunId')",
+                "Status": "@variables('varRunStatus')",
+                "MeetingCount": "@length(variables('varSortedMeetings'))",
+                "SavedCount": "@variables('varSavedCount')",
+                "SkippedCount": "@variables('varSkippedCount')",
+                "FailedCount": "@variables('varFailedCount')",
+                "ArchiveUrl": "@variables('varArchiveUrl')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Scope_90_Catch": [
+              "Succeeded",
+              "Skipped",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    },
+    "connectionReferences": {
+      "shared_teams": {
+        "connectionName": "a4d41dc235a94baabc21472cf2b9f1f6",
+        "source": "Invoker",
+        "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+        "tier": "NotSpecified",
+        "apiName": "teams"
+      },
+      "shared_sharepointonline": {
+        "connectionName": "85cb934055e9451b87540f3057dac4f4",
+        "source": "Invoker",
+        "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+        "tier": "NotSpecified",
+        "apiName": "sharepointonline"
+      },
+      "shared_conversionservice": {
+        "connectionName": "0c025702194947bdb1ba4db7b58b5d30",
+        "source": "Invoker",
+        "id": "/providers/Microsoft.PowerApps/apis/shared_conversionservice",
+        "tier": "NotSpecified",
+        "apiName": "conversionservice"
+      }
+    },
+    "flowFailureAlertSubscribed": false,
+    "isManaged": false
+  }
+}

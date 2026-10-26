@@ -1,0 +1,106 @@
+{
+  "schema": "1.0",
+  "details": {
+    "displayName": "PA_Migrate_Teams_Meeting_Archive_To_SPO",
+    "description": "Teams課内会議アーカイブ（単一フロー）",
+    "createdTime": "2026-07-16T00:00:00.0000000Z",
+    "packageTelemetryId": "dcf93182-0d8a-4f2e-b064-e0ed68b818d9",
+    "creator": "N/A",
+    "sourceEnvironment": ""
+  },
+  "resources": {
+    "fcca0e31-6d8b-40a8-8d63-2441c979a2c7": {
+      "type": "Microsoft.Flow/flows",
+      "suggestedCreationType": "New",
+      "creationType": "Existing, New, Update",
+      "details": {
+        "displayName": "Teams課内会議アーカイブ"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Root",
+      "dependsOn": [
+        "27ca9dc7-3d66-4026-9b2c-6291ab68a2cd",
+        "a8ff7b41-1fc0-4e5a-b4ce-6d521139c5d1",
+        "96a41f5e-d19e-4c3f-a873-5e37a6819a5e",
+        "29a8d7aa-01ea-4a61-88fb-7adad921d7fc",
+        "eb4515c8-8e9c-40cb-a7f9-2b3da20c720a",
+        "49df2bda-5f3d-45c2-a7ad-9cd62a6fa452"
+      ]
+    },
+    "27ca9dc7-3d66-4026-9b2c-6291ab68a2cd": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+      "name": "shared_teams",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "Microsoft Teams"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "a8ff7b41-1fc0-4e5a-b4ce-6d521139c5d1": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "Microsoft Teams への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "27ca9dc7-3d66-4026-9b2c-6291ab68a2cd"
+      ]
+    },
+    "96a41f5e-d19e-4c3f-a873-5e37a6819a5e": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "name": "shared_sharepointonline",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "SharePoint"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "29a8d7aa-01ea-4a61-88fb-7adad921d7fc": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "SharePoint への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "96a41f5e-d19e-4c3f-a873-5e37a6819a5e"
+      ]
+    },
+    "eb4515c8-8e9c-40cb-a7f9-2b3da20c720a": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_conversionservice",
+      "name": "shared_conversionservice",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "Content Conversion"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "49df2bda-5f3d-45c2-a7ad-9cd62a6fa452": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "Content Conversion への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "eb4515c8-8e9c-40cb-a7f9-2b3da20c720a"
+      ]
+    }
+  }
+}

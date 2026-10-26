@@ -1,0 +1,2685 @@
+{
+  "name": "6b41d9c2-8e07-4a35-9f16-2c58e0b7d34a",
+  "id": "/providers/Microsoft.Flow/flows/6b41d9c2-8e07-4a35-9f16-2c58e0b7d34a",
+  "type": "Microsoft.Flow/flows",
+  "properties": {
+    "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+    "displayName": "SharePointリスト新規作成＋初期化（既存リスト保護）",
+    "definition": {
+      "metadata": {
+        "creator": {},
+        "provisioningMethod": "FromDefinition",
+        "creationSource": "Portal",
+        "modifiedSources": "Portal"
+      },
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "SharePointUrl": {
+                  "title": "SharePointサイトまたはリスト一覧URL",
+                  "type": "string",
+                  "description": "例: https://{tenant}.sharepoint.com/sites/{siteName} または .../_layouts/15/viewlsts.aspx"
+                },
+                "ListName": {
+                  "title": "作成するリスト名",
+                  "type": "string",
+                  "description": "作成するリストの名前。同名リストが既に存在する場合は何も作成しません"
+                },
+                "ListDescription": {
+                  "title": "リストの説明",
+                  "type": "string",
+                  "description": "省略時は「Power Automateにより作成された初期化済みリスト」が設定されます"
+                }
+              },
+              "required": [
+                "SharePointUrl",
+                "ListName"
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Initialize_Input_SharePointUrl": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInputSharePointUrl",
+                "type": "string",
+                "value": "@trim(coalesce(triggerBody()?['SharePointUrl'], ''))"
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialize_SiteUrl": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSiteUrl",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Input_SharePointUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SiteId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSiteId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SiteUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SiteTitle": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSiteTitle",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SiteId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_VerifiedUrl": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varVerifiedUrl",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SiteTitle": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ListName": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varListName",
+                "type": "string",
+                "value": "@trim(coalesce(triggerBody()?['ListName'], ''))"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_VerifiedUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ListDescription": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varListDescription",
+                "type": "string",
+                "value": "@if(empty(trim(coalesce(triggerBody()?['ListDescription'], ''))), 'Power Automateにより作成された初期化済みリスト', trim(coalesce(triggerBody()?['ListDescription'], '')))"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ListName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ExistingLists": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varExistingLists",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ListDescription": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_MatchedLists": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMatchedLists",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ExistingLists": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ListExists": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varListExists",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MatchedLists": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_CreatedListId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varCreatedListId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ListExists": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_CreatedListTitle": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varCreatedListTitle",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_CreatedListId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_CreatedListRootFolder": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varCreatedListRootFolder",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_CreatedListTitle": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_CreatedInThisRun": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varCreatedInThisRun",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_CreatedListRootFolder": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_DeletedFields": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varDeletedFields",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_CreatedInThisRun": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SkippedFields": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSkippedFields",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_DeletedFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_FieldDeleteErrors": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFieldDeleteErrors",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SkippedFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_DefaultViewId": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varDefaultViewId",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_FieldDeleteErrors": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_DefaultViewTitle": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varDefaultViewTitle",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_DefaultViewId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_FinalViewFields": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFinalViewFields",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_DefaultViewTitle": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_Status": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varStatus",
+                "type": "string",
+                "value": "NotStarted"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_FinalViewFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ResultObject": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varResultObject",
+                "type": "object",
+                "value": "@json('{}')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ResultJson": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varResultJson",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ResultObject": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ErrorMessages": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varErrorMessages",
+                "type": "array",
+                "value": "@json('[]')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ResultJson": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_IsValid": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varIsValid",
+                "type": "boolean",
+                "value": true
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ErrorMessages": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_Stage": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varStage",
+                "type": "string",
+                "value": "Initialize"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_IsValid": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ErrorCode": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varErrorCode",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Stage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ErrorMessage": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varErrorMessage",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ErrorCode": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_LastStatusCode": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLastStatusCode",
+                "type": "string",
+                "value": "0"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_RollbackPerformed": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varRollbackPerformed",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_LastStatusCode": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ItemCount": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varItemCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RollbackPerformed": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SampleRawCreated": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSampleRawCreated",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ItemCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ExistingListInfo": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varExistingListInfo",
+                "type": "object",
+                "value": "@json('{}')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SampleRawCreated": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Parse_And_Validate_Input": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Parse_Input": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "ParseAndValidateInput"
+              },
+              "runAfter": {}
+            },
+            "Compose_Url_Without_Fragment": {
+              "type": "Compose",
+              "inputs": "@first(split(variables('varInputSharePointUrl'), '#'))",
+              "runAfter": {
+                "Set_Stage_Parse_Input": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Url_Normalized_Layouts": {
+              "type": "Compose",
+              "inputs": "@replace(replace(outputs('Compose_Url_Without_Fragment'), '/_Layouts/', '/_layouts/'), '/_LAYOUTS/', '/_layouts/')",
+              "runAfter": {
+                "Compose_Url_Without_Fragment": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Url_Before_Layouts": {
+              "type": "Compose",
+              "inputs": "@if(contains(outputs('Compose_Url_Normalized_Layouts'), '/_layouts/'), first(split(outputs('Compose_Url_Normalized_Layouts'), '/_layouts/')), first(split(outputs('Compose_Url_Normalized_Layouts'), '?')))",
+              "runAfter": {
+                "Compose_Url_Normalized_Layouts": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Parse_SiteUrl": {
+              "type": "Compose",
+              "inputs": "@if(endsWith(outputs('Compose_Url_Before_Layouts'), '/'), join(take(split(outputs('Compose_Url_Before_Layouts'), '/'), sub(length(split(outputs('Compose_Url_Before_Layouts'), '/')), 1)), '/'), outputs('Compose_Url_Before_Layouts'))",
+              "runAfter": {
+                "Compose_Url_Before_Layouts": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Site_Host": {
+              "type": "Compose",
+              "inputs": "@first(split(last(split(outputs('Parse_SiteUrl'), '//')), '/'))",
+              "runAfter": {
+                "Parse_SiteUrl": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_ListName_Sanitized": {
+              "type": "Compose",
+              "inputs": "@replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(variables('varListName'), '\"', ''), '#', ''), '%', ''), '*', ''), ':', ''), '<', ''), '>', ''), '?', ''), '/', ''), '\\', ''), '|', ''), '{', ''), '}', ''), '~', ''), decodeUriComponent('%09'), ''), decodeUriComponent('%0D'), ''), decodeUriComponent('%0A'), '')",
+              "runAfter": {
+                "Compose_Site_Host": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Validate_SiteUrl": {
+              "type": "Compose",
+              "inputs": "@if(empty(variables('varInputSharePointUrl')), 'ERR_URL_EMPTY', if(not(startsWith(outputs('Parse_SiteUrl'), 'https://')), 'ERR_NOT_HTTPS', if(not(endsWith(outputs('Compose_Site_Host'), '.sharepoint.com')), 'ERR_NOT_SHAREPOINT_HOST', if(empty(outputs('Parse_SiteUrl')), 'ERR_SITE_URL_NOT_EXTRACTED', ''))))",
+              "runAfter": {
+                "Compose_ListName_Sanitized": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Validate_ListName": {
+              "type": "Compose",
+              "inputs": "@if(empty(variables('varListName')), 'ERR_LIST_NAME_EMPTY', if(greater(length(variables('varListName')), 255), 'ERR_LIST_NAME_TOO_LONG', if(not(equals(length(variables('varListName')), length(outputs('Compose_ListName_Sanitized')))), 'ERR_LIST_NAME_INVALID_CHARS', if(startsWith(variables('varListName'), '.'), 'ERR_LIST_NAME_INVALID_PERIOD', if(endsWith(variables('varListName'), '.'), 'ERR_LIST_NAME_INVALID_PERIOD', if(contains(createArray('con', 'prn', 'aux', 'nul', 'forms', '_catalogs', '_private', '_vti_bin', '_vti_pvt', '_vti_cnf', 'app packages', 'appdata'), toLower(variables('varListName'))), 'ERR_LIST_NAME_RESERVED', ''))))))",
+              "runAfter": {
+                "Validate_SiteUrl": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Input_Validation_Code": {
+              "type": "Compose",
+              "inputs": "@if(not(empty(outputs('Validate_SiteUrl'))), outputs('Validate_SiteUrl'), outputs('Validate_ListName'))",
+              "runAfter": {
+                "Validate_ListName": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_SiteUrl": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varSiteUrl",
+                "value": "@outputs('Parse_SiteUrl')"
+              },
+              "runAfter": {
+                "Compose_Input_Validation_Code": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_ErrorCode_From_Input_Validation": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varErrorCode",
+                "value": "@outputs('Compose_Input_Validation_Code')"
+              },
+              "runAfter": {
+                "Set_SiteUrl": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_IsValid_From_Input_Validation": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varIsValid",
+                "value": "@empty(outputs('Compose_Input_Validation_Code'))"
+              },
+              "runAfter": {
+                "Set_ErrorCode_From_Input_Validation": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_ErrorMessage_From_Input_Validation": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varErrorMessage",
+                "value": "@if(equals(variables('varErrorCode'), 'ERR_URL_EMPTY'), 'SharePointのURLが入力されていません。', if(equals(variables('varErrorCode'), 'ERR_NOT_HTTPS'), 'URLが https:// で始まっていません。', if(equals(variables('varErrorCode'), 'ERR_NOT_SHAREPOINT_HOST'), 'SharePointのURLではありません（ホスト名が .sharepoint.com で終わっていません）。', if(equals(variables('varErrorCode'), 'ERR_SITE_URL_NOT_EXTRACTED'), 'URLからサイトURLを抽出できませんでした。', if(equals(variables('varErrorCode'), 'ERR_LIST_NAME_EMPTY'), 'リスト名が入力されていません（前後の空白を除くと空になります）。', if(equals(variables('varErrorCode'), 'ERR_LIST_NAME_TOO_LONG'), 'リスト名が長すぎます（255文字以内にしてください）。', if(equals(variables('varErrorCode'), 'ERR_LIST_NAME_INVALID_CHARS'), 'リスト名にSharePointで使用できない文字または制御文字が含まれています。', if(equals(variables('varErrorCode'), 'ERR_LIST_NAME_INVALID_PERIOD'), 'リスト名の先頭または末尾にピリオドは使用できません。', if(equals(variables('varErrorCode'), 'ERR_LIST_NAME_RESERVED'), 'リスト名がSharePointの予約名に該当します。', '')))))))))"
+              },
+              "runAfter": {
+                "Set_IsValid_From_Input_Validation": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Condition_Has_Input_Error": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      false
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Append_Input_Error_Message": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varErrorMessages",
+                    "value": "@concat(variables('varErrorCode'), ': ', variables('varErrorMessage'))"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "runAfter": {
+                "Set_ErrorMessage_From_Input_Validation": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_ExistingListInfo": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Verify_SharePoint_Site": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Verify_Site": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "VerifySharePointSite"
+              },
+              "runAfter": {}
+            },
+            "Condition_Input_Is_Valid": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Verify_SharePoint_Web": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web?$select=Id,Title,Url",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Set_Site_Status_Code": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varLastStatusCode",
+                    "value": "@string(coalesce(outputs('Verify_SharePoint_Web')?['statusCode'], 0))"
+                  },
+                  "runAfter": {
+                    "Verify_SharePoint_Web": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Store_Site_Id": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varSiteId",
+                    "value": "@trim(string(coalesce(body('Verify_SharePoint_Web')?['Id'], '')))"
+                  },
+                  "runAfter": {
+                    "Verify_SharePoint_Web": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Store_Site_Title": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varSiteTitle",
+                    "value": "@trim(string(coalesce(body('Verify_SharePoint_Web')?['Title'], '')))"
+                  },
+                  "runAfter": {
+                    "Store_Site_Id": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Store_Verified_Url": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varVerifiedUrl",
+                    "value": "@trim(string(coalesce(body('Verify_SharePoint_Web')?['Url'], '')))"
+                  },
+                  "runAfter": {
+                    "Store_Site_Title": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Verify_Site": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Parse_And_Validate_Input": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Check_Existing_List": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Check_Existing": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "CheckExistingList"
+              },
+              "runAfter": {}
+            },
+            "Condition_Check_Guard": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Get_All_Lists": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/lists?$select=Id,Title,Hidden,BaseTemplate,RootFolder/ServerRelativeUrl&$expand=RootFolder&$top=5000",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Store_Existing_Lists": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varExistingLists",
+                    "value": "@coalesce(body('Get_All_Lists')?['value'], json('[]'))"
+                  },
+                  "runAfter": {
+                    "Get_All_Lists": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Filter_Matching_List_Names": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@variables('varExistingLists')",
+                    "where": "@equals(toLower(trim(coalesce(item()?['Title'], ''))), toLower(trim(variables('varListName'))))"
+                  },
+                  "runAfter": {
+                    "Store_Existing_Lists": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Store_Matched_Lists": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varMatchedLists",
+                    "value": "@body('Filter_Matching_List_Names')"
+                  },
+                  "runAfter": {
+                    "Filter_Matching_List_Names": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Determine_List_Existence": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varListExists",
+                    "value": "@greater(length(variables('varMatchedLists')), 0)"
+                  },
+                  "runAfter": {
+                    "Store_Matched_Lists": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Check_Existing": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Verify_SharePoint_Site": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Create_List": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Create_List": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "CreateList"
+              },
+              "runAfter": {}
+            },
+            "Condition_List_Not_Exists": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varListExists')",
+                      false
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_Create_List_Body": {
+                  "type": "Compose",
+                  "inputs": {
+                    "__metadata": {
+                      "type": "SP.List"
+                    },
+                    "AllowContentTypes": false,
+                    "BaseTemplate": 100,
+                    "ContentTypesEnabled": false,
+                    "Description": "@variables('varListDescription')",
+                    "Title": "@variables('varListName')"
+                  },
+                  "runAfter": {}
+                },
+                "Create_Generic_List": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=verbose",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "@string(outputs('Compose_Create_List_Body'))"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_Create_List_Body": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_Create_Status_Code": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varLastStatusCode",
+                    "value": "@string(coalesce(outputs('Create_Generic_List')?['statusCode'], 0))"
+                  },
+                  "runAfter": {
+                    "Create_Generic_List": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Condition_Create_Succeeded": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "greaterOrEquals": [
+                          "@int(variables('varLastStatusCode'))",
+                          200
+                        ]
+                      },
+                      {
+                        "lessOrEquals": [
+                          "@int(variables('varLastStatusCode'))",
+                          299
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Store_Created_List_Id": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varCreatedListId",
+                        "value": "@trim(string(coalesce(body('Create_Generic_List')?['d']?['Id'], '')))"
+                      },
+                      "runAfter": {}
+                    },
+                    "Store_Created_List_Title": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varCreatedListTitle",
+                        "value": "@trim(string(coalesce(body('Create_Generic_List')?['d']?['Title'], '')))"
+                      },
+                      "runAfter": {
+                        "Store_Created_List_Id": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Set_Created_In_This_Run": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varCreatedInThisRun",
+                        "value": true
+                      },
+                      "runAfter": {
+                        "Store_Created_List_Title": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Get_Created_List_By_Id": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@variables('varSiteUrl')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')?$select=Id,Title&$expand=RootFolder')",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {
+                        "Set_Created_In_This_Run": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Store_Created_List_RootFolder": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varCreatedListRootFolder",
+                        "value": "@trim(string(coalesce(body('Get_Created_List_By_Id')?['RootFolder']?['ServerRelativeUrl'], '')))"
+                      },
+                      "runAfter": {
+                        "Get_Created_List_By_Id": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Set_Status_Created_Pending": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varStatus",
+                        "value": "CreatedPendingInitialization"
+                      },
+                      "runAfter": {
+                        "Store_Created_List_RootFolder": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Set_Create_Status_Code": [
+                      "Succeeded"
+                    ]
+                  },
+                  "else": {
+                    "actions": {
+                      "Set_Status_Conflict": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varStatus",
+                          "value": "AlreadyExistsOrConflict"
+                        },
+                        "runAfter": {}
+                      },
+                      "Set_ErrorCode_Conflict": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varErrorCode",
+                          "value": "ERR_CREATE_CONFLICT"
+                        },
+                        "runAfter": {
+                          "Set_Status_Conflict": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Set_ErrorMessage_Conflict": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varErrorMessage",
+                          "value": "リストの作成に失敗しました（他の実行が同名リストを作成した可能性があります）。既存リストには一切変更を加えていません。"
+                        },
+                        "runAfter": {
+                          "Set_ErrorCode_Conflict": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Set_IsValid_Conflict": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varIsValid",
+                          "value": false
+                        },
+                        "runAfter": {
+                          "Set_ErrorMessage_Conflict": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Append_Conflict_Message": {
+                        "type": "AppendToArrayVariable",
+                        "inputs": {
+                          "name": "varErrorMessages",
+                          "value": "@concat('ERR_CREATE_CONFLICT: httpStatusCode=', variables('varLastStatusCode'))"
+                        },
+                        "runAfter": {
+                          "Set_IsValid_Conflict": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Create_List": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Check_Existing_List": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Initialize_List": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Initialize_List": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "InitializeList"
+              },
+              "runAfter": {}
+            },
+            "Condition_Initialize_Guard": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varCreatedInThisRun')",
+                      true
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_Disable_Attachments_Body": {
+                  "type": "Compose",
+                  "inputs": {
+                    "__metadata": {
+                      "type": "SP.List"
+                    },
+                    "EnableAttachments": false
+                  },
+                  "runAfter": {}
+                },
+                "Compose_Title_Not_Required_Body": {
+                  "type": "Compose",
+                  "inputs": {
+                    "Required": false
+                  },
+                  "runAfter": {
+                    "Compose_Disable_Attachments_Body": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Verify_Empty_List": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/ItemCount')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_Title_Not_Required_Body": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Store_Item_Count": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varItemCount",
+                    "value": "@int(coalesce(body('Verify_Empty_List')?['value'], 0))"
+                  },
+                  "runAfter": {
+                    "Verify_Empty_List": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Condition_List_Is_Empty": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [
+                          "@variables('varItemCount')",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Disable_Attachments": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@variables('varSiteUrl')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')')",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=verbose",
+                            "Content-Type": "application/json;odata=verbose",
+                            "IF-MATCH": "*",
+                            "X-HTTP-Method": "MERGE"
+                          },
+                          "parameters/body": "@string(outputs('Compose_Disable_Attachments_Body'))"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "Deactivate_Title_Required": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@variables('varSiteUrl')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/fields/getbyinternalnameortitle(''Title'')')",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "IF-MATCH": "*",
+                            "X-HTTP-Method": "MERGE"
+                          },
+                          "parameters/body": "@string(outputs('Compose_Title_Not_Required_Body'))"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {
+                        "Disable_Attachments": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Store_Item_Count": [
+                      "Succeeded"
+                    ]
+                  },
+                  "else": {
+                    "actions": {
+                      "Set_ErrorCode_List_Not_Empty": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varErrorCode",
+                          "value": "ERR_LIST_NOT_EMPTY"
+                        },
+                        "runAfter": {}
+                      },
+                      "Set_ErrorMessage_List_Not_Empty": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varErrorMessage",
+                          "value": "作成直後のリストにアイテムが存在します。異常のため初期化を中止しました（アイテムの削除は行いません）。"
+                        },
+                        "runAfter": {
+                          "Set_ErrorCode_List_Not_Empty": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Set_IsValid_List_Not_Empty": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varIsValid",
+                          "value": false
+                        },
+                        "runAfter": {
+                          "Set_ErrorMessage_List_Not_Empty": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Append_List_Not_Empty_Message": {
+                        "type": "AppendToArrayVariable",
+                        "inputs": {
+                          "name": "varErrorMessages",
+                          "value": "@concat('ERR_LIST_NOT_EMPTY: itemCount=', string(variables('varItemCount')))"
+                        },
+                        "runAfter": {
+                          "Set_IsValid_List_Not_Empty": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Initialize_List": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Create_List": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Delete_Deletable_Fields": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Delete_Fields": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "DeleteDeletableFields"
+              },
+              "runAfter": {}
+            },
+            "Condition_Delete_Fields_Guard": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varCreatedInThisRun')",
+                      true
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Get_All_List_Fields": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/fields?$select=Id,Title,InternalName,StaticName,CanBeDeleted,Hidden,ReadOnlyField,Sealed,FromBaseType,Required,TypeAsString')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Filter_Deletable_Fields": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@coalesce(body('Get_All_List_Fields')?['value'], json('[]'))",
+                    "where": "@and(equals(coalesce(item()?['CanBeDeleted'], false), true), not(equals(coalesce(item()?['InternalName'], ''), 'sample_raw')))"
+                  },
+                  "runAfter": {
+                    "Get_All_List_Fields": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Filter_System_Fields": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@coalesce(body('Get_All_List_Fields')?['value'], json('[]'))",
+                    "where": "@equals(coalesce(item()?['CanBeDeleted'], false), false)"
+                  },
+                  "runAfter": {
+                    "Filter_Deletable_Fields": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Apply_to_each_SystemField": {
+                  "type": "Foreach",
+                  "foreach": "@body('Filter_System_Fields')",
+                  "actions": {
+                    "Append_Skipped_System_Field": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varSkippedFields",
+                        "value": {
+                          "internalName": "@coalesce(items('Apply_to_each_SystemField')?['InternalName'], '')",
+                          "title": "@coalesce(items('Apply_to_each_SystemField')?['Title'], '')",
+                          "typeAsString": "@coalesce(items('Apply_to_each_SystemField')?['TypeAsString'], '')",
+                          "reason": "CanBeDeleted=false のため削除しない（既定ビューからは除外済み。フォームからの非表示化は未実施）"
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
+                  "runAfter": {
+                    "Filter_System_Fields": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Apply_to_each_DeleteField": {
+                  "type": "Foreach",
+                  "foreach": "@body('Filter_Deletable_Fields')",
+                  "actions": {
+                    "Delete_Deletable_Field": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@variables('varSiteUrl')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/fields(guid''', items('Apply_to_each_DeleteField')?['Id'], ''')/deleteObject()')",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "Append_Deleted_Field": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varDeletedFields",
+                        "value": {
+                          "id": "@coalesce(items('Apply_to_each_DeleteField')?['Id'], '')",
+                          "internalName": "@coalesce(items('Apply_to_each_DeleteField')?['InternalName'], '')",
+                          "title": "@coalesce(items('Apply_to_each_DeleteField')?['Title'], '')",
+                          "typeAsString": "@coalesce(items('Apply_to_each_DeleteField')?['TypeAsString'], '')"
+                        }
+                      },
+                      "runAfter": {
+                        "Delete_Deletable_Field": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Append_Field_Delete_Error": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varFieldDeleteErrors",
+                        "value": {
+                          "internalName": "@coalesce(items('Apply_to_each_DeleteField')?['InternalName'], '')",
+                          "title": "@coalesce(items('Apply_to_each_DeleteField')?['Title'], '')",
+                          "httpStatusCode": "@string(coalesce(outputs('Delete_Deletable_Field')?['statusCode'], 0))"
+                        }
+                      },
+                      "runAfter": {
+                        "Delete_Deletable_Field": [
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
+                  "runAfter": {
+                    "Apply_to_each_SystemField": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Delete_Fields": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Initialize_List": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Create_SampleRaw_Field": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Create_SampleRaw": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "CreateSampleRawField"
+              },
+              "runAfter": {}
+            },
+            "Condition_Create_SampleRaw_Guard": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varCreatedInThisRun')",
+                      true
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_SampleRaw_Field_Body": {
+                  "type": "Compose",
+                  "inputs": {
+                    "parameters": {
+                      "__metadata": {
+                        "type": "SP.XmlSchemaFieldCreationInformation"
+                      },
+                      "SchemaXml": "<Field Type=\"Note\" Name=\"sample_raw\" StaticName=\"sample_raw\" DisplayName=\"sample_raw\" Required=\"FALSE\" NumLines=\"12\" RichText=\"TRUE\" RichTextMode=\"FullHtml\" IsolateStyles=\"TRUE\" RestrictedMode=\"FALSE\" AppendOnly=\"FALSE\" />",
+                      "Options": 0
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Create_SampleRaw_Field": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/fields/createFieldAsXml')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=verbose",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "@string(outputs('Compose_SampleRaw_Field_Body'))"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_SampleRaw_Field_Body": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Verify_SampleRaw_Field": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/fields/getbyinternalnameortitle(''sample_raw'')?$select=Id,Title,InternalName,StaticName,TypeAsString,Required,Hidden,ReadOnlyField,SchemaXml')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Create_SampleRaw_Field": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_SampleRaw_Verification": {
+                  "type": "Compose",
+                  "inputs": "@and(and(equals(coalesce(body('Verify_SampleRaw_Field')?['InternalName'], ''), 'sample_raw'), equals(coalesce(body('Verify_SampleRaw_Field')?['Required'], true), false)), and(equals(coalesce(body('Verify_SampleRaw_Field')?['Hidden'], true), false), and(equals(coalesce(body('Verify_SampleRaw_Field')?['TypeAsString'], ''), 'Note'), contains(coalesce(body('Verify_SampleRaw_Field')?['SchemaXml'], ''), 'RichTextMode=\"FullHtml\"'))))",
+                  "runAfter": {
+                    "Verify_SampleRaw_Field": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Condition_SampleRaw_Valid": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [
+                          "@outputs('Compose_SampleRaw_Verification')",
+                          true
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Set_SampleRaw_Created": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varSampleRawCreated",
+                        "value": true
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_SampleRaw_Verification": [
+                      "Succeeded"
+                    ]
+                  },
+                  "else": {
+                    "actions": {
+                      "Set_ErrorCode_SampleRaw_Invalid": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varErrorCode",
+                          "value": "ERR_SAMPLERAW_VERIFICATION_FAILED"
+                        },
+                        "runAfter": {}
+                      },
+                      "Set_ErrorMessage_SampleRaw_Invalid": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varErrorMessage",
+                          "value": "sample_raw列の検証に失敗しました（内部名・必須・非表示・型・リッチテキスト設定のいずれかが期待と異なります）。"
+                        },
+                        "runAfter": {
+                          "Set_ErrorCode_SampleRaw_Invalid": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Set_IsValid_SampleRaw_Invalid": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varIsValid",
+                          "value": false
+                        },
+                        "runAfter": {
+                          "Set_ErrorMessage_SampleRaw_Invalid": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Append_SampleRaw_Invalid_Message": {
+                        "type": "AppendToArrayVariable",
+                        "inputs": {
+                          "name": "varErrorMessages",
+                          "value": "@concat('ERR_SAMPLERAW_VERIFICATION_FAILED: typeAsString=', string(coalesce(body('Verify_SampleRaw_Field')?['TypeAsString'], '')))"
+                        },
+                        "runAfter": {
+                          "Set_IsValid_SampleRaw_Invalid": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Create_SampleRaw": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Delete_Deletable_Fields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Configure_Default_View": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Configure_View": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "ConfigureDefaultView"
+              },
+              "runAfter": {}
+            },
+            "Condition_Configure_View_Guard": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varCreatedInThisRun')",
+                      true
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@variables('varIsValid')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_Add_View_Field_Body": {
+                  "type": "Compose",
+                  "inputs": {
+                    "__metadata": {
+                      "type": "SP.View"
+                    },
+                    "SetAsDefaultView": true
+                  },
+                  "runAfter": {}
+                },
+                "Get_Default_View": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/views?$select=Id,Title,DefaultView,Hidden,ViewType,RowLimit')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {
+                    "Compose_Add_View_Field_Body": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Filter_Default_View": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@coalesce(body('Get_Default_View')?['value'], json('[]'))",
+                    "where": "@equals(coalesce(item()?['DefaultView'], false), true)"
+                  },
+                  "runAfter": {
+                    "Get_Default_View": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Store_Default_View_Id": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varDefaultViewId",
+                    "value": "@trim(string(coalesce(first(body('Filter_Default_View'))?['Id'], '')))"
+                  },
+                  "runAfter": {
+                    "Filter_Default_View": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Store_Default_View_Title": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varDefaultViewTitle",
+                    "value": "@trim(string(coalesce(first(body('Filter_Default_View'))?['Title'], '')))"
+                  },
+                  "runAfter": {
+                    "Store_Default_View_Id": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Condition_Default_View_Found": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "greater": [
+                          "@length(variables('varDefaultViewId'))",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Remove_All_Default_View_Fields": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@variables('varSiteUrl')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/views(guid''', variables('varDefaultViewId'), ''')/viewfields/removeAllViewFields()')",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "Add_SampleRaw_To_Default_View": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@variables('varSiteUrl')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/views(guid''', variables('varDefaultViewId'), ''')/viewfields/AddViewField(''sample_raw'')')",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=verbose",
+                            "Content-Type": "application/json;odata=verbose",
+                            "IF-MATCH": "*",
+                            "X-HTTP-Method": "MERGE"
+                          },
+                          "parameters/body": "@string(outputs('Compose_Add_View_Field_Body'))"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {
+                        "Remove_All_Default_View_Fields": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Verify_Default_View_Fields": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@variables('varSiteUrl')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')/views(guid''', variables('varDefaultViewId'), ''')/ViewFields')",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {
+                        "Add_SampleRaw_To_Default_View": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Store_Final_View_Fields": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varFinalViewFields",
+                        "value": "@coalesce(body('Verify_Default_View_Fields')?['Items'], json('[]'))"
+                      },
+                      "runAfter": {
+                        "Verify_Default_View_Fields": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Store_Default_View_Title": [
+                      "Succeeded"
+                    ]
+                  },
+                  "else": {
+                    "actions": {
+                      "Set_ErrorCode_View_Not_Found": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varErrorCode",
+                          "value": "ERR_DEFAULT_VIEW_NOT_FOUND"
+                        },
+                        "runAfter": {}
+                      },
+                      "Set_ErrorMessage_View_Not_Found": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varErrorMessage",
+                          "value": "既定ビュー（DefaultView=true）を特定できませんでした。"
+                        },
+                        "runAfter": {
+                          "Set_ErrorCode_View_Not_Found": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Set_IsValid_View_Not_Found": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varIsValid",
+                          "value": false
+                        },
+                        "runAfter": {
+                          "Set_ErrorMessage_View_Not_Found": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Append_View_Not_Found_Message": {
+                        "type": "AppendToArrayVariable",
+                        "inputs": {
+                          "name": "varErrorMessages",
+                          "value": "ERR_DEFAULT_VIEW_NOT_FOUND: DefaultView=true のビューが見つかりません"
+                        },
+                        "runAfter": {
+                          "Set_IsValid_View_Not_Found": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Configure_View": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Create_SampleRaw_Field": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Validate_Result": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Validate_Result": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "ValidateResult"
+              },
+              "runAfter": {}
+            },
+            "Condition_Validate_Guard": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varCreatedInThisRun')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_Final_Validation_Code": {
+                  "type": "Compose",
+                  "inputs": "@if(not(equals(variables('varItemCount'), 0)), 'ERR_LIST_NOT_EMPTY', if(not(equals(variables('varSampleRawCreated'), true)), 'ERR_SAMPLERAW_MISSING', if(greater(length(variables('varFieldDeleteErrors')), 0), 'ERR_FIELD_DELETE_FAILED', if(empty(variables('varDefaultViewId')), 'ERR_DEFAULT_VIEW_NOT_FOUND', if(not(equals(length(variables('varFinalViewFields')), 1)), 'ERR_VIEW_FIELDS_NOT_ONLY_SAMPLERAW', if(not(equals(string(first(variables('varFinalViewFields'))), 'sample_raw')), 'ERR_VIEW_FIELDS_NOT_ONLY_SAMPLERAW', ''))))))",
+                  "runAfter": {}
+                },
+                "Compose_Final_Error_Code": {
+                  "type": "Compose",
+                  "inputs": "@if(empty(outputs('Compose_Final_Validation_Code')), variables('varErrorCode'), outputs('Compose_Final_Validation_Code'))",
+                  "runAfter": {
+                    "Compose_Final_Validation_Code": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_Final_Error_Code": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varErrorCode",
+                    "value": "@outputs('Compose_Final_Error_Code')"
+                  },
+                  "runAfter": {
+                    "Compose_Final_Error_Code": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_Status_Final": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varStatus",
+                    "value": "@if(and(equals(variables('varIsValid'), true), empty(outputs('Compose_Final_Validation_Code'))), 'Created', 'InitializationFailed')"
+                  },
+                  "runAfter": {
+                    "Set_Final_Error_Code": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Validate_Result": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Configure_Default_View": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Handle_AlreadyExists": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_Handle_AlreadyExists": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "HandleAlreadyExists"
+              },
+              "runAfter": {}
+            },
+            "Condition_Already_Exists": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varListExists')",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Return_Already_Exists": {
+                  "type": "Compose",
+                  "inputs": {
+                    "id": "@trim(string(coalesce(first(variables('varMatchedLists'))?['Id'], '')))",
+                    "title": "@trim(string(coalesce(first(variables('varMatchedLists'))?['Title'], '')))",
+                    "hidden": "@coalesce(first(variables('varMatchedLists'))?['Hidden'], false)",
+                    "serverRelativeUrl": "@trim(string(coalesce(first(variables('varMatchedLists'))?['RootFolder']?['ServerRelativeUrl'], '')))"
+                  },
+                  "runAfter": {}
+                },
+                "Set_Existing_List_Info": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varExistingListInfo",
+                    "value": "@outputs('Return_Already_Exists')"
+                  },
+                  "runAfter": {
+                    "Return_Already_Exists": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_Status_Already_Exists": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varStatus",
+                    "value": "AlreadyExists"
+                  },
+                  "runAfter": {
+                    "Set_Existing_List_Info": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_Handle_AlreadyExists": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Validate_Result": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Handle_Error": {
+          "type": "Scope",
+          "actions": {
+            "Compose_Handler_Error_Code": {
+              "type": "Compose",
+              "inputs": "@if(not(empty(variables('varErrorCode'))), variables('varErrorCode'), if(equals(variables('varLastStatusCode'), '401'), 'ERR_PERMISSION_DENIED', if(equals(variables('varLastStatusCode'), '403'), 'ERR_PERMISSION_DENIED', if(equals(variables('varLastStatusCode'), '404'), 'ERR_SITE_OR_RESOURCE_NOT_FOUND', if(equals(variables('varLastStatusCode'), '400'), 'ERR_BAD_REQUEST', 'ERR_UNEXPECTED_FAILURE')))))",
+              "runAfter": {}
+            },
+            "Compose_Handler_Error_Message": {
+              "type": "Compose",
+              "inputs": "@if(not(empty(variables('varErrorMessage'))), variables('varErrorMessage'), if(equals(variables('varLastStatusCode'), '401'), 'SharePointへの認証に失敗しました。接続を作り直してください。', if(equals(variables('varLastStatusCode'), '403'), '対象サイトに対する権限が不足しています（サイトの参照、またはリスト・列・ビューの管理権限を確認してください）。', if(equals(variables('varLastStatusCode'), '404'), '対象のサイトまたはリソースが見つかりません。入力したURLがSharePointサイトのURLか確認してください。', if(equals(variables('varLastStatusCode'), '400'), 'SharePointへの要求が不正です。リスト名に使用できない文字が含まれていないか確認してください。', '想定外のエラーが発生しました。実行履歴で失敗したアクションを確認してください。')))))",
+              "runAfter": {
+                "Compose_Handler_Error_Code": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Handle_Error": {
+              "type": "Compose",
+              "inputs": "@union(variables('varErrorMessages'), createArray(concat('stage=', variables('varStage')), concat('httpStatusCode=', variables('varLastStatusCode')), concat('createdInThisRun=', string(variables('varCreatedInThisRun'))), concat('createdListId=', variables('varCreatedListId'))))",
+              "runAfter": {
+                "Compose_Handler_Error_Message": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_Error_Code_From_Handler": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varErrorCode",
+                "value": "@outputs('Compose_Handler_Error_Code')"
+              },
+              "runAfter": {
+                "Handle_Error": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_Error_Message_From_Handler": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varErrorMessage",
+                "value": "@outputs('Compose_Handler_Error_Message')"
+              },
+              "runAfter": {
+                "Set_Error_Code_From_Handler": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_Error_Messages_From_Handler": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varErrorMessages",
+                "value": "@outputs('Handle_Error')"
+              },
+              "runAfter": {
+                "Set_Error_Message_From_Handler": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_Status_Failed": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStatus",
+                "value": "@if(equals(variables('varCreatedInThisRun'), true), 'InitializationFailed', 'Failed')"
+              },
+              "runAfter": {
+                "Set_Error_Messages_From_Handler": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Handle_AlreadyExists": [
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        },
+        "Scope_Rollback_New_List": {
+          "type": "Scope",
+          "actions": {
+            "Condition_Rollback_Allowed": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varCreatedInThisRun')",
+                      true
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@variables('varListExists')",
+                      false
+                    ]
+                  },
+                  {
+                    "greater": [
+                      "@length(variables('varCreatedListId'))",
+                      0
+                    ]
+                  },
+                  {
+                    "not": {
+                      "equals": [
+                        "@variables('varStatus')",
+                        "Created"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "actions": {
+                "Rollback_Newly_Created_List": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "dataset": "@variables('varSiteUrl')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "@concat('_api/web/lists(guid''', variables('varCreatedListId'), ''')')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "IF-MATCH": "*",
+                        "X-HTTP-Method": "DELETE"
+                      }
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest"
+                    },
+                    "authentication": {
+                      "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                      "type": "Raw"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Set_Rollback_Performed": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varRollbackPerformed",
+                    "value": true
+                  },
+                  "runAfter": {
+                    "Rollback_Newly_Created_List": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Scope_Handle_Error": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        },
+        "Scope_Finalize": {
+          "type": "Scope",
+          "actions": {
+            "Condition_Result_Is_AlreadyExists": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@variables('varStatus')",
+                      "AlreadyExists"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Build_AlreadyExists_Result": {
+                  "type": "Compose",
+                  "inputs": {
+                    "success": true,
+                    "status": "AlreadyExists",
+                    "created": false,
+                    "message": "同名のリストが既に存在するため、作成処理を実行しませんでした。",
+                    "siteUrl": "@variables('varSiteUrl')",
+                    "listName": "@variables('varListName')",
+                    "existingList": "@variables('varExistingListInfo')"
+                  },
+                  "runAfter": {}
+                },
+                "Set_Result_Object_AlreadyExists": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varResultObject",
+                    "value": "@outputs('Build_AlreadyExists_Result')"
+                  },
+                  "runAfter": {
+                    "Build_AlreadyExists_Result": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {},
+              "else": {
+                "actions": {
+                  "Condition_Result_Is_Created": {
+                    "type": "If",
+                    "expression": {
+                      "and": [
+                        {
+                          "equals": [
+                            "@variables('varStatus')",
+                            "Created"
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Build_Result_Object": {
+                        "type": "Compose",
+                        "inputs": {
+                          "success": true,
+                          "status": "Created",
+                          "created": true,
+                          "message": "リストを新規作成し、初期化しました。",
+                          "site": {
+                            "id": "@variables('varSiteId')",
+                            "title": "@variables('varSiteTitle')",
+                            "url": "@variables('varVerifiedUrl')"
+                          },
+                          "list": {
+                            "id": "@variables('varCreatedListId')",
+                            "title": "@variables('varCreatedListTitle')",
+                            "rootFolder": "@variables('varCreatedListRootFolder')",
+                            "itemCount": "@variables('varItemCount')"
+                          },
+                          "initialization": {
+                            "deletedFields": "@variables('varDeletedFields')",
+                            "skippedSystemFields": "@variables('varSkippedFields')",
+                            "sampleRawCreated": "@variables('varSampleRawCreated')",
+                            "sampleRawInternalName": "sample_raw",
+                            "sampleRawType": "EnhancedRichText",
+                            "defaultViewId": "@variables('varDefaultViewId')",
+                            "defaultViewTitle": "@variables('varDefaultViewTitle')",
+                            "defaultViewFields": "@variables('varFinalViewFields')"
+                          }
+                        },
+                        "runAfter": {}
+                      },
+                      "Set_Result_Object_Created": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varResultObject",
+                          "value": "@outputs('Build_Result_Object')"
+                        },
+                        "runAfter": {
+                          "Build_Result_Object": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    },
+                    "runAfter": {},
+                    "else": {
+                      "actions": {
+                        "Build_Error_Result": {
+                          "type": "Compose",
+                          "inputs": {
+                            "success": false,
+                            "status": "@variables('varStatus')",
+                            "created": "@variables('varCreatedInThisRun')",
+                            "message": "@variables('varErrorMessage')",
+                            "stage": "@variables('varStage')",
+                            "siteUrl": "@variables('varSiteUrl')",
+                            "listName": "@variables('varListName')",
+                            "createdListId": "@variables('varCreatedListId')",
+                            "rollbackPerformed": "@variables('varRollbackPerformed')",
+                            "errors": "@variables('varErrorMessages')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Set_Result_Object_Failed": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varResultObject",
+                            "value": "@outputs('Build_Error_Result')"
+                          },
+                          "runAfter": {
+                            "Build_Error_Result": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "Serialize_Result_To_Json": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varResultJson",
+                "value": "@string(variables('varResultObject'))"
+              },
+              "runAfter": {
+                "Condition_Result_Is_AlreadyExists": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_Flow_Output": {
+              "type": "Compose",
+              "inputs": {
+                "success": "@coalesce(variables('varResultObject')?['success'], false)",
+                "status": "@variables('varStatus')",
+                "resultObject": "@variables('varResultObject')",
+                "resultJson": "@variables('varResultJson')"
+              },
+              "runAfter": {
+                "Serialize_Result_To_Json": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Rollback_New_List": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    },
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "connectionName": "b5e0a94c7d3142f8ae61c05d972b3f4e",
+        "source": "Invoker",
+        "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+        "tier": "NotSpecified",
+        "apiName": "sharepointonline"
+      }
+    },
+    "flowFailureAlertSubscribed": false,
+    "isManaged": false
+  }
+}

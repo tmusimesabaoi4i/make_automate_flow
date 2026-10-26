@@ -1,0 +1,172 @@
+========================================================================
+00_overview.txt
+Teams課内会議アーカイブ自動化 — Power Automate クラウドフロー全体設計
+標準Microsoft 365コネクタのみ / Power Automateクラウドフロー内で完結
+========================================================================
+
+■ この資料について
+------------------------------------------------------------------------
+本ディレクトリ（flow/）の各TXTは、Power Automateクラウドフローを
+画面を見ながらそのまま構築するための設計シートです。
+統合手順書は doc/power_automate_cloud_flow_implementation_guide.md を参照。
+
+元のWord仕様書（doc/Teams課内会議アーカイブ自動化_仕様書.docx）は
+変更・移動・リネームしません。本設計は、仕様書がAzure Function/Open XML/
+生Graphを前提としていた部分を、標準M365コネクタのみで完結する構成へ
+置き換えたものです。
+
+■ 最重要方針
+------------------------------------------------------------------------
+使用してよい: Microsoft Teams / SharePoint / Content Conversion /
+  Word Online(Business)は不採用(下記) / OneDrive for Business /
+  Office 365 Users / Power Apps(子フロー戻り値「Respond to a PowerApp or flow」) /
+  標準の変数・条件・ループ・Compose・Select・Filter array / 子フロー。
+使用しない: Azure Function/Automation/Logic Apps/App Service、独自サーバー、
+  Power Automate for desktop、Python/PowerShell/C#、カスタムコネクタ、
+  汎用HTTPアクション、HTTP with Microsoft Entra ID、アプリ登録前提のGraph、
+  アプリケーション権限、Open XML独自処理、外部/プレミアム文書生成コネクタ。
+
+■ 本プロジェクトの主目的（重要）
+------------------------------------------------------------------------
+定期運用が主目的ではありません。明日からの大規模システム移行に備え、
+過去のTeams投稿（過去2年分）を「一発で取得・アーカイブ」することが最優先です。
+したがって:
+  - 主役 = 手動実行フロー（01）。7日テスト → 2年一発の順で実行。
+  - 定期実行フロー（02）は将来の差分運用のためのオプション。
+  - 2年分の一括処理はタイムアウト・スロットリングに注意（各TXTに対策記載）。
+
+■ 最終的に作成するフロー数：5
+------------------------------------------------------------------------
+No. 表示名(推奨英語名)                    種別            TXT
+ 1  PA_Manual_Meeting_Archive_Start        インスタント(手動) 01
+ 2  PA_Scheduled_Meeting_Archive_Start     スケジュール(任意) 02
+ 3  PA_Meeting_Archive_Orchestrator        子フロー(中核)     03(+04,06,07)
+ 4  PA_Save_Meeting_Attachment             子フロー           05
+ 5  PA_Write_Run_Log                       子フロー           08
+
+  ※ 04/06/07 のTXTは「独立したフロー」ではなく、オーケストレータ(3)内の
+    Scope（セクション）の詳細シートです。フロー本数は 5 です。
+      04_collect_channel_messages.txt = 3内の Scope_Collect の詳細
+      06_build_word_html_child_flow.txt = 3内の Word用HTML生成セクションの詳細
+      07_create_word_archive_file.txt   = 3内の .doc作成セクションの詳細
+    08_error_log_and_ledger.txt = フロー5(PA_Write_Run_Log)＋SharePoint 3リストの説明。
+
+■ 各フローの責任範囲
+------------------------------------------------------------------------
+[1] PA_Manual_Meeting_Archive_Start（手動・主役）
+    - 初回テスト・取得期間指定・DryRun指定・過去7日試験・過去2年本番。
+    - 入力(StartDateUtc/EndDateUtc/LookbackDays/DryRun/ForceReprocess)から
+      取得範囲を確定し、RunId(guid)を発番してオーケストレータを呼び出す。
+
+[2] PA_Scheduled_Meeting_Archive_Start（定期・オプション）
+    - 週次等の差分実行。最終成功日時-2日〜現在を取得し、台帳で重複排除。
+    - 今回の主目的では未使用でも可。将来運用のために用意。
+
+[3] PA_Meeting_Archive_Orchestrator（中核・子フロー）
+    - 実行範囲の確定、Teams親投稿取得、返信取得、会議情報の正規化、
+      添付ファイル保存（子フロー4呼出）、会議の並び替え（一時リスト）、
+      Word用HTML生成、SharePointへのWord互換.doc保存、実行結果通知。
+    - 大きなHTML/配列を子フロー間で渡さないため、収集・HTML生成・
+      .doc作成をこのフローに統合。
+
+[4] PA_Save_Meeting_Attachment（添付保存・子フロー）
+    - 添付候補の判定、元ファイル取得、ファイル名正規化(yyyyMMdd_元名)、
+      SharePointへの保存、保存後URL取得、冪等性確認(台帳)、結果返却。
+    - 戻り値は小さいJSON({Status,SavedName,SavedFileUrl,ErrorMessage,IdempotencyKey})。
+
+[5] PA_Write_Run_Log（ログ・子フロー）
+    - エラーログ行・実行サマリ行を MeetingArchiveRunLog に書き込む。
+    - Scope_Catch/Scope_Finally から呼び出す。頻度は低い。
+    - ※インラインの「項目の作成」でも代替可（本TXTに併記）。
+
+■ 親フローと子フローの関係／呼出関係
+------------------------------------------------------------------------
+   [1 手動]  ┐
+             ├──(Run a Child Flow)──▶ [3 オーケストレータ]
+   [2 定期]  ┘                             │
+                                            ├──(Run a Child Flow, 添付ごと)──▶ [4 添付保存]
+                                            └──(Run a Child Flow, 集計/失敗時)─▶ [5 ログ]
+
+  ・子フロー呼出は「Run a Child Flow」アクション。
+  ・子フロー(3/4/5)はトリガー「フローを手動でトリガーする」を使い、
+    末尾の「Respond to a PowerApp or flow」で戻り値を返す。
+  ・子フローは親と同一のPower Platformソリューション内に置く。
+  ・要ライセンス確認：子フロー機能・実行に必要なライセンス/ポリシー。
+
+■ 作成順序（推奨）
+------------------------------------------------------------------------
+  0) Power Platformソリューション作成、接続参照・環境変数を定義。
+  1) SharePointに3リスト作成（台帳/一時保存/実行ログ）。
+  2) [5 PA_Write_Run_Log] を作成（他フローから呼ぶため先に用意）。
+  3) [4 PA_Save_Meeting_Attachment] を作成。
+  4) [3 PA_Meeting_Archive_Orchestrator] を作成（4,5を呼ぶ）。
+  5) [1 PA_Manual_Meeting_Archive_Start] を作成（3を呼ぶ）。
+  6) [2 PA_Scheduled_Meeting_Archive_Start] を作成（任意）。
+  7) 7日間テスト → 目視確認 → 2年間本番実行。
+
+  ※ Run a Child Flow は呼び先が先に存在している必要があるため、
+    子フロー(5→4→3)を先に、トリガー系(1,2)を後に作成します。
+
+■ 統合・分割の理由
+------------------------------------------------------------------------
+  ・収集（元04）／Word用HTML生成（元06）／.doc作成（元07）を
+    オーケストレータ(3)へ統合した理由：
+      - Power Automateの子フロー戻り値・入力にはサイズ制限があり、
+        巨大なメッセージ配列や長大なHTML文字列を子フロー間で受け渡すと
+        サイズ超過・タイムアウトのリスクがある。
+      - HTML連結は共通変数への逐次Appendが必要で、フローをまたぐと
+        並列・状態管理が複雑になる。1フロー内に置く方が安全。
+  ・添付保存（4）を子フローに分離した理由：
+      - 入出力が小さいJSONで完結し、冪等性・再試行・エラー返却を
+        1件単位でカプセル化できる。並列化する場合も共通変数を汚さない。
+  ・ログ（5）を子フローにした理由：
+      - 複数フロー・複数箇所から同一形式で記録するためDRYにできる。
+      - 呼出頻度が低い（エラー時・集計時）ため子フロー呼出コストは許容。
+  ・1フローに複数トリガーは設定不可のため、手動(1)と定期(2)は分離。
+
+■ 主要な技術方式（詳細は各TXT）
+------------------------------------------------------------------------
+  ・Teams取得（主方式）：Microsoft Teamsコネクタの
+    「Send a Microsoft Graph HTTP request」（標準・非プレミアム・
+    アプリ登録/管理者同意不要）で /teams/{teamId}/channels/{channelId}/messages
+    と .../messages/{messageId}/replies を @odata.nextLink ページングで全件取得。
+    → 汎用HTTPやHTTP with Entra IDとは別物で、指示の許可範囲内。
+    簡易代替（7日テスト向け）：標準アクション「Get messages」＋
+    「List replies of a channel message」。ただし「Get messages」は
+    直近件数中心で全履歴取得は不確実（要Teamsコネクタ確認）。
+  ・並び替え：SharePoint一時リスト（MeetingArchiveStaging）に SortKey と
+    RunId で保存し、「複数の項目の取得」で RunId 絞り込み・SortKey 昇順で読戻す。
+  ・Word生成：HTML文字列を組み立て、SharePoint「ファイルの作成」で
+    課内会議総括_yyyyMMdd_HHmmss.doc として保存（Word互換HTML）。
+    Word Online(Business)の「テンプレートに値を入力」「Word→PDF」は
+    プレミアムのため不採用。.html保存の代替も手順書に記載。
+  ・保存後URL：SharePoint「ファイルの作成」出力にwebUrlは無い。作成後に
+    「ファイルのプロパティの取得」→動的コンテンツ「Link to item」を使用。
+  ・冪等性：台帳(MeetingArchiveLedger)に IdempotencyKey=MessageId+AttachmentId
+    （返信は+ReplyId）で保存前検索。成功済みは再保存せず既存URLを返却。
+
+■ 使用するSharePointリスト（詳細は08）
+------------------------------------------------------------------------
+  MeetingArchiveLedger  … 添付保存の処理台帳（冪等性）
+  MeetingArchiveStaging … 会議の一時保存（並び替え）
+  MeetingArchiveRunLog  … 実行ログ・エラーログ
+
+■ 使用する環境変数（値は仕様書1.1）
+------------------------------------------------------------------------
+  envTeamId, envChannelId, envTenantId, envSiteUrl, envLibrary,
+  envDestinationPath, envLookbackDays(=730), envLedgerListName,
+  envStagingListName, envRunLogListName, envIncludeKeywords(=課内会議),
+  envExcludeKeywords(=空)
+
+■ 未確定事項（要実環境確認ラベル）
+------------------------------------------------------------------------
+  - 「Send a Microsoft Graph HTTP request」が @odata.nextLink の絶対URLを
+    そのまま受理するか（要実環境確認）。
+  - channelId内の ":" を含むパスをそのまま渡してよいか（要実環境確認）。
+  - 標準「Get messages」で過去2年の全履歴を取得できるか（要Teamsコネクタ確認）。
+  - 添付 contentUrl から元ファイル本体を標準コネクタで取得できるか
+    （要SharePointコネクタ確認）。
+  - Word互換.docを開く際の形式警告有無（要Word表示確認）。
+  - 子フロー機能・実行ライセンス（要ライセンス確認）、DLPポリシー（要DLP確認）。
+
+========================================================================

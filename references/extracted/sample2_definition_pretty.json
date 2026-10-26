@@ -1,0 +1,906 @@
+{
+ "name": "b27d4b3e-9972-4fdb-8ae3-d1905febfd9f",
+ "id": "/providers/Microsoft.Flow/flows/b27d4b3e-9972-4fdb-8ae3-d1905febfd9f",
+ "type": "Microsoft.Flow/flows",
+ "properties": {
+  "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+  "displayName": "create_meeting_list_sample",
+  "definition": {
+   "metadata": {
+    "workflowEntityId": null,
+    "processAdvisorMetadata": null,
+    "flowChargedByPaygo": null,
+    "flowclientsuspensionreason": "None",
+    "flowclientsuspensiontime": null,
+    "flowclientsuspensionreasondetails": null,
+    "creator": {
+     "id": "641b02f0-caf2-4b76-826c-c757d0cd98f4",
+     "type": "User",
+     "tenantId": "b6d94148-69a6-487a-8a69-88236d09260a"
+    },
+    "provisioningMethod": "FromDefinition",
+    "failureAlertSubscription": true,
+    "clientLastModifiedTime": "2026-03-01T15:06:53.9448919Z",
+    "connectionKeySavedTimeKey": "2026-05-23T12:07:00.8229065Z",
+    "creationSource": null,
+    "modifiedSources": "Portal"
+   },
+   "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+   "contentVersion": "1.0.0.0",
+   "parameters": {
+    "$authentication": {
+     "defaultValue": {},
+     "type": "SecureObject"
+    },
+    "$connections": {
+     "defaultValue": {},
+     "type": "Object"
+    }
+   },
+   "triggers": {
+    "manual": {
+     "type": "Request",
+     "kind": "Button",
+     "inputs": {
+      "schema": {
+       "type": "object",
+       "properties": {},
+       "required": []
+      }
+     }
+    }
+   },
+   "actions": {
+    "Graph_GetChannelMessages_Top50": {
+     "runAfter": {
+      "ForEach_ExistingMeetingItem": [
+       "Succeeded"
+      ]
+     },
+     "metadata": {
+      "operationMetadataId": "7a37c7d0-f6a5-426f-af69-c46c45242fcb"
+     },
+     "type": "OpenApiConnection",
+     "inputs": {
+      "parameters": {
+       "Uri": "https://graph.microsoft.com/v1.0/teams/a7ac0c68-87ba-4613-8960-13660f0f5f56/channels/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2/messages?$top=50",
+       "Method": "GET",
+       "ContentType": "application/json"
+      },
+      "host": {
+       "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+       "connectionName": "shared_teams-2",
+       "operationId": "HttpRequest"
+      },
+      "authentication": "@parameters('$authentication')"
+     }
+    },
+    "ParseJson_ChannelMessages": {
+     "runAfter": {
+      "Graph_GetChannelMessages_Top50": [
+       "Succeeded"
+      ]
+     },
+     "metadata": {
+      "operationMetadataId": "3ac50f3b-72d5-4a21-bf23-a10c9a2ecfb2"
+     },
+     "type": "ParseJson",
+     "inputs": {
+      "content": "@body('Graph_GetChannelMessages_Top50')",
+      "schema": {
+       "type": "object",
+       "properties": {
+        "statusCode": {
+         "type": "integer"
+        },
+        "headers": {
+         "type": "object",
+         "properties": {
+          "Transfer-Encoding": {
+           "type": "string"
+          },
+          "Vary": {
+           "type": "string"
+          },
+          "Strict-Transport-Security": {
+           "type": "string"
+          },
+          "request-id": {
+           "type": "string"
+          },
+          "client-request-id": {
+           "type": "string"
+          },
+          "x-ms-ags-diagnostic": {
+           "type": "string"
+          },
+          "OData-Version": {
+           "type": "string"
+          },
+          "x-ms-client-region": {
+           "type": "string"
+          },
+          "x-ms-flavor": {
+           "type": "string"
+          },
+          "X-Ms-Workflow-Resourcegroup-Name": {
+           "type": "string"
+          },
+          "x-ms-workflow-subscription-id": {
+           "type": "string"
+          },
+          "x-ms-environment-id": {
+           "type": "string"
+          },
+          "x-ms-tenant-id": {
+           "type": "string"
+          },
+          "x-ms-subscription-id": {
+           "type": "string"
+          },
+          "x-ms-dlp-re": {
+           "type": "string"
+          },
+          "x-ms-dlp-gu": {
+           "type": "string"
+          },
+          "x-ms-dlp-ef": {
+           "type": "string"
+          },
+          "x-ms-mip-sl": {
+           "type": "string"
+          },
+          "x-ms-au-creator-id": {
+           "type": "string"
+          },
+          "Timing-Allow-Origin": {
+           "type": "string"
+          },
+          "x-ms-apihub-cached-response": {
+           "type": "string"
+          },
+          "x-ms-apihub-obo": {
+           "type": "string"
+          },
+          "Date": {
+           "type": "string"
+          },
+          "Content-Type": {
+           "type": "string"
+          },
+          "Content-Length": {
+           "type": "string"
+          }
+         }
+        },
+        "body": {
+         "type": "object",
+         "properties": {
+          "@@odata.context": {
+           "type": "string"
+          },
+          "@@odata.count": {
+           "type": "integer"
+          },
+          "@@odata.nextLink": {
+           "type": "string"
+          },
+          "value": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "replyToId": {},
+             "etag": {
+              "type": "string"
+             },
+             "messageType": {
+              "type": "string"
+             },
+             "createdDateTime": {
+              "type": "string"
+             },
+             "lastModifiedDateTime": {
+              "type": "string"
+             },
+             "lastEditedDateTime": {},
+             "deletedDateTime": {},
+             "subject": {
+              "type": "string"
+             },
+             "summary": {},
+             "chatId": {},
+             "importance": {
+              "type": "string"
+             },
+             "locale": {
+              "type": "string"
+             },
+             "webUrl": {
+              "type": "string"
+             },
+             "policyViolation": {},
+             "eventDetail": {},
+             "from": {
+              "type": "object",
+              "properties": {
+               "application": {},
+               "device": {},
+               "user": {
+                "type": "object",
+                "properties": {
+                 "@@odata.type": {
+                  "type": "string"
+                 },
+                 "id": {
+                  "type": "string"
+                 },
+                 "displayName": {
+                  "type": "string"
+                 },
+                 "userIdentityType": {
+                  "type": "string"
+                 },
+                 "tenantId": {
+                  "type": "string"
+                 }
+                }
+               }
+              }
+             },
+             "body": {
+              "type": "object",
+              "properties": {
+               "contentType": {
+                "type": "string"
+               },
+               "content": {
+                "type": "string"
+               }
+              }
+             },
+             "channelIdentity": {
+              "type": "object",
+              "properties": {
+               "teamId": {
+                "type": "string"
+               },
+               "channelId": {
+                "type": "string"
+               }
+              }
+             },
+             "attachments": {
+              "type": "array"
+             },
+             "mentions": {
+              "type": "array",
+              "items": {
+               "type": "object",
+               "properties": {
+                "id": {
+                 "type": "integer"
+                },
+                "mentionText": {
+                 "type": "string"
+                },
+                "mentioned": {
+                 "type": "object",
+                 "properties": {
+                  "application": {},
+                  "device": {},
+                  "user": {},
+                  "conversation": {},
+                  "tag": {
+                   "type": "object",
+                   "properties": {
+                    "@@odata.type": {
+                     "type": "string"
+                    },
+                    "id": {
+                     "type": "string"
+                    },
+                    "displayName": {
+                     "type": "string"
+                    }
+                   }
+                  }
+                 }
+                }
+               },
+               "required": [
+                "id",
+                "mentionText",
+                "mentioned"
+               ]
+              }
+             },
+             "reactions": {
+              "type": "array"
+             }
+            },
+            "required": [
+             "id",
+             "replyToId",
+             "etag",
+             "messageType",
+             "createdDateTime",
+             "lastModifiedDateTime",
+             "lastEditedDateTime",
+             "deletedDateTime",
+             "subject",
+             "summary",
+             "chatId",
+             "importance",
+             "locale",
+             "webUrl",
+             "policyViolation",
+             "eventDetail",
+             "from",
+             "body",
+             "channelIdentity",
+             "attachments",
+             "mentions",
+             "reactions"
+            ]
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "ForEach_ChannelMessage": {
+     "foreach": "@coalesce(body('ParseJson_ChannelMessages')?['value'], json('[]'))",
+     "actions": {
+      "If_IsChannelMessage": {
+       "actions": {
+        "HtmlToText_MessageBody": {
+         "runAfter": {
+          "Filter_AttachmentLinks": [
+           "Succeeded"
+          ]
+         },
+         "metadata": {
+          "operationMetadataId": "4f3990fa-adb7-47f2-bc73-8f27f154f6ab"
+         },
+         "type": "OpenApiConnection",
+         "inputs": {
+          "parameters": {
+           "Content": "<p class=\"editor-paragraph\">@{trim(coalesce(items('ForEach_ChannelMessage')?['body']?['content'],''))}</p>"
+          },
+          "host": {
+           "apiId": "/providers/Microsoft.PowerApps/apis/shared_conversionservice",
+           "connectionName": "shared_conversionservice",
+           "operationId": "HtmlToText"
+          },
+          "authentication": "@parameters('$authentication')"
+         }
+        },
+        "CreateItem_MeetingDetail": {
+         "runAfter": {
+          "HtmlToText_MessageBody": [
+           "Succeeded"
+          ]
+         },
+         "metadata": {
+          "operationMetadataId": "59dad491-4f07-4592-9787-f46152db525d"
+         },
+         "type": "OpenApiConnection",
+         "inputs": {
+          "parameters": {
+           "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+           "table": "9c0e9aaa-d03f-40a5-a57e-882ee4d491fc",
+           "item/Title": "@concat(formatDateTime(convertTimeZone(trim(coalesce(items('ForEach_ChannelMessage')?['lastModifiedDateTime'], '')),'UTC','Tokyo Standard Time'),'yyyy年MM月dd日'),'に開催の課内会議の詳細')",
+           "item/OData__x6295__x7a3f__x65e5__x6642_": "@{formatDateTime(trim(coalesce(items('ForEach_ChannelMessage')?['createdDateTime'],'')),'yyyy-MM-dd HH:mm')}\n",
+           "item/OData__x5b9b__x5148_": "@{trim(coalesce(items('ForEach_ChannelMessage')?['mentions']?[0]?['mentionText'],''))}\n",
+           "item/OData__x30d5__x30a1__x30a4__x30eb_": "<p class=\"editor-paragraph\">@{if(empty(body('Filter_AttachmentLinks')),null,trim(join(body('Filter_AttachmentLinks'), '<br/>')))}</p>",
+           "item/OData__x6295__x7a3f__x5185__x5bb9_": "@body('HtmlToText_MessageBody')",
+           "item/URL": "@{if(empty(items('ForEach_ChannelMessage')?['webUrl']), null,trim(coalesce(items('ForEach_ChannelMessage')?['webUrl'],'')))}\n"
+          },
+          "host": {
+           "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+           "connectionName": "shared_sharepointonline",
+           "operationId": "PostItem"
+          },
+          "authentication": "@parameters('$authentication')"
+         }
+        },
+        "Graph_GetMessageReplies_Top50": {
+         "runAfter": {
+          "SetVar_ChildAttachments_Clear": [
+           "Succeeded"
+          ]
+         },
+         "type": "OpenApiConnection",
+         "inputs": {
+          "parameters": {
+           "Uri": "@concat('https://graph.microsoft.com/v1.0/teams/a7ac0c68-87ba-4613-8960-13660f0f5f56','/channels/19%3A53e5d619e45b4fda8d0dc7f2858a9d64%40thread.tacv2','/messages/', uriComponent(items('ForEach_ChannelMessage')?['id']),'/replies?$top=50'\n)",
+           "Method": "GET",
+           "ContentType": "application/json"
+          },
+          "host": {
+           "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+           "connectionName": "shared_teams-2",
+           "operationId": "HttpRequest"
+          },
+          "authentication": "@parameters('$authentication')"
+         }
+        },
+        "ParseJson_MessageReplies": {
+         "runAfter": {
+          "Graph_GetMessageReplies_Top50": [
+           "Succeeded"
+          ]
+         },
+         "type": "ParseJson",
+         "inputs": {
+          "content": "@body('Graph_GetMessageReplies_Top50')",
+          "schema": {
+           "type": "object",
+           "properties": {
+            "statusCode": {
+             "type": "integer"
+            },
+            "headers": {
+             "type": "object",
+             "properties": {
+              "Transfer-Encoding": {
+               "type": "string"
+              },
+              "Vary": {
+               "type": "string"
+              },
+              "Strict-Transport-Security": {
+               "type": "string"
+              },
+              "request-id": {
+               "type": "string"
+              },
+              "client-request-id": {
+               "type": "string"
+              },
+              "x-ms-ags-diagnostic": {
+               "type": "string"
+              },
+              "OData-Version": {
+               "type": "string"
+              },
+              "x-ms-client-region": {
+               "type": "string"
+              },
+              "x-ms-flavor": {
+               "type": "string"
+              },
+              "X-Ms-Workflow-Resourcegroup-Name": {
+               "type": "string"
+              },
+              "x-ms-workflow-subscription-id": {
+               "type": "string"
+              },
+              "x-ms-environment-id": {
+               "type": "string"
+              },
+              "x-ms-tenant-id": {
+               "type": "string"
+              },
+              "x-ms-subscription-id": {
+               "type": "string"
+              },
+              "x-ms-dlp-re": {
+               "type": "string"
+              },
+              "x-ms-dlp-gu": {
+               "type": "string"
+              },
+              "x-ms-dlp-ef": {
+               "type": "string"
+              },
+              "x-ms-mip-sl": {
+               "type": "string"
+              },
+              "x-ms-au-creator-id": {
+               "type": "string"
+              },
+              "Timing-Allow-Origin": {
+               "type": "string"
+              },
+              "x-ms-apihub-cached-response": {
+               "type": "string"
+              },
+              "x-ms-apihub-obo": {
+               "type": "string"
+              },
+              "Date": {
+               "type": "string"
+              },
+              "Content-Type": {
+               "type": "string"
+              },
+              "Content-Length": {
+               "type": "string"
+              }
+             }
+            },
+            "body": {
+             "type": "object",
+             "properties": {
+              "@@odata.context": {
+               "type": "string"
+              },
+              "@@odata.count": {
+               "type": "integer"
+              },
+              "value": {
+               "type": "array",
+               "items": {
+                "type": "object",
+                "properties": {
+                 "id": {
+                  "type": "string"
+                 },
+                 "replyToId": {
+                  "type": "string"
+                 },
+                 "etag": {
+                  "type": "string"
+                 },
+                 "messageType": {
+                  "type": "string"
+                 },
+                 "createdDateTime": {
+                  "type": "string"
+                 },
+                 "lastModifiedDateTime": {
+                  "type": "string"
+                 },
+                 "lastEditedDateTime": {},
+                 "deletedDateTime": {},
+                 "subject": {},
+                 "summary": {},
+                 "chatId": {},
+                 "importance": {
+                  "type": "string"
+                 },
+                 "locale": {
+                  "type": "string"
+                 },
+                 "webUrl": {
+                  "type": "string"
+                 },
+                 "from": {},
+                 "policyViolation": {},
+                 "body": {
+                  "type": "object",
+                  "properties": {
+                   "contentType": {
+                    "type": "string"
+                   },
+                   "content": {
+                    "type": "string"
+                   }
+                  }
+                 },
+                 "channelIdentity": {
+                  "type": "object",
+                  "properties": {
+                   "teamId": {
+                    "type": "string"
+                   },
+                   "channelId": {
+                    "type": "string"
+                   }
+                  }
+                 },
+                 "attachments": {
+                  "type": "array"
+                 },
+                 "mentions": {
+                  "type": "array"
+                 },
+                 "reactions": {
+                  "type": "array"
+                 },
+                 "eventDetail": {
+                  "type": "object",
+                  "properties": {
+                   "@@odata.type": {
+                    "type": "string"
+                   },
+                   "callId": {},
+                   "callDuration": {
+                    "type": "string"
+                   },
+                   "callEventType": {
+                    "type": "string"
+                   },
+                   "callParticipants": {
+                    "type": "array",
+                    "items": {
+                     "type": "object",
+                     "properties": {
+                      "participant": {
+                       "type": "object",
+                       "properties": {
+                        "application": {},
+                        "device": {},
+                        "user": {
+                         "type": "object",
+                         "properties": {
+                          "@@odata.type": {
+                           "type": "string"
+                          },
+                          "id": {
+                           "type": "string"
+                          },
+                          "displayName": {
+                           "type": "string"
+                          },
+                          "userIdentityType": {
+                           "type": "string"
+                          },
+                          "tenantId": {
+                           "type": "string"
+                          }
+                         }
+                        }
+                       }
+                      }
+                     },
+                     "required": [
+                      "participant"
+                     ]
+                    }
+                   },
+                   "initiator": {
+                    "type": "object",
+                    "properties": {
+                     "application": {},
+                     "device": {},
+                     "user": {
+                      "type": "object",
+                      "properties": {
+                       "@@odata.type": {
+                        "type": "string"
+                       },
+                       "id": {
+                        "type": "string"
+                       },
+                       "displayName": {},
+                       "userIdentityType": {
+                        "type": "string"
+                       },
+                       "tenantId": {
+                        "type": "string"
+                       }
+                      }
+                     }
+                    }
+                   }
+                  }
+                 }
+                },
+                "required": [
+                 "id",
+                 "replyToId",
+                 "etag",
+                 "messageType",
+                 "createdDateTime",
+                 "lastModifiedDateTime",
+                 "lastEditedDateTime",
+                 "deletedDateTime",
+                 "subject",
+                 "summary",
+                 "chatId",
+                 "importance",
+                 "locale",
+                 "webUrl",
+                 "from",
+                 "policyViolation",
+                 "body",
+                 "channelIdentity",
+                 "attachments",
+                 "mentions",
+                 "reactions",
+                 "eventDetail"
+                ]
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        },
+        "ForEach_Reply": {
+         "foreach": "@coalesce(body('ParseJson_MessageReplies')?['value'], json('[]'))",
+         "actions": {
+          "SetVar_ChildAttachments_Append": {
+           "runAfter": {
+            "Compose_ReplyAttachments": [
+             "Succeeded"
+            ]
+           },
+           "type": "SetVariable",
+           "inputs": {
+            "name": "varChildAttachments",
+            "value": "@union(createArray(item()), coalesce(outputs('Compose_ReplyAttachments'), json('[]')))"
+           }
+          },
+          "Compose_ReplyAttachments": {
+           "type": "Compose",
+           "inputs": "@coalesce(items('ForEach_Reply')?['attachments'], json('[]'))"
+          }
+         },
+         "runAfter": {
+          "ParseJson_MessageReplies": [
+           "Succeeded"
+          ]
+         },
+         "type": "Foreach"
+        },
+        "SetVar_ChildAttachments_Clear": {
+         "type": "SetVariable",
+         "inputs": {
+          "name": "varChildAttachments",
+          "value": []
+         }
+        },
+        "Select_AttachmentLinks": {
+         "runAfter": {
+          "ForEach_Reply": [
+           "Succeeded"
+          ]
+         },
+         "type": "Select",
+         "inputs": {
+          "from": "@coalesce(variables('varChildAttachments'), array())",
+          "select": "@if(empty(trim(coalesce(item()?['contentUrl'], ''))),null,concat('<a href=\"', trim(item()?['contentUrl']), '\">',coalesce(trim(item()?['name']), trim(item()?['contentUrl'])),'</a>'))"
+         }
+        },
+        "Filter_AttachmentLinks": {
+         "runAfter": {
+          "Select_AttachmentLinks": [
+           "Succeeded"
+          ]
+         },
+         "type": "Query",
+         "inputs": {
+          "from": "@coalesce(body('Select_AttachmentLinks'), array())",
+          "where": "@not(empty(item()))"
+         }
+        }
+       },
+       "else": {
+        "actions": {}
+       },
+       "expression": {
+        "and": [
+         {
+          "equals": [
+           "@trim(coalesce(items('ForEach_ChannelMessage')?['messageType'],''))",
+           "message"
+          ]
+         }
+        ]
+       },
+       "type": "If"
+      }
+     },
+     "runAfter": {
+      "ParseJson_ChannelMessages": [
+       "Succeeded"
+      ]
+     },
+     "metadata": {
+      "operationMetadataId": "0575ad4a-a4c0-4458-bd96-c563e6aa2499"
+     },
+     "type": "Foreach"
+    },
+    "GetItems_MeetingList": {
+     "runAfter": {
+      "Initialize_ChildAttachments": [
+       "Succeeded"
+      ]
+     },
+     "metadata": {
+      "operationMetadataId": "21ef25af-c3ed-4c8e-9b67-180d06ab0189"
+     },
+     "type": "OpenApiConnection",
+     "inputs": {
+      "parameters": {
+       "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+       "table": "9c0e9aaa-d03f-40a5-a57e-882ee4d491fc",
+       "$top": 100
+      },
+      "host": {
+       "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+       "connectionName": "shared_sharepointonline",
+       "operationId": "GetItems"
+      },
+      "authentication": "@parameters('$authentication')"
+     }
+    },
+    "ForEach_ExistingMeetingItem": {
+     "foreach": "@outputs('GetItems_MeetingList')?['body/value']",
+     "actions": {
+      "DeleteItem_MeetingItem": {
+       "metadata": {
+        "operationMetadataId": "73d3e6f8-8195-493b-91e6-d5f27288b0a8"
+       },
+       "type": "OpenApiConnection",
+       "inputs": {
+        "parameters": {
+         "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+         "table": "9c0e9aaa-d03f-40a5-a57e-882ee4d491fc",
+         "id": "@items('ForEach_ExistingMeetingItem')?['ID']"
+        },
+        "host": {
+         "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+         "connectionName": "shared_sharepointonline",
+         "operationId": "DeleteItem"
+        },
+        "authentication": "@parameters('$authentication')"
+       }
+      }
+     },
+     "runAfter": {
+      "GetItems_MeetingList": [
+       "Succeeded"
+      ]
+     },
+     "metadata": {
+      "operationMetadataId": "ce22a3ef-e0a1-437e-a6c7-319229783e56"
+     },
+     "type": "Foreach"
+    },
+    "Initialize_ChildAttachments": {
+     "runAfter": {},
+     "type": "InitializeVariable",
+     "inputs": {
+      "variables": [
+       {
+        "name": "varChildAttachments",
+        "type": "array",
+        "value": []
+       }
+      ]
+     }
+    }
+   },
+   "outputs": {}
+  },
+  "connectionReferences": {
+   "shared_teams-2": {
+    "connectionName": "c101e3dbe885457f8485de11c5e28a5e",
+    "source": "Embedded",
+    "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+    "tier": "NotSpecified",
+    "apiName": "teams",
+    "isProcessSimpleApiReferenceConversionAlreadyDone": false
+   },
+   "shared_conversionservice": {
+    "connectionName": "shared-conversionser-5a42b6d5-cffe-4fb9-8239-ab2bb51612da",
+    "source": "Embedded",
+    "id": "/providers/Microsoft.PowerApps/apis/shared_conversionservice",
+    "tier": "NotSpecified",
+    "apiName": "conversionservice",
+    "isProcessSimpleApiReferenceConversionAlreadyDone": false
+   },
+   "shared_sharepointonline": {
+    "connectionName": "054920e5a92b48b6b53f62b01b3cb354",
+    "source": "Embedded",
+    "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+    "tier": "NotSpecified",
+    "apiName": "sharepointonline",
+    "isProcessSimpleApiReferenceConversionAlreadyDone": false
+   }
+  },
+  "flowFailureAlertSubscribed": false,
+  "isManaged": false
+ }
+}

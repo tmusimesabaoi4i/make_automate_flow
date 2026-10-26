@@ -1,0 +1,891 @@
+========================================================================
+08_error_log_and_ledger.txt
+Teams課内会議アーカイブ自動化 — SharePoint 3リスト定義 ＋
+フロー[5] PA_Write_Run_Log（子フロー）設計
+標準Microsoft 365コネクタのみ / Power Automateクラウドフロー内で完結
+========================================================================
+
+■ この資料について
+------------------------------------------------------------------------
+本資料は2部構成です。
+  第1部: SharePointに作成する3つのリスト（MeetingArchiveLedger /
+         MeetingArchiveStaging / MeetingArchiveRunLog）の列定義・
+         作成手順・役割を説明します。
+  第2部: フロー[5] PA_Write_Run_Log（実行ログ/エラーログ書込み用の
+         子フロー）の設計を説明します。あわせて、各主要フローの
+         Scope_Try/Scope_Catch/Scope_Finallyによるエラー処理方針を
+         まとめます。
+
+00_overview.txt に記載のとおり、04/06/07 と異なり本ファイルは
+「独立したフロー1本＋前提となるリスト定義」を扱います。
+  08_error_log_and_ledger.txt = フロー5(PA_Write_Run_Log) ＋ SharePoint 3リストの説明
+
+作成順序（00_overview.txtより再掲）：
+  1) SharePointに3リストを作成（本資料 第1部）
+  2) [5 PA_Write_Run_Log] を作成（本資料 第2部。他フローから呼ばれるため先に用意）
+  3) 以降 [4]→[3]→[1]→[2] の順に作成
+
+■ 前提と制約（正典§0の再掲。全ファイル共通）
+------------------------------------------------------------------------
+・Azure/外部サーバー/独自コード/Power Automate for desktop/汎用HTTP/
+  HTTP with Microsoft Entra ID/カスタムコネクタ/アプリ登録/プレミアム
+  文書生成コネクタは使用しません。
+・使用するコネクタは標準のみ：SharePoint / Power Apps
+  （子フロー戻り値用「Respond to a PowerApp or flow」）。
+・本ファイルで新規に使用するアクションは、SharePoint「項目の作成」
+  「複数の項目の取得」、Power Apps「Respond to a PowerApp or flow」の
+  3種類のみです。実在しないアクション名は使用しません。
+
+========================================================================
+第1部　SharePoint 3リストの定義
+========================================================================
+
+■ 1.0 共通の作成手順（3リストに共通）
+------------------------------------------------------------------------
+以下はSharePointモダンリストを新規作成する際の共通の逐次操作です。
+3つのリストとも、まずこの手順1〜5を行い、その後リストごとに異なる
+列を追加します（列追加の手順は各リストの節で説明します）。
+
+  手順1. Webブラウザで対象SharePointサイトを開く。
+         URL: https://metijapan.sharepoint.com/sites/mROOM_240600018
+         （環境変数 envSiteUrl と同じ値。要実環境確認：実際のテナント
+         URLと一致しているか事前確認する）
+  手順2. サイトのホームページ左側メニューまたは「サイトコンテンツ」を開く。
+  手順3. 画面右上（または「サイトコンテンツ」画面上部）の「+ 新規」を
+         クリックし、メニューから「リスト」を選択する。
+  手順4. リスト作成画面で「空白のリスト」を選択する。
+  手順5. 「名前」欄にリスト名を正確に入力する（大文字小文字・アンダー
+         スコアの有無まで正典どおりに入力すること。誤入力は後続フローの
+         「リスト名」選択や式のマッピングに影響します）。入力後「作成」
+         をクリックする。
+
+リスト作成直後は「Title」（表示名は「タイトル」、内部的には既定の
+単一行テキスト列）だけが存在します。この列は削除せずそのまま使う
+方針とし、各リストで説明する用途（例: ログの識別用文字列）に利用します。
+
+列を追加する共通操作（各リストで繰り返し使用）:
+  手順A. リスト画面の一番右の列見出しにある「+ 列の追加」をクリックする。
+  手順B. 列の種類を選択する（本資料で使うのは「1行テキスト」「複数行
+         テキスト」「数値」のいずれか。以下、正典の表記に合わせて
+         「単一行」＝1行テキスト、「複数行」＝複数行テキスト、
+         「数値」＝数値、と表記します）。
+  手順C. 「名前」欄に正典どおりの列名を入力する。
+  手順D. 「複数行テキスト」を選んだ場合、詳細設定（「その他のオプション」
+         等の展開）で「テキストの種類」を確認し、書式なし（プレーン
+         テキスト）を選択する。リッチテキスト（書式設定と画像を許可）は
+         オフのままにする（正典の「複数行（プレーン）」指定に対応。
+         UIの正確な文言はテナントのSharePointバージョンにより異なる
+         場合があるため要実環境確認）。
+  手順E. 「保存」をクリックして列を追加する。
+  手順F. 追加したい列がなくなるまで手順A〜Eを繰り返す。
+
+備考（列の型について。要件の「選択肢」型に関する補足）:
+  SharePointには値を固定候補から選ばせる「選択肢」という列の型が
+  ありますが、本設計の Status列（Ledger）・Level列（RunLog）は、
+  正典§3のとおり「単一行（値の例: Saved/Failed/Skipped、Info/Warning/
+  Error）」として単一行テキスト型で作成します。選択肢型ではなく
+  単一行テキストにする理由は、Power Automateから任意の文字列を
+  そのまま書き込めるようにするためで、候補外の値が来た場合に書込み
+  自体が失敗する（選択肢型の制約に引っかかる）事態を避けるためです。
+  値の妥当性チェックはフロー側の式・ログ確認で行います。
+
+■ 1.1 MeetingArchiveLedger（処理台帳・冪等性）
+------------------------------------------------------------------------
+役割：添付ファイルを1件保存するたびに1行記録する「処理済み台帳」です。
+同じ添付（MessageId＋AttachmentId、返信の場合は＋ReplyId）が既に保存
+済みかどうかを、このリストを検索して判定します。これにより、フローを
+再実行しても同じ添付が無制限に複製されることを防ぎます（受入条件
+「同一フローを再実行しても同一添付が無制限に複製されない」に対応）。
+
+作成手順：1.0の手順1〜5で「MeetingArchiveLedger」という名前のリストを
+作成した後、手順A〜Fを列の数だけ繰り返して以下を追加する。
+
+  列名                  | 型
+  ----------------------|------------------------------
+  Title                 | 単一行（既定列。そのまま使用）
+  IdempotencyKey        | 単一行
+  RunId                 | 単一行
+  MessageId             | 単一行
+  ReplyId               | 単一行
+  AttachmentId          | 単一行
+  OriginalFileName      | 単一行
+  SavedFileName         | 単一行
+  SavedFileUrl          | 複数行（プレーンテキスト）
+  Status                | 単一行（値: Saved/Failed/Skipped）
+  ErrorMessage          | 複数行
+  ProcessedDateTimeUtc  | 単一行
+
+IdempotencyKeyの意味：
+  正典§7.12の式で生成される、添付1件を一意に識別する文字列です。
+    返信でない場合: concat(MessageId, '_', AttachmentId)
+    返信の場合    : concat(MessageId, '_', ReplyId, '_', AttachmentId)
+  この文字列を検索キーとして「複数の項目の取得」（フィルタークエリで
+  IdempotencyKey列を絞り込み）を実行することで、同じ添付が過去に
+  保存済みかどうかを判定できます。
+
+冪等性の仕組み（正典§6・§7.12・§9、対応する添付保存フロー[4]の
+アクション名を用いて説明。詳細な手順・式は05のTXTで扱います）：
+  1. Compose_IdempotencyKey で上記の式を組み立てる。
+  2. Get_Ledger_Existing（SharePoint「複数の項目の取得」）で
+     MeetingArchiveLedgerを IdempotencyKey が一致する条件で検索する。
+  3. Condition_Already_Saved で「既存の行があり、かつStatus=Saved」
+     かどうかを判定する。
+       - 該当あり（既に保存成功済み）：再保存せず、既存行の
+         SavedFileUrl／SavedFileNameをそのまま戻り値として返す
+         （ファイルを複製しない）。
+       - 該当なし、または既存行がStatus=Failed：新規に保存処理を行う。
+  4. 保存処理の最後に Create_Ledger_Item で1行追記する（Status、
+     SavedFileName、SavedFileUrl、ErrorMessage、ProcessedDateTimeUtc
+     を書き込む）。
+  5. ForceReprocess=はい が指定された場合は、台帳の既存行を無視して
+     常に再保存する（正典§5.1・§5.3のForceReprocess引数に対応。
+     再保存時も同じIdempotencyKeyで新しい台帳行を追加するか、既存行を
+     更新するかは実装時に決定。既定は追加とし、最新行を優先参照する
+     運用を推奨）。
+
+この仕組みにより、7日間テスト→2年本番の間で誤って同じ添付が二重に
+コピーされることを防ぎます。
+
+■ 1.2 MeetingArchiveStaging（会議一時保存・並び替え用）
+------------------------------------------------------------------------
+役割：Teamsから取得した会議（親投稿）ごとの情報を1行ずつ一時保存し、
+「複数の項目の取得」でRunId絞り込み＋SortKey昇順で読み戻すことで、
+会議を開催日（同日は投稿日時）昇順に並べ替えるためのリストです。
+Power Automateの配列変数だけで安定した多段ソートを行うのは複雑になる
+ため、SharePointリストの「並べ替え」機能を利用します（00_overview.txt
+「主要な技術方式」参照）。
+
+作成手順：1.0の手順1〜5で「MeetingArchiveStaging」という名前のリストを
+作成した後、手順A〜Fを列の数だけ繰り返して以下を追加する。
+
+  列名                | 型
+  --------------------|------------------------------
+  Title               | 単一行（既定列。そのまま使用）
+  RunId               | 単一行
+  SortKey             | 単一行
+  MeetingDate         | 単一行（yyyy-MM-dd形式の文字列）
+  PostedDateTimeJst   | 単一行
+  MessageId           | 単一行
+  Author              | 単一行
+  Organizer           | 単一行
+  BodyText            | 複数行（プレーンテキスト。Html to text変換後）
+  AttachmentsJson     | 複数行（保存済み添付情報のJSON配列を文字列化して格納）
+  TeamsMessageUrl     | 複数行（Teams投稿のwebUrl。参照用のみ。添付ファイル
+                      | へのリンクには使わない点に注意）
+
+SortKeyの意味：
+  正典§7.6の式で生成される文字列です。
+    concat(formatDateTime(convertFromUtc(createdDateTime,
+      'Tokyo Standard Time'),'yyyyMMddHHmmss'), '_', メッセージID)
+  「yyyyMMddHHmmss_メッセージID」という形式にすることで、
+    - 前半のyyyyMMddHHmmssが文字列として辞書順に比較しても日時の
+      早い順に並ぶ（ゼロ埋めの14桁固定長のため）。
+    - 万一同一秒に複数投稿があっても、後半のメッセージIDが
+      タイブレーク（同着時の順序決定）に使われる。
+  という2段構えのソートキーになっています。SharePointの「複数の項目の
+  取得」でRunId=現在の実行IDのものだけに絞り込み、SortKey昇順で
+  並べ替えて取得すれば、会議が開催日（実質は投稿日）順に並びます
+  （オーケストレータ側のアクション名: Get_Sorted_Meetings）。
+
+■ 1.3 MeetingArchiveRunLog（実行ログ/エラーログ）
+------------------------------------------------------------------------
+役割：各フローの実行結果（成功サマリ・警告・エラー）を1行ずつ記録する
+ログリストです。第2部で説明するフロー[5] PA_Write_Run_Logが、この
+リストへの書込みを一元的に担当します。
+
+作成手順：1.0の手順1〜5で「MeetingArchiveRunLog」という名前のリストを
+作成した後、手順A〜Fを列の数だけ繰り返して以下を追加する。
+
+  列名                  | 型
+  ----------------------|------------------------------
+  Title                 | 単一行（既定列。そのまま使用）
+  RunId                 | 単一行
+  FlowName              | 単一行
+  ActionName            | 単一行
+  MessageId             | 単一行
+  ReplyId               | 単一行
+  AttachmentId          | 単一行
+  Level                 | 単一行（値: Info/Warning/Error）
+  ErrorMessage          | 複数行
+  OccurredDateTimeUtc   | 単一行
+  MeetingCount          | 数値
+  SavedCount            | 数値
+  SkippedCount          | 数値
+  ArchiveUrl            | 複数行
+
+各列の用途：
+  RunId               … どの実行（1回のフロー起動）に属するログかを
+                        識別するguid()文字列。手動/定期どちらの起点でも
+                        オーケストレータ呼出時に発番されたRunIdを引き継ぐ。
+  FlowName            … ログを書いたフローの表示名（例:
+                        'PA_Meeting_Archive_Orchestrator'）。
+  ActionName          … ログの発生元アクション名、またはScope名
+                        （例: 'Scope_Catch'、'Run_Child_Flow_Save_Attachment'）。
+  MessageId/ReplyId/AttachmentId … エラーが特定の投稿・返信・添付に
+                        紐づく場合に、その識別子を記録する（紐づかない
+                        場合は空文字）。
+  Level               … 'Info'（正常完了サマリ）/ 'Warning'（処理は継続
+                        したが注意が必要）/ 'Error'（失敗）の3値。
+  ErrorMessage        … 人が読める要旨のみ（機密情報は含めない。
+                        第2部2.10で詳述）。
+  OccurredDateTimeUtc … ログ記録時点のUTC日時文字列（utcNow()）。
+  MeetingCount/SavedCount/SkippedCount … 実行結果の集計値（会議件数・
+                        添付保存成功数・スキップ数）。正常完了時
+                        （Level=Info）に主に使用。エラー時は0でよい。
+  ArchiveUrl          … 生成できた場合のWord総括ファイルのURL
+                        （正典§7.14の方式で取得したLink to item）。
+
+========================================================================
+第2部　フロー[5] PA_Write_Run_Log（子フロー）の設計
+========================================================================
+
+■ 2.0 フロー概要（先頭ブロック）
+------------------------------------------------------------------------
+表示名           : PA_Write_Run_Log
+推奨名（英語）    : PA_Write_Run_Log（表示名がそのまま英語名）
+ファイル名        : 08_error_log_and_ledger.txt（本ファイル）
+フロー種別        : 子（呼出可能）フロー
+作成場所          : 親フローと同一のPower Platformソリューション内
+役割             : MeetingArchiveRunLogリストへ実行ログ/エラーログを
+                   1行書き込み、書き込んだ行のIDを呼出元へ返す。
+呼出元           : 主に PA_Meeting_Archive_Orchestrator（3）の
+                   Scope_Catch／Scope_Finallyから、Run a Child Flow
+                   アクション（表示名: Run_Child_Flow_Write_Run_Log_Info
+                   / Run_Child_Flow_Write_Run_Log_Error）で呼び出す。
+                   正典§4の呼出元表記「3(,4)→5」は、通常はオーケスト
+                   レータ(3)のみから呼び出す設計であることを示し、
+                   括弧内の「4」は将来PA_Save_Meeting_Attachment（4）
+                   から添付1件ごとに直接ログを書きたい場合の拡張余地を
+                   示すものです。正典§6のアクション一覧では添付保存
+                   （5→4のセクション）側にRun_Child_Flow_Write_Run_Log
+                   の呼出は定義されていないため、本設計では呼出元を
+                   オーケストレータ（3）のみとします。
+呼出先           : なし（末尾でRespond to a PowerApp or flowにより
+                   処理を終了する）
+
+■ 2.1 使用するコネクタ・接続・権限
+------------------------------------------------------------------------
+使用するコネクタ  : SharePoint、Power Apps
+                   （Power Appsコネクタは「Respond to a PowerApp or
+                   flow」専用で、子フロー戻り値のために使用。実際の
+                   Power Appsアプリとは接続しない）
+使用する接続      : SharePoint接続1本（サイトのアドレス: envSiteUrl。
+                   親フローで使う接続と共有してよい）
+必要な権限        : 対象SharePointサイト（envSiteUrl）の
+                   MeetingArchiveRunLogリストに対する「項目の作成」
+                   権限（少なくとも投稿(Contribute)レベル）。
+プレミアムコネクタの有無 : なし（標準のSharePoint／Power Appsのみ）。
+管理者承認の必要性 : 子フロー機能（Run a Child Flowで呼び出される
+                   フロー）の作成・実行に必要なライセンス（要ライセ
+                   ンス確認）。SharePointとPower Appsコネクタが同一
+                   DLP（データ損失防止）グループに属しているか
+                   （要DLP確認）。プレミアムコネクタは使用しないため
+                   追加の管理者承認は原則不要（要DLP確認・要ライセ
+                   ンス確認のラベルで最終確認は必要）。
+
+■ 2.2 入力引数（子フロー入力。正典§5.5）
+------------------------------------------------------------------------
+引数名: RunId
+  PA表示名        : RunId
+  型              : テキスト
+  必須/任意        : 必須
+  既定値          : （既定値なし。必ず呼出元が指定）
+  用途            : どの実行に属するログかを識別
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : variables('varRunId')
+
+引数名: FlowName
+  PA表示名        : FlowName
+  型              : テキスト
+  必須/任意        : 必須
+  既定値          : （既定値なし）
+  用途            : ログを書いたフローの表示名を記録
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : 'PA_Meeting_Archive_Orchestrator'（固定文字列。
+                    呼出元のフロー名をそのまま入力）
+
+引数名: ActionName
+  PA表示名        : ActionName
+  型              : テキスト
+  必須/任意        : 必須
+  既定値          : （既定値なし）
+  用途            : ログの発生元アクション名・Scope名を記録
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : 例）成功時サマリ: 'Scope_Finally' /
+                    エラー時: 'Scope_Catch'、または実際に失敗した
+                    アクション名（例: first(result('Scope_Try'))
+                    ?['name']。result()はScope内の各アクション実行
+                    結果を配列で返す標準の式関数。取得できる
+                    プロパティ形状はコネクタのバージョンにより
+                    差異があるため要実環境確認）
+
+引数名: MessageId
+  PA表示名        : MessageId
+  型              : テキスト
+  必須/任意        : 任意
+  既定値          : 空文字
+  用途            : エラーが特定の投稿に紐づく場合の識別子
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : 紐づく投稿があれば items('Apply_To_Each_Meeting')
+                    ?['id']、なければ ''
+
+引数名: ReplyId
+  PA表示名        : ReplyId
+  型              : テキスト
+  必須/任意        : 任意
+  既定値          : 空文字
+  用途            : エラーが特定の返信に紐づく場合の識別子
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : 紐づく返信があれば items('Apply_To_Each_Reply')
+                    ?['id']、なければ ''
+
+引数名: AttachmentId
+  PA表示名        : AttachmentId
+  型              : テキスト
+  必須/任意        : 任意
+  既定値          : 空文字
+  用途            : エラーが特定の添付に紐づく場合の識別子
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : 紐づく添付があれば items('Apply_To_Each_Attachment')
+                    ?['id']、なければ ''
+
+引数名: Level
+  PA表示名        : Level
+  型              : テキスト
+  必須/任意        : 必須
+  既定値          : （既定値なし）
+  用途            : ログの重大度（Info/Warning/Error）
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : 固定文字列 'Info' または 'Error'
+                    （Warningを使う場合も固定文字列で渡す）
+
+引数名: ErrorMessage
+  PA表示名        : ErrorMessage
+  型              : テキスト
+  必須/任意        : 任意
+  既定値          : 空文字
+  用途            : エラー要旨（機密情報は含めない）
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : 例）concat('添付保存に失敗しました: ',
+                    coalesce(first(result('Scope_Try'))?['error']
+                    ?['message'], '詳細不明')) （要実環境確認。
+                    §2.10のとおりトークン・本文・認証情報は含めない）
+
+引数名: MeetingCount
+  PA表示名        : MeetingCount
+  型              : 数値
+  必須/任意        : 任意
+  既定値          : 0
+  用途            : 取得できた会議件数
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : variables('varMeetingIndex')（正常完了サマリ時。
+                    エラー時は0でよい）
+
+引数名: SavedCount
+  PA表示名        : SavedCount
+  型              : 数値
+  必須/任意        : 任意
+  既定値          : 0
+  用途            : 添付保存成功件数
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : variables('varSavedCount')
+
+引数名: SkippedCount
+  PA表示名        : SkippedCount
+  型              : 数値
+  必須/任意        : 任意
+  既定値          : 0
+  用途            : スキップ件数
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : variables('varSkippedCount')
+
+引数名: ArchiveUrl
+  PA表示名        : ArchiveUrl
+  型              : テキスト
+  必須/任意        : 任意
+  既定値          : 空文字
+  用途            : 生成できたWord総括ファイルのURL
+  呼出元          : PA_Meeting_Archive_Orchestrator
+  呼出元から渡す式 : 生成できていれば正典§7.14の方式で取得したURL
+                    （Get_Saved_File_Propertiesの「Link to item」）、
+                    未生成またはエラー時は ''
+
+■ 2.3 出力（戻り値。正典§5.5）
+------------------------------------------------------------------------
+出力名   : LogItemId
+型       : テキスト
+内容     : MeetingArchiveRunLogに新規作成された項目のSharePoint ID
+呼出元での参照方法 : body('Run_Child_Flow_Write_Run_Log_Info')?['LogItemId']
+                    または body('Run_Child_Flow_Write_Run_Log_Error')
+                    ?['LogItemId']（Run a Child Flowアクションの
+                    表示名に応じて置き換える）
+
+■ 2.4 環境変数
+------------------------------------------------------------------------
+本フローが参照する環境変数（正典§2）：
+  envSiteUrl        … SharePoint「サイトのアドレス」欄で選択
+  envRunLogListName … 値は 'MeetingArchiveRunLog'。フロー内では
+                     SharePoint「項目の作成」の「リスト名」欄は通常
+                     ドロップダウンでリストを直接選ぶため、環境変数
+                     envRunLogListNameは主に設計上の参照名として
+                     記録し、実装ではリスト名を直接選択してもよい
+                     （どちらでも可。envRunLogListNameを動的に式で
+                     使う場合は「リスト名」欄をカスタム値入力モードに
+                     切り替えて式を入力する）。
+
+■ 2.5 内部変数
+------------------------------------------------------------------------
+本フローは内部変数（Initialize variable）を使用しません。トリガーの
+入力（triggerBody()?[...]）をそのままCreate_Run_Logの各列へマッピング
+するだけの単純な直線フローのため、変数初期化は不要です。
+（該当なし。並列実行時の注意点もありません＝Apply to each等の
+ループを持たないため。）
+
+■ 2.6 アクション一覧
+------------------------------------------------------------------------
+
+[トリガー] フローを手動でトリガーする（子フロー入力）
+  コネクタ       : Power Automate（組み込みトリガー）
+  PA上のアクション名 : 手動でフローをトリガーします
+                     （英語UI: Manually trigger a flow）
+  配置場所       : フロー先頭
+  操作手順       :
+    1. Power Automateで「作成」→「インスタントクラウドフロー」を選択。
+    2. フロー名に「PA_Write_Run_Log」と入力する。
+    3. トリガーの検索ボックスに「手動」と入力し、「手動でフローを
+       トリガーします」を選択して「作成」をクリックする。
+    4. トリガーカードを開き、「+ 入力の追加」を12回クリックし、
+       以下の名前・種類で入力を追加する（追加のたびに種類を選び、
+       追加後に入力欄の名前を書き換える）。
+         RunId          : テキスト
+         FlowName       : テキスト
+         ActionName     : テキスト
+         MessageId      : テキスト
+         ReplyId        : テキスト
+         AttachmentId   : テキスト
+         Level          : テキスト
+         ErrorMessage   : テキスト
+         MeetingCount   : 数値
+         SavedCount     : 数値
+         SkippedCount   : 数値
+         ArchiveUrl     : テキスト
+  入力内容       : 上記12項目（正典§5.5と一致させる）
+  使用する式     : なし（トリガー自体は式を持たない）
+  出力           : triggerBody()?['RunId'] 等、各入力値
+  次のアクション : Create_Run_Log
+  実行条件       : （トリガーのため実行条件なし）
+  再試行         : 該当なし
+  タイムアウト   : 該当なし
+  エラー時の処理 : 該当なし
+
+[アクション1] Create_Run_Log
+  コネクタ       : SharePoint
+  PA上のアクション名 : 項目の作成（Create item）
+  配置場所       : トリガーの直後
+  操作手順       :
+    1. トリガーカードの下の「+ 新しいステップ」をクリックする。
+    2. 検索ボックスに「SharePoint」と入力し、SharePointコネクタを選ぶ。
+    3. アクション一覧から「項目の作成」を選んで追加する。
+    4. アクションの「...」（詳細）メニューから「名前の変更」を選び、
+       「Create_Run_Log」に変更する。
+    5. 「サイトのアドレス」欄で対象サイト
+       （https://metijapan.sharepoint.com/sites/mROOM_240600018、
+       envSiteUrl）を選択する。
+    6. 「リスト名」欄で「MeetingArchiveRunLog」を選択する。
+    7. リストの列に対応した入力欄が表示されるので、各欄に下記の
+       式を入力する（各欄をクリックし、必要に応じて「式」タブに
+       切り替えて入力する）。
+  入力内容（列: 式）:
+    Title               : concat(coalesce(triggerBody()?['RunId'],''),
+                          '_', coalesce(triggerBody()?['ActionName'],''))
+    RunId               : triggerBody()?['RunId']
+    FlowName            : triggerBody()?['FlowName']
+    ActionName          : triggerBody()?['ActionName']
+    MessageId           : coalesce(triggerBody()?['MessageId'], '')
+    ReplyId             : coalesce(triggerBody()?['ReplyId'], '')
+    AttachmentId        : coalesce(triggerBody()?['AttachmentId'], '')
+    Level               : triggerBody()?['Level']
+    ErrorMessage        : coalesce(triggerBody()?['ErrorMessage'], '')
+    OccurredDateTimeUtc : utcNow()
+    MeetingCount        : coalesce(triggerBody()?['MeetingCount'], 0)
+    SavedCount          : coalesce(triggerBody()?['SavedCount'], 0)
+    SkippedCount        : coalesce(triggerBody()?['SkippedCount'], 0)
+    ArchiveUrl          : coalesce(triggerBody()?['ArchiveUrl'], '')
+  使用する式     : 上記のとおり。coalesceの既定値は文字列列には''、
+                  数値列には0（正典§9の既定値ルールに準拠。falseや
+                  0を未設定扱いにしない）。
+  出力           : ID（作成された項目のSharePoint ID）。
+                  outputs('Create_Run_Log')?['body/ID'] として参照。
+  次のアクション : Respond_To_Caller
+  実行条件       : 直前（トリガー）が成功した場合（既定のrun after
+                  ="has succeeded"のみ。追加設定不要）
+  再試行         : SharePointコネクタの既定リトライポリシーをそのまま
+                  使用（既定: 一時的なエラー・429/503応答に対して
+                  自動的に間隔を空けて再試行）。個別のカスタムリトライ
+                  ポリシーは設定しない。
+  タイムアウト   : 既定（未設定。コネクタ既定値に従う）
+  エラー時の処理 : 本フロー自身はScope_Try/Catchで囲みません
+                  （理由は§2.9参照）。失敗した場合はフロー実行自体が
+                  失敗となり、呼出元のRun a Child Flowアクションの
+                  実行結果が「失敗」として記録されます。
+
+[アクション2] Respond_To_Caller
+  コネクタ       : Power Apps
+  PA上のアクション名 : Respond to a PowerApp or flow
+  配置場所       : Create_Run_Logの直後（フロー末尾）
+  操作手順       :
+    1. Create_Run_Logカードの下の「+ 新しいステップ」をクリックする。
+    2. 検索ボックスに「Respond to a PowerApp or flow」と入力し、
+       Power Appsコネクタのアクションを選んで追加する。
+    3. アクション名を「Respond_To_Caller」に変更する。
+    4. 「+ 出力の追加」をクリックし、種類「テキスト」を選択、
+       名前を「LogItemId」に変更する。
+    5. LogItemIdの値欄に、動的コンテンツ一覧からCreate_Run_Logの
+       「ID」を選択する（または式タブで下記の式を入力する）。
+  入力内容       : 出力パラメータ LogItemId（テキスト）1つ
+  使用する式     : LogItemId = outputs('Create_Run_Log')?['body/ID']
+                  （可能な限り動的コンテンツ一覧から選択し、手打ちの
+                  式は最小限にする。コネクタのバージョンによって
+                  出力プロパティのパス表記が異なる場合があるため
+                  要実環境確認）
+  出力           : LogItemId（テキスト）。呼出元へ返却される戻り値。
+  次のアクション : なし（フロー終了）
+  実行条件       : 直前（Create_Run_Log）が成功した場合
+  再試行         : 該当なし（Respond系アクションは通常再試行不要）
+  タイムアウト   : 既定
+  エラー時の処理 : 該当なし（本アクションが失敗する状況は稀。失敗時は
+                  フロー実行自体が失敗としてマークされる）
+
+■ 2.7 条件・ループ・ページング・並列実行
+------------------------------------------------------------------------
+条件（Condition）        : 使用しない（該当なし）
+Apply to each            : 使用しない（該当なし）
+Do until                 : 使用しない（該当なし）
+Select                   : 使用しない（該当なし）
+Filter array             : 使用しない（該当なし）
+Compose                  : 使用しない（各列への式はCreate_Run_Logの
+                           入力欄に直接記述するため、独立したCompose
+                           アクションは設けない）
+ページング               : 該当なし（1回の呼出につき1件のみ書込み）
+並列実行                 : 該当なし。ただし、複数の呼出元（複数の
+                           Apply to each反復や複数フロー）から同時に
+                           このPA_Write_Run_Logが呼び出される可能性は
+                           あるため、各呼出は独立した子フロー実行と
+                           して並行に走ってよい（本フロー内に共通の
+                           変数を持たないため競合は発生しない）。
+
+■ 2.8 インライン代替（子フローにしない場合）
+------------------------------------------------------------------------
+00_overview.txtに記載のとおり、PA_Write_Run_Logを独立した子フローに
+せず、各フロー（オーケストレータ等）内に直接「項目の作成」アクション
+を配置してMeetingArchiveRunLogへ書き込む方式でも代替可能です。
+
+インライン方式を選ぶ場合の設計：
+  ・Scope_Catch内、Scope_Finally内それぞれに、本節2.6の
+   Create_Run_Log相当の「項目の作成」アクションをそのまま複製配置する。
+  ・列マッピングの式は本節と同一（ただしtriggerBody()ではなく、
+   その場で使えるvariables('varRunId')等に読み替える）。
+  ・Respond_To_Callerは不要（子フロー呼出ではないため）。
+  ・利点: 子フロー呼出のオーバーヘッドがない、呼出失敗時の
+   トラブルシューティングが単純。
+  ・欠点: 同じログ書込みロジック（列マッピング）を複数箇所に複製する
+   ため、列名変更等の際にDRYでなくなる（00_overview.txt「統合・分割の
+   理由」参照）。
+  ・どちらを採用しても、ログの列構成・書き込む値は本資料と同一にする。
+
+■ 2.9 エラー処理方針（本フロー、および各主要フローの方針まとめ）
+------------------------------------------------------------------------
+(a) 本フロー（PA_Write_Run_Log）自身の方針
+  本フローにはScope_Try/Scope_Catch/Scope_Finallyを設けません。
+  理由：ログ書込み専用のフローがさらに自分自身のエラーをログに
+  書こうとすると、ログ書込みの失敗をログに書く、という循環が発生し
+  得るため、あえてシンプルな直線フローのままにします。
+  Create_Run_Logが失敗した場合は、フロー実行自体が「失敗」として
+  Power Automateの実行履歴に記録され、呼出元のRun a Child Flow
+  アクションも失敗としてマークされます（正典§6のログ(5)アクション
+  一覧が Create_Run_Log, Respond_To_Caller の2つのみであることに
+  対応）。
+
+(b) 各主要フロー（[1]手動開始／[3]オーケストレータ／[4]添付保存）の方針
+  正典§9・§6の Scope_Try / Scope_Catch / Scope_Finally の構成に
+  従い、以下の実行条件（run after設定）を使います。
+    Scope_Try     : 本体の処理を格納するスコープ。
+    Scope_Catch   : Scope_Tryの実行条件が「失敗（has failed）」または
+                    「タイムアウト（has timed out）」の場合に実行する。
+                    ここでRun_Child_Flow_Write_Run_Log_Error
+                    （Level='Error'）を呼び出し、エラー内容を記録する。
+    Scope_Finally : Scope_Tryの実行条件が「成功（is successful）」
+                    「失敗（has failed）」「スキップ済み（is skipped）」
+                    「タイムアウト（has timed out）」のいずれでも実行
+                    する（つまり必ず実行される後片付けブロック）。
+                    正常完了時にRun_Child_Flow_Write_Run_Log_Info
+                    （Level='Info'）で件数サマリを記録し、必要に応じて
+                    Post_Result_Message等の通知を行う。
+  [3]オーケストレータおよび[4]添付保存の両方に、このScope_Try/Catch/
+  Finallyの3点セットを設けます。[1]手動開始フローについても、
+  Run_Child_Flow_Orchestrator呼出をScope_Tryで囲み、失敗時に
+  Notify_Manual_Resultで失敗を通知する構成が望ましい設計です。
+
+(c) 添付1件の失敗で全会議処理を止めない方針
+  オーケストレータのApply_To_Each_Attachment（正典§6）内で
+  Run_Child_Flow_Save_Attachmentを呼び出す際、子フロー[4]は例外を
+  投げるのではなく、必ず戻り値（Status=Saved/Skipped/Failedのいずれか）
+  を返す設計にしています。これにより、ある添付の保存に失敗しても
+  Apply to each自体は正常終了として次の添付・次の会議へ処理を継続
+  でき、Word総括全体の生成やその他の添付の保存が止まりません
+  （正典§9「添付1件失敗で全停止しない」、仕様書9章「1ファイルの失敗で
+  会議全体を中止せず」に対応）。
+
+(d) 失敗を戻り値で返す方針（JSON例）
+  子フロー[4] PA_Save_Meeting_Attachment は、添付1件の保存に失敗した
+  場合でもフローとしては正常終了し、戻り値のJSONで失敗を表現します。
+  概念を示す例としては次のような形になります。
+    {
+      "status": "Failed",
+      "savedName": "",
+      "savedFileUrl": "",
+      "errorMessage": "添付ファイル本体の取得に失敗しました"
+    }
+  ただし実装上のキー名は正典§5.4の戻り値スキーマに統一し、大文字
+  始まりのキー名を使います（名称・型は正典からコピーする方針のため）。
+  実際の戻り値の例：
+    {
+      "Status": "Failed",
+      "SavedName": "",
+      "SavedFileUrl": "",
+      "ErrorMessage": "添付ファイル本体の取得に失敗しました",
+      "IdempotencyKey": "1698xxxxxxx_yyyyyyyy"
+    }
+  オーケストレータはこの戻り値のStatusを見て、Word総括HTML内に
+  「（保存失敗）」の注記（正典§8のAppend_Attachment_Html「失敗」
+  テンプレート）を出力し、かつ必要に応じてRun_Child_Flow_Write_
+  Run_Log_Errorでこの内容をログに記録します（ErrorMessageの内容を
+  そのまま、または要旨化してPA_Write_Run_LogのErrorMessage引数へ
+  渡す）。
+
+■ 2.10 ログに記録しない情報（正典§9）
+------------------------------------------------------------------------
+MeetingArchiveRunLog・MeetingArchiveLedgerのいずれにも、以下は記録
+しません。
+  ・Teamsコネクタやその他コネクタのアクセストークン／認証情報
+  ・添付ファイルやTeams投稿本文そのもの（全文）
+  ・SharePointの共有リンクに含まれる認証用パラメータ
+ErrorMessage列に書く内容は「原因の要旨」（例:
+「添付ファイル本体の取得に失敗しました」「SharePointへのファイル
+作成でエラーが発生しました」）にとどめ、outputs()やresult()の
+生レスポンス全体をそのまま連結しないようにします。
+
+■ 2.11 テスト手順
+------------------------------------------------------------------------
+  1. PA_Write_Run_Logを保存後、Power Automateの「テスト」機能で
+     手動実行し、以下のテスト入力を与える。
+       RunId='test-run-001', FlowName='PA_Meeting_Archive_Orchestrator',
+       ActionName='Scope_Finally', MessageId='', ReplyId='',
+       AttachmentId='', Level='Info', ErrorMessage='',
+       MeetingCount=3, SavedCount=5, SkippedCount=0,
+       ArchiveUrl='https://metijapan.sharepoint.com/.../課内会議総括_....doc'
+  2. 実行後、MeetingArchiveRunLogリストを開き、1行追加されている
+     ことを確認する。Title列が「test-run-001_Scope_Finally」に
+     なっていること、MeetingCount/SavedCount/SkippedCountが数値
+     として正しく入っていること（文字列化されていないこと）を確認する。
+  3. Level='Error'、ErrorMessage='テストエラー'を指定した2回目の
+     テスト実行を行い、Error行が正しく記録されることを確認する。
+  4. 戻り値LogItemIdが、実際にリストへ追加された項目のIDと一致する
+     ことを確認する（リスト側の項目を開き、URL末尾のID等と突き合わせる）。
+  5. オーケストレータ側からRun a Child Flowで実際に呼び出し、
+     Scope_Catch/Scope_Finallyそれぞれの経路で正しく呼ばれることを
+     結合テストで確認する（オーケストレータのTXT側テスト手順とあわせて
+     実施）。
+
+■ 2.12 完成条件
+------------------------------------------------------------------------
+  ☐ MeetingArchiveLedger／MeetingArchiveStaging／MeetingArchiveRunLog
+    の3リストが、正典§3の列名・型どおりに作成されている。
+  ☐ PA_Write_Run_Logが子フローとして作成され、トリガーの12入力・
+    戻り値LogItemIdが正典§5.5と一致している。
+  ☐ Create_Run_Logの列マッピングがすべて正しく、テスト実行で
+    MeetingArchiveRunLogに1行正しく追加される。
+  ☐ Level='Info'とLevel='Error'の両パターンで正しくログが残る。
+  ☐ ログにアクセストークン・ファイル本文・共有リンク認証情報が
+    含まれていない。
+  ☐ オーケストレータのScope_Catch/Scope_Finallyから実際に呼び出し、
+    LogItemIdが取得できることを確認済み。
+
+========================================================================
+式・型監査（正典§11・全17問）
+========================================================================
+trim対象はすべて文字列か:
+  Yes。本フローはtrim()を明示使用していない。Titleの式は
+  coalesce(triggerBody()?['RunId'],'')のように文字列引数のみを
+  対象とし、数値引数（MeetingCount等）にはtrimを適用していない。
+
+coalesceの候補値は同一型か:
+  Yes。文字列列は coalesce(triggerBody()?['x'], '')（文字列と文字列）、
+  数値列は coalesce(triggerBody()?['y'], 0)（数値と数値）で統一し、
+  型混在はない。
+
+nullと空文字列を区別しているか:
+  Yes。MessageId/ReplyId/AttachmentId等の任意引数が未指定（null）の
+  場合はcoalesceで''に変換して記録するため、値が明示的に空文字で
+  渡された場合と区別はしないが、いずれも「該当なし」を表す空欄として
+  一貫して扱う設計にしている。
+
+空白だけの文字列を考慮しているか:
+  Yes（現状の方針として明記）。ActionName等が空白のみで渡された場合も
+  concatはそのまま結合し処理は継続する。空白のみを不正値として弾く
+  要件は現状ないため追加のtrim検証は行っていない。将来要件化する
+  場合はtrim(coalesce(...))判定の追加を検討する。
+
+配列の既定値がjson('[]')になっているか:
+  該当なし。本フローは配列変数・配列引数を使用しない。
+
+オブジェクトの既定値がjson('{}')になっているか:
+  該当なし。本フローはオブジェクト型の変数を使用しない。
+
+falseを未設定扱いしていないか:
+  該当なし。本フローはBoolean型の入力・変数を持たない。
+
+0を未設定扱いしていないか:
+  Yes。MeetingCount=0／SavedCount=0／SkippedCount=0は正当な値として
+  そのままSharePoint数値列へ書き込み、未設定と混同していない。
+
+Apply to eachへnullを渡していないか:
+  該当なし。本フローはApply to eachを使用しない。
+
+JSONプロパティを安全に参照しているか:
+  Yes。triggerBody()?['RunId']のように、すべて安全参照（?[]）を
+  使用している。
+
+HTMLへ入れる値をエスケープしているか:
+  該当なし。本フローはHTMLを生成しない。ErrorMessage等はSharePoint
+  の複数行テキスト列にそのまま格納するのみで、HTML埋め込みは行わない。
+
+未定義の変数がないか:
+  Yes（該当なし）。本フローは内部変数（Initialize variable）を
+  一切使用しない設計のため、未定義変数は発生しない。
+
+未定義のアクション参照がないか:
+  Yes。式中で参照するアクション名はCreate_Run_Logのみで、本フロー内に
+  実在するアクション名と一致している。
+
+式内のアクション名が実在するか:
+  Yes。outputs('Create_Run_Log')?['body/ID']は本フロー内のアクション
+  名Create_Run_Logと一致している。
+
+添付リンクが保存後SharePointファイルを指しているか:
+  該当なし。本フローはファイル保存を行わない。ArchiveUrlは呼出元
+  （オーケストレータ）が正典§7.14の方式（Get_Saved_File_Propertiesの
+  「Link to item」）で取得した値をそのまま引数として受け取るのみ。
+
+会議が日付順に並ぶか:
+  該当なし。本フローはログ書込みのみを行い、会議の並び替えは行わない。
+  並び替えはMeetingArchiveStagingとGet_Sorted_Meetings（オーケスト
+  レータ側）で実施する（本資料第1部1.2参照）。
+
+各会議が新しいページから開始するか:
+  該当なし。本フローはWord総括ファイルの生成を行わない。該当処理は
+  オーケストレータのHTML生成／Word作成セクションで実施する。
+
+========================================================================
+想定されるエラー（正典§12・該当分）
+========================================================================
+
+想定エラー: 数値列（MeetingCount/SavedCount/SkippedCount）にnullを
+           渡してSharePoint書込みが型エラーになる
+原因: 呼出元がMeetingCount等を省略し、triggerBody()?['MeetingCount']
+     がnullのままCreate_Run_Logに渡された
+確認するアクション: Create_Run_Log
+確認する入力: MeetingCount, SavedCount, SkippedCount
+修正方法: coalesce()で数値の既定値0を設定してから列へ渡す
+修正後の式: coalesce(triggerBody()?['MeetingCount'], 0)
+
+想定エラー: Title列が「_」だけ、または判読できない文字列になる
+原因: 呼出元がRunIdまたはActionNameを空文字／null のまま渡した
+確認するアクション: Create_Run_Log
+確認する入力: RunId, ActionName
+修正方法: 呼出元（Run_Child_Flow_Write_Run_Log_Info/Error）で必ず
+         RunId・ActionNameを指定するよう実装を見直す。本フロー側でも
+         coalesceで既定文字列を補う
+修正後の式: concat(coalesce(triggerBody()?['RunId'],'unknown'),'_',
+           coalesce(triggerBody()?['ActionName'],'unknown'))
+
+想定エラー: Level列に'Info'/'Warning'/'Error'以外の文字列が入る
+原因: 呼出元の実装ミスで任意の文字列（例: 'info'小文字や'OK'）を
+     渡してしまう
+確認するアクション: Create_Run_Log（呼出元のRun_Child_Flow_Write_
+                   Run_Log_*アクション）
+確認する入力: Level
+修正方法: 呼出元では必ず'Info'／'Warning'／'Error'のいずれかを固定値で
+         渡す。運用時はLevel列の値を定期的にフィルタし異常値がないか
+         目視確認する
+修正後の式: （呼出元側）Level: 'Info' / 'Warning' / 'Error' のいずれか
+           を固定文字列で渡す
+
+想定エラー: SharePointリストが見つからない、または列名の相違により
+           Create_Run_Logの列マッピングが崩れる
+原因: 第1部の手順でリスト名・列名を正典（§3.3）と異なる表記
+     （タイプミス・全角半角違い）で作成してしまった
+確認するアクション: Create_Run_Log
+確認する入力: サイトのアドレス, リスト名, 各列マッピング
+修正方法: 本資料第1部の列名表と実際に作成したリストの列名を突き合わせ、
+         相違があれば列名を修正するか、Create_Run_Logの列マッピングを
+         選び直す
+修正後の式: （式の修正ではなくUI設定の修正。列名を正典どおりに統一する）
+
+想定エラー: 2年分一括処理時、ログ書込みが集中してSharePointの
+           スロットリング（429）が発生しCreate_Run_Logが失敗する
+原因: 大量の会議・添付を処理する過程でScope_Catch/Scope_Finallyからの
+     呼出が短時間に集中する
+確認するアクション: Create_Run_Log
+確認する入力: 実行頻度（Scope_Catch/Scope_Finallyからの呼出回数）
+修正方法: SharePointコネクタの既定リトライ（429時のRetry-After尊重）
+         に任せる。ログ書込みの粒度をエラー時・集計時のみに絞り、
+         添付1件ごとの正常系詳細ログはMeetingArchiveLedger側に
+         任せる設計を維持する
+修正後の式: （式変更ではなく呼出頻度の設計方針。00_overview.txtの
+           「呼出頻度が低い」方針を維持する）
+
+想定エラー: 戻り値LogItemIdが空、またはRespond_To_Callerで参照エラー
+           になる
+原因: outputs('Create_Run_Log')?['body/ID']の参照パスが実際の
+     コネクタ出力と異なる（コネクタのバージョン差異）
+確認するアクション: Respond_To_Caller
+確認する入力: Create_Run_Logの出力（動的コンテンツ一覧の「ID」）
+修正方法: Respond_To_Callerの入力欄で動的コンテンツ一覧から
+         Create_Run_Logの「ID」を直接選択し、式を手打ちしない
+         （要実環境確認）
+修正後の式: outputs('Create_Run_Log')?['body/ID']
+           （動的コンテンツ選択で自動生成される式を優先する）
+
+想定エラー: ErrorMessageに機密情報（アクセストークン、ファイル本文、
+           共有リンクの認証情報）が記録されてしまう
+原因: 呼出元でエラーメッセージ生成時にoutputs()の全体やレスポンス
+     本文をそのまま連結してしまう
+確認するアクション: 呼出元フロー（オーケストレータ／添付保存）の
+                   エラーメッセージ生成部分
+確認する入力: ErrorMessage
+修正方法: エラーメッセージは「原因の要旨」のみを渡す設計とし、
+         トークン・ファイル本文・共有リンクの認証情報を含む可能性の
+         ある値をそのまま渡さない（本資料§2.10・正典§9準拠）
+修正後の式: （呼出元側）ErrorMessage: concat('添付保存に失敗: ',
+           coalesce(first(result('Scope_Try'))?['error']?['message'],
+           '詳細不明'))のように要旨のみを整形して渡す（要実環境確認）
+
+想定エラー: MeetingArchiveStagingのSortKeyが同時刻投稿で意図した順に
+           並ばない
+原因: SortKeyの生成式（yyyyMMddHHmmss_メッセージID）で、同一秒内の
+     複数投稿がメッセージIDの文字列比較順に依存するが、メッセージID
+     の発行順と実際の投稿順が一致しない可能性がある
+確認するアクション: Compose_SortKey（オーケストレータ側。本ファイルは
+                   Stagingリストの説明として言及）
+確認する入力: SortKeyの元になるcreatedDateTimeとメッセージID
+修正方法: 同一日時内の順序はメッセージID文字列比較に委ねているため、
+         Teamsのメッセージ発行順と投稿順が一致することを実環境で
+         確認する（要実環境確認）。ずれが確認された場合は
+         PostedDateTimeJstを用いた二次ソートキーの追加を検討する
+修正後の式: 変更なし（現行式を維持しつつ、要実環境確認ラベルで
+           運用時に確認する）
+
+========================================================================
+（本ファイルは08_error_log_and_ledger.txtの全内容です）
+========================================================================

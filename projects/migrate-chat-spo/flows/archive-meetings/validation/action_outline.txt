@@ -1,0 +1,156 @@
+=== v4 アクションアウトライン（実行順・ネスト・通し番号=定義上の全アクション） ===
+trigger: manual (Request/Button) inputs: LookbackDays/DryRun/ForceReprocess
+  1 Compose_EffectiveLookbackDays  <Compose>  runAfter: -
+  2 Initialize_RunId  <InitializeVariable> [varRunId:string]  runAfter: Compose_EffectiveLookbackDays(Succeeded)
+  3 Initialize_LookbackDays  <InitializeVariable> [varLookbackDays:integer]  runAfter: Initialize_RunId(Succeeded)
+  4 Initialize_EndDateUtc  <InitializeVariable> [varEndDateUtc:string]  runAfter: Initialize_LookbackDays(Succeeded)
+  5 Initialize_StartDateUtc  <InitializeVariable> [varStartDateUtc:string]  runAfter: Initialize_EndDateUtc(Succeeded)
+  6 Initialize_TeamId  <InitializeVariable> [varTeamId:string]  runAfter: Initialize_StartDateUtc(Succeeded)
+  7 Initialize_ChannelId  <InitializeVariable> [varChannelId:string]  runAfter: Initialize_TeamId(Succeeded)
+  8 Initialize_SiteAddress  <InitializeVariable> [varSiteAddress:string]  runAfter: Initialize_ChannelId(Succeeded)
+  9 Initialize_ListSiteAddress  <InitializeVariable> [varListSiteAddress:string]  runAfter: Initialize_SiteAddress(Succeeded)
+ 10 Initialize_Library  <InitializeVariable> [varLibrary:string]  runAfter: Initialize_ListSiteAddress(Succeeded)
+ 11 Initialize_DestinationPath  <InitializeVariable> [varDestinationPath:string]  runAfter: Initialize_Library(Succeeded)
+ 12 Initialize_LedgerList  <InitializeVariable> [varLedgerList:string]  runAfter: Initialize_DestinationPath(Succeeded)
+ 13 Initialize_RunLogList  <InitializeVariable> [varRunLogList:string]  runAfter: Initialize_LedgerList(Succeeded)
+ 14 Initialize_MessagesArray  <InitializeVariable> [varMessagesArray:array]  runAfter: Initialize_RunLogList(Succeeded)
+ 15 Initialize_NextLink  <InitializeVariable> [varNextLink:string]  runAfter: Initialize_MessagesArray(Succeeded)
+ 16 Initialize_RepliesArray  <InitializeVariable> [varRepliesArray:array]  runAfter: Initialize_NextLink(Succeeded)
+ 17 Initialize_ReplyNextLink  <InitializeVariable> [varReplyNextLink:string]  runAfter: Initialize_RepliesArray(Succeeded)
+ 18 Initialize_AttachmentCandidates  <InitializeVariable> [varAttachmentCandidates:array]  runAfter: Initialize_ReplyNextLink(Succeeded)
+ 19 Initialize_MeetingAttachments  <InitializeVariable> [varMeetingAttachments:array]  runAfter: Initialize_AttachmentCandidates(Succeeded)
+ 20 Initialize_Meetings  <InitializeVariable> [varMeetings:array]  runAfter: Initialize_MeetingAttachments(Succeeded)
+ 21 Initialize_SortedMeetings  <InitializeVariable> [varSortedMeetings:array]  runAfter: Initialize_Meetings(Succeeded)
+ 22 Initialize_DocumentHtml  <InitializeVariable> [varDocumentHtml:string]  runAfter: Initialize_SortedMeetings(Succeeded)
+ 23 Initialize_MeetingIndex  <InitializeVariable> [varMeetingIndex:integer]  runAfter: Initialize_DocumentHtml(Succeeded)
+ 24 Initialize_SavedCount  <InitializeVariable> [varSavedCount:integer]  runAfter: Initialize_MeetingIndex(Succeeded)
+ 25 Initialize_SkippedCount  <InitializeVariable> [varSkippedCount:integer]  runAfter: Initialize_SavedCount(Succeeded)
+ 26 Initialize_FailedCount  <InitializeVariable> [varFailedCount:integer]  runAfter: Initialize_SkippedCount(Succeeded)
+ 27 Initialize_ArchiveUrl  <InitializeVariable> [varArchiveUrl:string]  runAfter: Initialize_FailedCount(Succeeded)
+ 28 Initialize_RunStatus  <InitializeVariable> [varRunStatus:string]  runAfter: Initialize_ArchiveUrl(Succeeded)
+ 29 Initialize_ErrorMessage  <InitializeVariable> [varErrorMessage:string]  runAfter: Initialize_RunStatus(Succeeded)
+ 30 Scope_05_Ensure_Destination_Folder  <Scope>  runAfter: Initialize_ErrorMessage(Succeeded)
+ 31   Condition_Provision_Destination  <If>  runAfter: -
+ 32     Create_Destination_Folder_L1  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: -
+ 33     Create_Destination_Folder_L2  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Create_Destination_Folder_L1(Succeeded/Failed)
+ 34     Create_Destination_Folder_L3  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Create_Destination_Folder_L2(Succeeded/Failed)
+ 35     Create_Destination_Folder_L4  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Create_Destination_Folder_L3(Succeeded/Failed)
+ 36     Verify_Destination_Folder  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Create_Destination_Folder_L4(Succeeded/Failed)
+ 37 Scope_10_Get_Channel_Messages  <Scope>  runAfter: Scope_05_Ensure_Destination_Folder(Succeeded)
+ 38   Set_NextLink_First  <SetVariable> [varNextLink]  runAfter: -
+ 39   Do_Until_Messages_Paging  <Until> [until: @empty(variables('varNextLink'))]  runAfter: Set_NextLink_First(Succeeded)
+ 40     Get_Channel_Messages  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+ 41     Process_Retrieved_Messages  <Foreach> [in: @coalesce(body('Get_Channel_Messages')?['value'], json('[]'))]  runAfter: Get_Channel_Messages(Succeeded)
+ 42       Append_Message_To_MessagesArray  <AppendToArrayVariable> [varMessagesArray]  runAfter: -
+ 43     Set_NextLink  <SetVariable> [varNextLink]  runAfter: Process_Retrieved_Messages(Succeeded)
+ 44 Scope_20_Process_Meetings  <Scope>  runAfter: Scope_10_Get_Channel_Messages(Succeeded)
+ 45   Filter_Messages_By_Period  <Query>  runAfter: -
+ 46   Process_Each_Parent_Message  <Foreach> [in: @body('Filter_Messages_By_Period')]  runAfter: Filter_Messages_By_Period(Succeeded)
+ 47     Compose_Author  <Compose>  runAfter: -
+ 48     Compose_Organizer  <Compose>  runAfter: Compose_Author(Succeeded)
+ 49     Compose_MeetingDate  <Compose>  runAfter: Compose_Organizer(Succeeded)
+ 50     Compose_PostedDateTimeJst  <Compose>  runAfter: Compose_MeetingDate(Succeeded)
+ 51     Convert_Body_Html_To_Text  <OpenApiConnection> [shared_conversionservice/HtmlToText]  runAfter: Compose_PostedDateTimeJst(Succeeded)
+ 52     Set_ReplyNextLink_First  <SetVariable> [varReplyNextLink]  runAfter: Convert_Body_Html_To_Text(Succeeded)
+ 53     Set_RepliesArray_Reset  <SetVariable> [varRepliesArray]  runAfter: Set_ReplyNextLink_First(Succeeded)
+ 54     Do_Until_Replies_Paging  <Until> [until: @empty(variables('varReplyNextLink'))]  runAfter: Set_RepliesArray_Reset(Succeeded)
+ 55       Get_Message_Replies  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+ 56       Process_Retrieved_Replies  <Foreach> [in: @coalesce(body('Get_Message_Replies')?['value'], json('[]'))]  runAfter: Get_Message_Replies(Succeeded)
+ 57         Append_Reply_To_RepliesArray  <AppendToArrayVariable> [varRepliesArray]  runAfter: -
+ 58       Set_ReplyNextLink  <SetVariable> [varReplyNextLink]  runAfter: Process_Retrieved_Replies(Succeeded)
+ 59     Select_Parent_Attachments  <Select>  runAfter: Do_Until_Replies_Paging(Succeeded)
+ 60     Set_AttachmentCandidates_Parent  <SetVariable> [varAttachmentCandidates]  runAfter: Select_Parent_Attachments(Succeeded)
+ 61     Process_Each_Reply  <Foreach> [in: @variables('varRepliesArray')]  runAfter: Set_AttachmentCandidates_Parent(Succeeded)
+ 62       Select_Reply_Attachments  <Select>  runAfter: -
+ 63       Process_Each_Reply_Attachment  <Foreach> [in: @body('Select_Reply_Attachments')]  runAfter: Select_Reply_Attachments(Succeeded)
+ 64         Append_Reply_Attachment_Candidate  <AppendToArrayVariable> [varAttachmentCandidates]  runAfter: -
+ 65     Filter_File_Attachments  <Query>  runAfter: Process_Each_Reply(Succeeded)
+ 66     Set_MeetingAttachments_Reset  <SetVariable> [varMeetingAttachments]  runAfter: Filter_File_Attachments(Succeeded)
+ 67     Condition_Has_File_Attachments  <If>  runAfter: Set_MeetingAttachments_Reset(Succeeded)
+ 68       Process_Each_Attachment  <Foreach> [in: @body('Filter_File_Attachments')]  runAfter: -
+ 69         Compose_IdempotencyKey  <Compose>  runAfter: -
+ 70         Get_Ledger_Existing  <OpenApiConnection> [shared_sharepointonline/GetItems]  runAfter: Compose_IdempotencyKey(Succeeded)
+ 71         Condition_Already_Saved  <If>  runAfter: Get_Ledger_Existing(Succeeded)
+ 72           Append_Existing_Meeting_Attachment  <AppendToArrayVariable> [varMeetingAttachments]  runAfter: -
+ 73           Increment_SkippedCount_Existing  <IncrementVariable> [varSkippedCount]  runAfter: Append_Existing_Meeting_Attachment(Succeeded)
+            [else]
+ 74           Compose_Extension  <Compose>  runAfter: -
+ 75           Compose_BaseName  <Compose>  runAfter: Compose_Extension(Succeeded)
+ 76           Replace_Invalid_Quote  <Compose>  runAfter: Compose_BaseName(Succeeded)
+ 77           Replace_Invalid_Star  <Compose>  runAfter: Replace_Invalid_Quote(Succeeded)
+ 78           Replace_Invalid_Colon  <Compose>  runAfter: Replace_Invalid_Star(Succeeded)
+ 79           Replace_Invalid_Lt  <Compose>  runAfter: Replace_Invalid_Colon(Succeeded)
+ 80           Replace_Invalid_Gt  <Compose>  runAfter: Replace_Invalid_Lt(Succeeded)
+ 81           Replace_Invalid_Question  <Compose>  runAfter: Replace_Invalid_Gt(Succeeded)
+ 82           Replace_Invalid_Slash  <Compose>  runAfter: Replace_Invalid_Question(Succeeded)
+ 83           Replace_Invalid_Backslash  <Compose>  runAfter: Replace_Invalid_Slash(Succeeded)
+ 84           Replace_Invalid_Pipe  <Compose>  runAfter: Replace_Invalid_Backslash(Succeeded)
+ 85           Replace_Invalid_Hash  <Compose>  runAfter: Replace_Invalid_Pipe(Succeeded)
+ 86           Replace_Invalid_Percent  <Compose>  runAfter: Replace_Invalid_Hash(Succeeded)
+ 87           Compose_TrimTrailing  <Compose>  runAfter: Replace_Invalid_Percent(Succeeded)
+ 88           Compose_SavedName  <Compose>  runAfter: Compose_TrimTrailing(Succeeded)
+ 89           Condition_DryRun  <If>  runAfter: Compose_SavedName(Succeeded)
+ 90             Append_DryRun_Meeting_Attachment  <AppendToArrayVariable> [varMeetingAttachments]  runAfter: -
+ 91             Increment_SkippedCount_DryRun  <IncrementVariable> [varSkippedCount]  runAfter: Append_DryRun_Meeting_Attachment(Succeeded)
+              [else]
+ 92             Compose_Saved_File_Url  <Compose>  runAfter: -
+ 93             Scope_Save_File  <Scope>  runAfter: Compose_Saved_File_Url(Succeeded)
+ 94               Compose_Source_Url  <Compose>  runAfter: -
+ 95               Compose_Source_Site  <Compose>  runAfter: Compose_Source_Url(Succeeded)
+ 96               Compose_Source_Path  <Compose>  runAfter: Compose_Source_Site(Succeeded)
+ 97               Get_Source_File_Content  <OpenApiConnection> [shared_sharepointonline/GetFileContentByPath]  runAfter: Compose_Source_Path(Succeeded)
+ 98               Create_Attachment_File  <OpenApiConnection> [shared_sharepointonline/CreateFile]  runAfter: Get_Source_File_Content(Succeeded)
+ 99             Compose_Ledger_Body  <Compose>  runAfter: Scope_Save_File(Succeeded)
+100             Create_Ledger_Item  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_Ledger_Body(Succeeded)
+101             Append_Saved_Meeting_Attachment  <AppendToArrayVariable> [varMeetingAttachments]  runAfter: Create_Ledger_Item(Succeeded)
+102             Increment_SavedCount  <IncrementVariable> [varSavedCount]  runAfter: Append_Saved_Meeting_Attachment(Succeeded)
+103             Append_Failed_Meeting_Attachment  <AppendToArrayVariable> [varMeetingAttachments]  runAfter: Scope_Save_File(Failed/TimedOut)
+104             Compose_LedgerFailed_Body  <Compose>  runAfter: Append_Failed_Meeting_Attachment(Succeeded)
+105             Create_Ledger_Item_Failed  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_LedgerFailed_Body(Succeeded)
+106             Increment_FailedCount  <IncrementVariable> [varFailedCount]  runAfter: Create_Ledger_Item_Failed(Succeeded)
+107     Compose_SortKey  <Compose>  runAfter: Condition_Has_File_Attachments(Succeeded)
+108     Append_Normalized_Meeting  <AppendToArrayVariable> [varMeetings]  runAfter: Compose_SortKey(Succeeded)
+109 Scope_40_Sort_Meetings  <Scope>  runAfter: Scope_20_Process_Meetings(Succeeded)
+110   Sort_Meetings  <SetVariable> [varSortedMeetings]  runAfter: -
+111 Scope_50_Build_Word_Content  <Scope>  runAfter: Scope_40_Sort_Meetings(Succeeded)
+112   Append_DocumentHtml_Header  <AppendToStringVariable> [varDocumentHtml]  runAfter: -
+113   Apply_To_Each_Sorted_Meeting  <Foreach> [in: @variables('varSortedMeetings')]  runAfter: Append_DocumentHtml_Header(Succeeded)
+114     Condition_Insert_Page_Break  <If>  runAfter: -
+115       Append_Page_Break  <AppendToStringVariable> [varDocumentHtml]  runAfter: -
+116     Escape_Ampersand  <Compose>  runAfter: Condition_Insert_Page_Break(Succeeded)
+117     Escape_LessThan  <Compose>  runAfter: Escape_Ampersand(Succeeded)
+118     Escape_GreaterThan  <Compose>  runAfter: Escape_LessThan(Succeeded)
+119     Escape_DoubleQuote  <Compose>  runAfter: Escape_GreaterThan(Succeeded)
+120     Escape_SingleQuote  <Compose>  runAfter: Escape_DoubleQuote(Succeeded)
+121     Compose_Body_With_Breaks  <Compose>  runAfter: Escape_SingleQuote(Succeeded)
+122     Compose_Meeting_Header_Html  <Compose>  runAfter: Compose_Body_With_Breaks(Succeeded)
+123     Append_Meeting_Header_Html  <AppendToStringVariable> [varDocumentHtml]  runAfter: Compose_Meeting_Header_Html(Succeeded)
+124     Condition_Has_Attachments  <If>  runAfter: Append_Meeting_Header_Html(Succeeded)
+125       Apply_To_Each_Saved_Attachment  <Foreach> [in: @coalesce(items('Apply_To_Each_Sorted_Meeting')?['attachments'], json(]  runAfter: -
+126         Condition_Attachment_Saved  <If>  runAfter: -
+127           Append_Attachment_Html  <AppendToStringVariable> [varDocumentHtml]  runAfter: -
+            [else]
+128           Append_Attachment_Failed_Html  <AppendToStringVariable> [varDocumentHtml]  runAfter: -
+        [else]
+129       Append_No_Attachments_Html  <AppendToStringVariable> [varDocumentHtml]  runAfter: -
+130     Increment_MeetingIndex  <IncrementVariable> [varMeetingIndex]  runAfter: Condition_Has_Attachments(Succeeded)
+131   Append_DocumentHtml_Footer  <AppendToStringVariable> [varDocumentHtml]  runAfter: Apply_To_Each_Sorted_Meeting(Succeeded)
+132 Scope_60_Create_Archive_File  <Scope>  runAfter: Scope_50_Build_Word_Content(Succeeded)
+133   Compose_ArchiveFileName  <Compose>  runAfter: -
+134   Condition_DryRun_Archive  <If>  runAfter: Compose_ArchiveFileName(Succeeded)
+135     Set_ArchiveUrl_DryRun  <SetVariable> [varArchiveUrl]  runAfter: -
+      [else]
+136     Create_Archive_Document  <OpenApiConnection> [shared_sharepointonline/CreateFile]  runAfter: -
+137     Set_ArchiveUrl  <SetVariable> [varArchiveUrl]  runAfter: Create_Archive_Document(Succeeded)
+138 Scope_70_Write_Run_Log  <Scope>  runAfter: Scope_60_Create_Archive_File(Succeeded)
+139   Set_RunStatus_Success  <SetVariable> [varRunStatus]  runAfter: -
+140   Compose_RunLog_Body  <Compose>  runAfter: Set_RunStatus_Success(Succeeded)
+141   Create_Run_Log  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_RunLog_Body(Succeeded)
+142 Scope_90_Catch  <Scope>  runAfter: Scope_70_Write_Run_Log(Failed/Skipped/TimedOut)
+143   Set_RunStatus_Failed  <SetVariable> [varRunStatus]  runAfter: -
+144   Set_ErrorMessage  <SetVariable> [varErrorMessage]  runAfter: Set_RunStatus_Failed(Succeeded)
+145   Compose_ErrorLog_Body  <Compose>  runAfter: Set_ErrorMessage(Succeeded)
+146   Create_Error_Log  <OpenApiConnection> [shared_sharepointonline/HttpRequest]  runAfter: Compose_ErrorLog_Body(Succeeded)
+147 Scope_99_Finally  <Scope>  runAfter: Scope_90_Catch(Succeeded/Skipped/Failed/TimedOut)
+148   Compose_Finally_Summary  <Compose>  runAfter: -
+--- total actions: 148 ---

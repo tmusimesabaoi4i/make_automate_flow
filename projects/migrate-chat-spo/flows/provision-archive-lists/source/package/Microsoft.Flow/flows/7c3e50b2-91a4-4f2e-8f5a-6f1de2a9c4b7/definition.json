@@ -1,0 +1,2885 @@
+{
+  "name": "d94a1b6e-3c58-47f0-b2e1-9a7c05e8f3d2",
+  "id": "/providers/Microsoft.Flow/flows/d94a1b6e-3c58-47f0-b2e1-9a7c05e8f3d2",
+  "type": "Microsoft.Flow/flows",
+  "properties": {
+    "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+    "displayName": "CreateMeetingArchiveLists",
+    "definition": {
+      "metadata": {
+        "creator": {},
+        "provisioningMethod": "FromDefinition",
+        "creationSource": "Portal",
+        "modifiedSources": "Portal"
+      },
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {},
+              "required": []
+            }
+          }
+        }
+      },
+      "actions": {
+        "Compose_LedgerListTitle": {
+          "type": "Compose",
+          "inputs": "MeetingArchiveLedger",
+          "runAfter": {}
+        },
+        "Create_LedgerList": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.List\"}, \"AllowContentTypes\": true, \"BaseTemplate\": 100, \"ContentTypesEnabled\": true, \"Title\": \"@{trim(coalesce(outputs('Compose_LedgerListTitle'), ''))}\"}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Compose_LedgerListTitle": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_LedgerList": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')?$select=Id,Title&$expand=RootFolder')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Create_LedgerList": [
+              "Succeeded",
+              "Skipped",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Compose_LedgerListId": {
+          "type": "Compose",
+          "inputs": "@trim(string(body('Get_LedgerList')?['Id']))",
+          "runAfter": {
+            "Get_LedgerList": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_LedgerExistingFields": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields?$select=Title,InternalName,TypeAsString')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Compose_LedgerListId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_IdempotencyKey": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'IdempotencyKey')"
+          },
+          "runAfter": {
+            "Get_LedgerExistingFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_IdempotencyKey": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_IdempotencyKey'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_IdempotencyKey": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"IdempotencyKey\\\" Name=\\\"IdempotencyKey\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_IdempotencyKey": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_RunId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'RunId')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_IdempotencyKey": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_RunId": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_RunId'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_RunId": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"RunId\\\" Name=\\\"RunId\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_MessageId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'MessageId')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_MessageId": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_MessageId'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_MessageId": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"MessageId\\\" Name=\\\"MessageId\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_MessageId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_ReplyId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'ReplyId')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_MessageId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_ReplyId": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_ReplyId'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_ReplyId": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"ReplyId\\\" Name=\\\"ReplyId\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_ReplyId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_AttachmentId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'AttachmentId')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_ReplyId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_AttachmentId": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_AttachmentId'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_AttachmentId": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"AttachmentId\\\" Name=\\\"AttachmentId\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_AttachmentId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_OriginalFileName": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'OriginalFileName')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_AttachmentId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_OriginalFileName": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_OriginalFileName'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_OriginalFileName": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"OriginalFileName\\\" Name=\\\"OriginalFileName\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_OriginalFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_SavedFileName": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'SavedFileName')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_OriginalFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_SavedFileName": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_SavedFileName'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_SavedFileName": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"SavedFileName\\\" Name=\\\"SavedFileName\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_SavedFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_SavedFileUrl": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'SavedFileUrl')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_SavedFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_SavedFileUrl": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_SavedFileUrl'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_SavedFileUrl": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Note\\\" DisplayName=\\\"SavedFileUrl\\\" Name=\\\"SavedFileUrl\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" RichText=\\\"FALSE\\\" NumLines=\\\"6\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_SavedFileUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_Status": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'Status')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_SavedFileUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_Status": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_Status'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_Status": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"Status\\\" Name=\\\"Status\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_ErrorMessage": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'ErrorMessage')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_ErrorMessage": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_ErrorMessage'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_ErrorMessage": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Note\\\" DisplayName=\\\"ErrorMessage\\\" Name=\\\"ErrorMessage\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" RichText=\\\"FALSE\\\" NumLines=\\\"6\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_Ledger_ProcessedDateTimeUtc": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'ProcessedDateTimeUtc')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_Ledger_ProcessedDateTimeUtc": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_Ledger_ProcessedDateTimeUtc'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_Ledger_ProcessedDateTimeUtc": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"ProcessedDateTimeUtc\\\" Name=\\\"ProcessedDateTimeUtc\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_Ledger_ProcessedDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Remove_LedgerDefaultViewFields": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/removeAllViewFields()')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "If_Create_Ledger_ProcessedDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_LedgerFinalFields": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/fields?$select=Title,InternalName,TypeAsString')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Remove_LedgerDefaultViewFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_LinkTitle": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''LinkTitle'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Get_LedgerFinalFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_IdempotencyKey": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'IdempotencyKey')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_LinkTitle": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_IdempotencyKey": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_IdempotencyKey'))?['InternalName'], 'IdempotencyKey')",
+          "runAfter": {
+            "Filter_LedgerView_IdempotencyKey": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_IdempotencyKey": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_IdempotencyKey'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_IdempotencyKey": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_RunId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'RunId')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_IdempotencyKey": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_RunId": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_RunId'))?['InternalName'], 'RunId')",
+          "runAfter": {
+            "Filter_LedgerView_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_RunId": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_RunId'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_MessageId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'MessageId')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_MessageId": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_MessageId'))?['InternalName'], 'MessageId')",
+          "runAfter": {
+            "Filter_LedgerView_MessageId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_MessageId": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_MessageId'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_MessageId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_ReplyId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'ReplyId')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_MessageId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_ReplyId": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_ReplyId'))?['InternalName'], 'ReplyId')",
+          "runAfter": {
+            "Filter_LedgerView_ReplyId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_ReplyId": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_ReplyId'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_ReplyId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_AttachmentId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'AttachmentId')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_ReplyId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_AttachmentId": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_AttachmentId'))?['InternalName'], 'AttachmentId')",
+          "runAfter": {
+            "Filter_LedgerView_AttachmentId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_AttachmentId": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_AttachmentId'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_AttachmentId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_OriginalFileName": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'OriginalFileName')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_AttachmentId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_OriginalFileName": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_OriginalFileName'))?['InternalName'], 'OriginalFileName')",
+          "runAfter": {
+            "Filter_LedgerView_OriginalFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_OriginalFileName": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_OriginalFileName'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_OriginalFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_SavedFileName": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'SavedFileName')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_OriginalFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_SavedFileName": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_SavedFileName'))?['InternalName'], 'SavedFileName')",
+          "runAfter": {
+            "Filter_LedgerView_SavedFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_SavedFileName": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_SavedFileName'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_SavedFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_SavedFileUrl": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'SavedFileUrl')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_SavedFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_SavedFileUrl": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_SavedFileUrl'))?['InternalName'], 'SavedFileUrl')",
+          "runAfter": {
+            "Filter_LedgerView_SavedFileUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_SavedFileUrl": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_SavedFileUrl'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_SavedFileUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_Status": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'Status')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_SavedFileUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_Status": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_Status'))?['InternalName'], 'Status')",
+          "runAfter": {
+            "Filter_LedgerView_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_Status": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_Status'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_ErrorMessage": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'ErrorMessage')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_ErrorMessage": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_ErrorMessage'))?['InternalName'], 'ErrorMessage')",
+          "runAfter": {
+            "Filter_LedgerView_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_ErrorMessage": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_ErrorMessage'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_LedgerView_ProcessedDateTimeUtc": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_LedgerFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'ProcessedDateTimeUtc')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_Ledger_ProcessedDateTimeUtc": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_LedgerView_ProcessedDateTimeUtc'))?['InternalName'], 'ProcessedDateTimeUtc')",
+          "runAfter": {
+            "Filter_LedgerView_ProcessedDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_ProcessedDateTimeUtc": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_Ledger_ProcessedDateTimeUtc'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_Ledger_ProcessedDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_Author": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''Author'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_ProcessedDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_Editor": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''Editor'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_Author": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_Created": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''Created'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_Editor": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_LedgerViewField_Modified": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_LedgerListTitle')), ''')/defaultView/viewfields/AddViewField(''Modified'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Add_LedgerViewField_Created": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_RunLogListTitle": {
+          "type": "Compose",
+          "inputs": "MeetingArchiveRunLog",
+          "runAfter": {
+            "Add_LedgerViewField_Modified": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Create_RunLogList": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "_api/web/lists",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.List\"}, \"AllowContentTypes\": true, \"BaseTemplate\": 100, \"ContentTypesEnabled\": true, \"Title\": \"@{trim(coalesce(outputs('Compose_RunLogListTitle'), ''))}\"}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Compose_RunLogListTitle": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_RunLogList": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')?$select=Id,Title&$expand=RootFolder')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Create_RunLogList": [
+              "Succeeded",
+              "Skipped",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Compose_RunLogListId": {
+          "type": "Compose",
+          "inputs": "@trim(string(body('Get_RunLogList')?['Id']))",
+          "runAfter": {
+            "Get_RunLogList": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_RunLogExistingFields": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields?$select=Title,InternalName,TypeAsString')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Compose_RunLogListId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_RunId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'RunId')"
+          },
+          "runAfter": {
+            "Get_RunLogExistingFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_RunId": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_RunId'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_RunId": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"RunId\\\" Name=\\\"RunId\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_FlowName": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'FlowName')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_FlowName": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_FlowName'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_FlowName": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"FlowName\\\" Name=\\\"FlowName\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_FlowName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_Level": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'Level')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_FlowName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_Level": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_Level'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_Level": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"Level\\\" Name=\\\"Level\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_Level": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_Status": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'Status')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_Level": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_Status": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_Status'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_Status": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"Status\\\" Name=\\\"Status\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_MeetingCount": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'MeetingCount')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_MeetingCount": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_MeetingCount'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_MeetingCount": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Number\\\" DisplayName=\\\"MeetingCount\\\" Name=\\\"MeetingCount\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_MeetingCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_SavedCount": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'SavedCount')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_MeetingCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_SavedCount": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_SavedCount'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_SavedCount": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Number\\\" DisplayName=\\\"SavedCount\\\" Name=\\\"SavedCount\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_SavedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_SkippedCount": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'SkippedCount')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_SavedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_SkippedCount": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_SkippedCount'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_SkippedCount": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Number\\\" DisplayName=\\\"SkippedCount\\\" Name=\\\"SkippedCount\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_SkippedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_FailedCount": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'FailedCount')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_SkippedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_FailedCount": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_FailedCount'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_FailedCount": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Number\\\" DisplayName=\\\"FailedCount\\\" Name=\\\"FailedCount\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_FailedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_ArchiveUrl": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'ArchiveUrl')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_FailedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_ArchiveUrl": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_ArchiveUrl'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_ArchiveUrl": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Note\\\" DisplayName=\\\"ArchiveUrl\\\" Name=\\\"ArchiveUrl\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" RichText=\\\"FALSE\\\" NumLines=\\\"6\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_ArchiveUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_ErrorMessage": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'ErrorMessage')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_ArchiveUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_ErrorMessage": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_ErrorMessage'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_ErrorMessage": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Note\\\" DisplayName=\\\"ErrorMessage\\\" Name=\\\"ErrorMessage\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" RichText=\\\"FALSE\\\" NumLines=\\\"6\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLog_OccurredDateTimeUtc": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogExistingFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['InternalName'], ''), 'OccurredDateTimeUtc')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "If_Create_RunLog_OccurredDateTimeUtc": {
+          "type": "If",
+          "expression": {
+            "and": [
+              {
+                "equals": [
+                  "@length(body('Filter_RunLog_OccurredDateTimeUtc'))",
+                  0
+                ]
+              }
+            ]
+          },
+          "actions": {
+            "Create_RunLog_OccurredDateTimeUtc": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+                  "parameters/method": "POST",
+                  "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields/createFieldAsXml')",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=verbose",
+                    "Content-Type": "application/json;odata=verbose"
+                  },
+                  "parameters/body": "{\"parameters\": {\"__metadata\": {\"type\": \"SP.XmlSchemaFieldCreationInformation\"}, \"Options\": 0, \"SchemaXml\": \"<Field Type=\\\"Text\\\" DisplayName=\\\"OccurredDateTimeUtc\\\" Name=\\\"OccurredDateTimeUtc\\\" Required=\\\"FALSE\\\" Group=\\\"AutoGenerated Columns\\\" MaxLength=\\\"255\\\" />\"}}"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Filter_RunLog_OccurredDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Remove_RunLogDefaultViewFields": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/removeAllViewFields()')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "If_Create_RunLog_OccurredDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_RunLogFinalFields": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "GET",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/fields?$select=Title,InternalName,TypeAsString')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Remove_RunLogDefaultViewFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_LinkTitle": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''LinkTitle'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Get_RunLogFinalFields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_RunId": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'RunId')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_LinkTitle": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_RunId": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_RunId'))?['InternalName'], 'RunId')",
+          "runAfter": {
+            "Filter_RunLogView_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_RunId": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_RunId'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_FlowName": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'FlowName')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_RunId": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_FlowName": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_FlowName'))?['InternalName'], 'FlowName')",
+          "runAfter": {
+            "Filter_RunLogView_FlowName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_FlowName": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_FlowName'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_FlowName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_Level": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'Level')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_FlowName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_Level": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_Level'))?['InternalName'], 'Level')",
+          "runAfter": {
+            "Filter_RunLogView_Level": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_Level": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_Level'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_Level": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_Status": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'Status')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_Level": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_Status": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_Status'))?['InternalName'], 'Status')",
+          "runAfter": {
+            "Filter_RunLogView_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_Status": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_Status'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_MeetingCount": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'MeetingCount')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_Status": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_MeetingCount": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_MeetingCount'))?['InternalName'], 'MeetingCount')",
+          "runAfter": {
+            "Filter_RunLogView_MeetingCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_MeetingCount": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_MeetingCount'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_MeetingCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_SavedCount": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'SavedCount')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_MeetingCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_SavedCount": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_SavedCount'))?['InternalName'], 'SavedCount')",
+          "runAfter": {
+            "Filter_RunLogView_SavedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_SavedCount": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_SavedCount'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_SavedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_SkippedCount": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'SkippedCount')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_SavedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_SkippedCount": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_SkippedCount'))?['InternalName'], 'SkippedCount')",
+          "runAfter": {
+            "Filter_RunLogView_SkippedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_SkippedCount": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_SkippedCount'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_SkippedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_FailedCount": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'FailedCount')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_SkippedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_FailedCount": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_FailedCount'))?['InternalName'], 'FailedCount')",
+          "runAfter": {
+            "Filter_RunLogView_FailedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_FailedCount": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_FailedCount'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_FailedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_ArchiveUrl": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'ArchiveUrl')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_FailedCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_ArchiveUrl": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_ArchiveUrl'))?['InternalName'], 'ArchiveUrl')",
+          "runAfter": {
+            "Filter_RunLogView_ArchiveUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_ArchiveUrl": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_ArchiveUrl'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_ArchiveUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_ErrorMessage": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'ErrorMessage')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_ArchiveUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_ErrorMessage": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_ErrorMessage'))?['InternalName'], 'ErrorMessage')",
+          "runAfter": {
+            "Filter_RunLogView_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_ErrorMessage": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_ErrorMessage'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_RunLogView_OccurredDateTimeUtc": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Get_RunLogFinalFields')?['value'], json('[]'))",
+            "where": "@equals(coalesce(item()?['Title'], ''), 'OccurredDateTimeUtc')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_ErrorMessage": [
+              "Succeeded"
+            ]
+          }
+        },
+        "ComposeInternalName_RunLog_OccurredDateTimeUtc": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Filter_RunLogView_OccurredDateTimeUtc'))?['InternalName'], 'OccurredDateTimeUtc')",
+          "runAfter": {
+            "Filter_RunLogView_OccurredDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_OccurredDateTimeUtc": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''', outputs('ComposeInternalName_RunLog_OccurredDateTimeUtc'), ''')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "ComposeInternalName_RunLog_OccurredDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_Author": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''Author'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_OccurredDateTimeUtc": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_Editor": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''Editor'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_Author": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_Created": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''Created'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_Editor": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Add_RunLogViewField_Modified": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "parameters": {
+              "dataset": "https://metijapan.sharepoint.com/teams/pjteam_220400119",
+              "parameters/method": "POST",
+              "parameters/uri": "@concat('_api/web/lists/GetByTitle(''', trim(outputs('Compose_RunLogListTitle')), ''')/defaultView/viewfields/AddViewField(''Modified'')')",
+              "parameters/headers": {
+                "Accept": "application/json;odata=verbose",
+                "Content-Type": "application/json;odata=verbose",
+                "IF-MATCH": "*",
+                "X-HTTP-Method": "MERGE"
+              },
+              "parameters/body": "{\"__metadata\": {\"type\": \"SP.View\"}, \"SetAsDefaultView\": true}"
+            },
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Add_RunLogViewField_Created": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "outputs": {}
+    },
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "connectionName": "054920e5a92b48b6b53f62b01b3cb354",
+        "source": "Embedded",
+        "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+        "tier": "NotSpecified",
+        "apiName": "sharepointonline",
+        "isProcessSimpleApiReferenceConversionAlreadyDone": false
+      }
+    },
+    "flowFailureAlertSubscribed": false,
+    "isManaged": false
+  }
+}

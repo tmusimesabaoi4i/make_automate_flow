@@ -1,0 +1,380 @@
+========================================================================
+package_validation_report.txt
+PA_Migrate_Teams_Meeting_Archive_To_SPO パッケージ検証レポート
+検証日: 2026-07-16
+========================================================================
+
+参照したサンプルZIP:
+  tmp_20260716051507.zip（変更・上書きしていない。参照用に
+  ../../../references/extracted/sample_extracted_ref/ へ読み取り展開のみ）
+
+判定したパッケージ形式:
+  レガシー Power Automate パッケージ形式（エクスポート→パッケージ(.zip)）。
+  ソリューション形式ではない。ルートに manifest.json、Microsoft.Flow/flows/
+  配下に flows manifest とフロー資産（definition.json/apisMap.json/
+  connectionsMap.json）を持つ構造。雛形と同一。
+
+作成したZIP:
+  ../release/PA_Migrate_Teams_Meeting_Archive_To_SPO_20260717144000.zip
+
+ZIPに含まれるフロー数:
+  1（Microsoft.Flow/flows/manifest.json の flowAssets.assetPaths = 1件）。
+  子フローなし・複数親フローなし。
+
+フロー表示名:
+  Teams課内会議アーカイブ
+
+フロー内部名:
+  英語名(パッケージ displayName): PA_Migrate_Teams_Meeting_Archive_To_SPO
+  フローID(definition.json name): 2fe554b1-6ba6-4ce0-962c-07bde4bdb6ee（新規・匿名GUID）
+  パッケージフォルダGUID: fcca0e31-6d8b-40a8-8d63-2441c979a2c7
+
+使用コネクタ:
+  Microsoft Teams（shared_teams）／SharePoint（shared_sharepointonline）／
+  Content Conversion（shared_conversionservice）。すべて標準・非プレミアム。
+  使用 operationId: HttpRequest / GetItems / CreateFile / GetFileItem /
+  GetFileContentByPath / HtmlToText（実在6種のみ。v7で PostItem を廃止し
+  SharePoint HttpRequest の REST に置換）。
+
+接続参照:
+  shared_teams / shared_sharepointonline / shared_conversionservice
+  （source=Invoker、connectionName=匿名GUID）。apisMap.json・
+  connectionsMap.json・manifest.json resources とキーが一致（3対3対3）。
+  インポート時にユーザー本人の接続へ再マッピングされる想定。
+
+JSON検証結果:
+  パッケージ5ファイル（manifest.json、Microsoft.Flow/flows/manifest.json、
+  definition.json、apisMap.json、connectionsMap.json）すべて
+  Python json.load でパース成功。末尾カンマ・不正エスケープなし
+  （全JSONを json.dump で機械生成しており構文エラーは構造的に発生しない）。
+
+XML検証結果:
+  該当なし（レガシーパッケージはJSONのみ。XMLファイルを含まない）。
+
+GUID検査結果:
+  manifest.json の resources GUID 7個（フロー1・API3・接続3）はすべて
+  正しいGUID形式で重複なし。フローID(name)・パッケージフォルダGUID・
+  packageTelemetryId もGUID形式。雛形のGUIDとは重複しない新規値。
+
+runAfter検査結果:
+  全アクションの runAfter 参照先が、同一コンテナ（同一Scope/ループ/
+  条件分岐）内の兄弟アクションに存在することを機械検査。エラー0件。
+  Scope_90_Catch は Scope_70 の Failed/Skipped/TimedOut、Scope_99_Finally は
+  Scope_90 の Succeeded/Skipped/Failed/TimedOut で実行（Try/Catch/Finally）。
+
+変数参照検査結果:
+  InitializeVariable で初期化した変数 27個 と、式内 variables('...') 参照
+  27個 が一致。未初期化変数の参照 0件。InitializeVariable は
+  すべてトップレベル（Scope/ループ内配置による無効化なし）。
+  ※v4で varDocHtmlParts 廃止（27→26）、v6で varRunLogList 追加（26→27）。
+
+アクション参照検査結果:
+  式内の body('...') / outputs('...') 参照先がすべて定義済みアクション名に
+  一致（未定義参照0件）。総アクション数 148（トリガー除く。v10）。
+
+ZIP再展開検査結果:
+  再展開成功。展開ツリーは雛形と同一構造（GUID正規化後に完全一致）。
+  余分な親フォルダなし／__MACOSX なし／.DS_Store なし／一時ファイルなし／
+  絶対パスなし／設計TXT・Markdownの混入なし。ZIPエントリは5件のみ。
+
+trim監査結果:
+  trim() は文字列に対してのみ使用。対象は trim(coalesce(<値>,'')) の形で
+  文字列（またはnull→''）を保証してから適用。配列/オブジェクト/Boolean/
+  整数/バイナリへの直接 trim なし。
+
+coalesce監査結果:
+  coalesce の候補は同一型で統一。文字列は第2候補 ''、配列は json('[]')。
+  配列に '' をフォールバックする誤用なし。
+
+null安全性監査結果:
+  null／空文字列／空配列を区別。プロパティ参照は ?['a']?['b'] の安全参照。
+  DryRun/ForceReprocess は equals(coalesce(...,既定),true) で厳密判定し、
+  false/0 を未設定扱いしない。Apply to each（Foreach）の入力は
+  body('Filter_*') または coalesce(...,json('[]')) で配列を保証。
+
+会議ソート方式:
+  sort(variables('varMeetings'), 'sortKey') による昇順ソート
+  （SortKey = yyyyMMddHHmmss_MessageID）。sort() のオブジェクト配列
+  プロパティソートは公式リファレンスで実在確認済み。追加リスト不要・
+  単一フロー内完結。
+
+Word生成方式:
+  Word用HTML文字列を組み立て、SharePoint「ファイルの作成」(CreateFile)で
+  課内会議総括_yyyyMMdd_HHmmss.doc として保存（Word互換HTML）。
+  HTMLの.docxリネームは行っていない。Word Online(Business)のテンプレート/
+  PDF変換はプレミアムのため不採用。真正の.docxは標準コネクタのみでは
+  安定生成不可のためHTMLベース.docを採用。
+  DryRun=はい のときは総括.docを作成しない（本番フォルダを汚さない。
+  Condition_DryRun_Archive）。実ファイル確認は DryRun=いいえ で実行する。
+
+適用した設計修正（レビュー反映・v2）:
+  定義レビューで検出した3点を修正し、再検証（0エラー0警告）した。
+  (1) DryRun=はい では総括.docを作成しない（従来は常時作成していた）。
+  (2) 添付1件の保存失敗で会議処理全体を止めず継続し、処理台帳に
+      Status=Failed を記録して varFailedCount で集計する（Scope_Save_File の
+      Failed/TimedOut を後続ハンドラで吸収）。
+  (3) Word添付リンクの判定を「savedFileUrl が非空か」に変更。再利用
+      （Skipped・既存URLあり）の添付も正しくハイパーリンク表示し、URLが
+      無い場合のみ status=Failed→「（保存失敗）」、DryRun等→
+      「（テスト実行のため未保存）」と表示する。
+  実行ログ(MeetingArchiveRunLog)に FailedCount 列を追加。
+
+適用した修正（インポートエラー対応・v3）:
+  実環境インポート時に次のエラーが発生したため修正した:
+  「The template language expression 'if(contains(@coalesce(...」
+   ... the string character '@' at position '12' is not expected.」
+  原因: Compose_Extension / Compose_BaseName の式で、外側 @if(...) の内側に
+  ネストした coalesce(...) の前に不正な '@' が付いていた（@ は式文字列の先頭
+  または @{...} 補間でのみ有効。入れ子関数に付けると不正）。
+  修正: 内側の @coalesce(...) を coalesce(...) に変更（先頭の @if は保持）。
+  対象2アクションのみ。再生成後、定義全体を機械走査し、式内に不正な '@'
+  （文字列先頭でも @{ 補間でもない位置の '@'）が 0 件であることを確認。
+  ZIPを再パッケージし、ZIP内 definition.json と build 定義の一致(MD5)も確認。
+
+適用した修正（保存エラー対応・v4）:
+  v3 ZIP のインポート自体は成功したが、フローの保存で次のエラーが発生:
+  「WorkflowRunActionInputsInvalidProperty: The inputs of workflow run
+   action 'Set_MessagesArray' of type 'SetVariable' are not valid.
+   Self reference is not supported when updating the value of variable
+   'varMessagesArray'.」
+  原因: SetVariable の値式が更新対象変数自身を variables('...') で参照
+  （union による配列累積）していた。Power Automate はこの自己参照を許可しない。
+  全 SetVariable を機械走査し、自己参照 3件をすべて除去した:
+  (1) Set_MessagesArray（union(varMessagesArray, 新ページ)）→ 削除。
+      Do until 内に Process_Retrieved_Messages（Apply to each、入力=
+      coalesce(body('Get_Channel_Messages')?['value'], json('[]'))、並列オフ）
+      ＋ Append_Message_To_MessagesArray（配列変数に追加、値=item()）。
+  (2) Set_RepliesArray（union自己参照）→ 削除。同様に
+      Process_Retrieved_Replies ＋ Append_Reply_To_RepliesArray に置換。
+  (3) Append_Reply_Attachment_Candidates（実体は SetVariable+union自己参照）
+      → 削除。Process_Each_Reply_Attachment（Apply to each、入力=
+      body('Select_Reply_Attachments')）＋ Append_Reply_Attachment_Candidate
+      （配列変数に追加、値=item()）に置換。
+  あわせて次も変更（指示 §4・§8 準拠）:
+  - Word用HTMLの連結を varDocHtmlParts（配列+join）方式から varDocumentHtml へ
+    「文字列変数に追加」(AppendToStringVariable) 直接連結に統一。
+    Set_DocumentHtml_Header→Append_DocumentHtml_Header に改名、
+    Set_DocumentHtml（join）と varDocHtmlParts 変数を削除（変数 27→26）。
+  - LookbackDays 安全化: ルート先頭に Compose_EffectiveLookbackDays を追加。
+    if(greater(int(coalesce(triggerBody()?['LookbackDays'], 0)), 0),
+       int(coalesce(triggerBody()?['LookbackDays'], 7)), 7)
+    により null/未入力/0以下 → 7、正の整数のみ採用（7/30/365/730 指定可）。
+  - ネストした Apply to each の入力を items('Apply_To_Each_Sorted_Meeting')
+    の明示参照に変更（item() の曖昧さ排除）。
+  - カウンター更新は従来から IncrementVariable（自己参照なし）を使用。
+  - union() による重複排除は廃止（Graph の nextLink ページングは重複を
+    返さない前提。添付の重複保存は冪等キー台帳で防止）。
+
+適用した修正（堅牢化・v5）:
+  Opus級モデルによる保存可能性論理監査（12観点・結果:保存阻害要因なし）の
+  指摘2点と、実働サンプル create_meeting_list_sample_20260716105612.zip
+  （実環境で作成・動作実績のあるエクスポート。読み取り専用で参照）の
+  実装方式を反映した。
+  (1) Graph URL の uriComponent エンコード（実働サンプル準拠）:
+      チャネルID（19:...@thread.tacv2 は ':' '@' を含む）と親メッセージIDを
+      uriComponent() でエンコード（Set_NextLink_First / Set_ReplyNextLink_First
+      の計3箇所）。実働サンプルは %3A/%40 エンコード済みURLで動作しており、
+      従来の生文字列連結は Graph が受理しないおそれがあった。
+      teamId はGUIDのため非エンコード。@odata.nextLink はそのまま使用。
+  (2) 曜日式の堅牢化: json('[...]')[dayOfWeek(...)]（配列の計算インデックス
+      角括弧アクセス＝式エディタで不安定になり得る境界事例）→
+      substring('日月火水木金土', dayOfWeek(...), 1) に変更。
+  (3) runAfter の明示化: コンテナ起点4アクションに "runAfter": {} を明示
+      （キー省略はエンジン上等価だが PA 標準エクスポート形式に一致させた）。
+  実働サンプルの次の実装は設計上の問題があるため移植していない:
+  - SetVariable上書きによる添付蓄積（union(createArray(item()),...) は
+    累積でなく毎回上書き＋返信オブジェクト混入の二重バグ）
+    → 当方は Apply to each＋配列変数に追加 で正しく累積。
+  - ページング無し（$top=50 の1ページのみ）→ 当方は nextLink ページング維持。
+  - 封筒形 Parse JSON スキーマ → 当方は式参照のため Parse JSON 不要
+    （サンプルの動作実績から Teams HttpRequest の body() は Graph 応答
+     JSONそのものであることを確認。当方の body(...)?['value'] 参照は正当）。
+
+適用した修正（実働サンプル突合監査・v6）:
+  Opus級モデルによる設計監査（実働サンプルとの突合・8観点）で、
+  次の重大バグ1件を検出し修正した:
+  【重大】コネクタ出力参照の body/ パス欠落（5箇所）
+    OpenApiConnection アクションの outputs('X') は封筒
+    {statusCode, headers, body} を返すため、outputs('X')?['ItemId'] /
+    ?['{Link}'] は常に null になる。DryRun=はい（既定）では発火せず、
+    DryRun=いいえ の本番経路でのみ全添付が保存失敗扱いになる潜在バグ。
+    修正: 5箇所すべて body('X')?['フィールド'] 参照に変更
+    （Get_Saved_File_Properties.id / Create_Ledger_Item.SavedFileUrl /
+     Append_Saved_Meeting_Attachment.savedFileUrl /
+     Get_Saved_Archive_Properties.id / Set_ArchiveUrl）。
+    検証スクリプトに「outputs(コネクタ)?[非body] → エラー」の
+    機械検査を恒久追加（再発防止）。
+  任意推奨の反映:
+  - RunLogリスト名を varRunLogList 変数に一元化（変数27個・132アクション）。
+  - Word添付リンクの href 内URLを & → &amp; エスケープ。
+
+適用した修正（保存エラー対応・v7）:
+  v6のインポート後の保存で3件目のエラーが発生:
+  「OpenApiOperationParameterValidationFailed: Input parameter 'item'
+   validation failed in workflow operation 'Create_Run_Log':
+   The API operation 'PostItem' is missing required property 'item'.」
+  原因（Web調査＋全アクション監査で確定）: SharePoint「項目の作成」
+  (PostItem) は必須の動的ボディ item を持ち、サイト/リストが式
+  （@variables）だと列スキーマを解決できず、フラット化キー item/Title 等を
+  item に束ねられない→「item 欠落」で保存失敗。実働サンプルの PostItem は
+  サイト/リストとも静的リテラルでのみ保存実績。保存時検証は1件ずつしか
+  報告しないため、同型の PostItem×4 がすべて該当と判定し一括修正した。
+  修正: PostItem×4（Create_Ledger_Item / Create_Ledger_Item_Failed /
+  Create_Run_Log / Create_Error_Log）を「SharePoint に HTTP 要求を送信」
+  (operationId=HttpRequest) + REST に置換:
+  - 前段 Compose（Compose_Ledger_Body 等4個）でボディオブジェクトを構築し
+    string() でJSON化して送信（数値・日時列の型を保持）
+  - POST _api/web/lists/getbytitle('リスト名変数')/items
+  - ヘッダー Accept / Content-Type とも application/json;odata=nometadata
+    （__metadata 不要の単純JSONボディ。learn.microsoft.com で確認）
+  - dataset は雛形（実エクスポート）で保存実績のある静的リテラル
+  他の9アクション（GetItems/GetFileItem×2/CreateFile×2/
+  GetFileContentByPath/Teams HttpRequest×2/HtmlToText）は必須の動的ボディを
+  持たず保存検証を通るため無改修（全13アクションの一斉監査で判定）。
+  応答参照の変更ゼロ（4アクションの出力を参照する箇所は存在しない）。
+  検証スクリプトに「PostItem存在→エラー」を恒久追加（再発防止）。
+  総アクション 132→136（Compose×4追加）。変数27不変。
+  注意（実行時・保存はブロックしない）:
+  - テナント設定によりPOSTで __metadata 型指定が要求される可能性
+    （ListItemEntityTypeFullName を取得してボディに追加する回避策を手順書に記載）
+  - SavedFileUrl / ArchiveUrl 列は「1行テキスト」で作成すること
+    （ハイパーリンク型の場合RESTは {"Url":...} オブジェクトを要求）
+
+適用した修正（添付保存の全件失敗への対処・v10）:
+  v9の実環境実行はエンドツーエンド完走（封じ込め・台帳Failed記録・
+  エラーログ201が全て機能）したが、全添付が Status=Failed となった。
+  新実行証跡（親50件）の分析で失敗添付のcontentUrlは正しい形と確認され、
+  失敗は保存側と判断:
+  (a) CreateFileは中間フォルダを自動作成しない（保存先4階層が未作成なら全滅）
+  (b) GetFileItem の table="Shared Documents" はURLセグメントであり
+      ライブラリ表示名（日本語サイトは「ドキュメント」）でない→名前解決不能
+      ＝全件失敗の最有力候補（この場合ファイル自体は保存済みの可能性→
+      再実行時の同名409に注意）
+  また、Graphが%エンコード済みcontentUrlを返す実例を確認（エンコード文書が
+  フィルタを通らず黙って除外される潜在バグ）。
+  修正:
+  (1) Scope_05_Ensure_Destination_Folder 新設: DryRun=いいえ のときのみ
+      保存先フォルダをREST(POST _api/web/folders)で1階層ずつ作成
+      （既存エラーは[Succeeded,Failed]継続で許容）→ GETで実在検証。
+      パス/権限の問題を実行早期に明確な形で失敗させる。
+      ServerRelativeUrlはフルサーバー相対（uriPath(サイトURL)+…）。
+  (2) エンコードURL正規化: フィルタに /Shared%20Documents/ をor追加、
+      Compose_Source_Url で条件付きdecodeUriComponent。
+  (3) GetFileItem（{Link}）全廃: 保存後URLを既知の値
+      （サイト+ライブラリ+保存先パス+ファイル名。空白→%20）から決定的に構築。
+      長年の要実環境確認事項（{Link}の可否）自体を解消。
+  (4) 失敗時の台帳ErrorMessageに元contentUrlと保存先を埋め込み（自己診断化）。
+  (5) ファイル名サニタイズに # と % を追加。
+  (6) 検証スクリプトに GetFileItem禁止・{Link}残存禁止を恒久追加。
+  総アクション 139→148。変数28不変。検証0エラー0警告。互換突合=完全互換。
+  release: PA_Migrate_Teams_Meeting_Archive_To_SPO_20260718012104.zip
+
+適用した修正（実行時404の根本修正・v9）:
+  実環境での初実行（v8）はインポート・保存・実行・実行ログのREST書き込み
+  （201 Created）まで到達したが、Get_Source_File_Content が
+  404 File not found で失敗した（ユーザー提供の実行出力で確認）。
+  原因（実データで確定）: Teamsチャネルの添付はチームのサイト
+  （contentUrl: https://…/teams/<チームサイト>/Shared Documents/…）に
+  保存されるが、旧実装は dataset=varSiteAddress（ファイル保存先サイト）に
+  対してサイト接頭辞付きパスを渡しており、別サイト参照で404になっていた。
+  修正:
+  (1) 取得元サイト・パスを contentUrl 自体から導出（Compose_Source_Site /
+      Compose_Source_Path。'/Shared Documents/' の位置で分割）。設定不要・汎用。
+  (2) Filter_File_Attachments に contains(contentUrl, '/Shared Documents/')
+      条件を追加（ライブラリ実在ファイルのみ収集。外部リンク等を事前除外）。
+  (3) Scope_30_Save_Attachments（Scope）を Condition_Has_File_Attachments
+      （If: 添付が1件以上ある場合のみ収集実行）に置換（ユーザー提案の
+      明示的な有無分岐。ネスト深さ上限8を維持するためScope自体を置換）。
+  総アクション 137→139（Compose×2追加）。変数28不変。0エラー0警告。
+
+適用した修正（リスト操作サイトの分離・v8）:
+  台帳・実行ログのリストを pjteam_220400119 サイトに作成することが
+  ユーザー決定された（リスト自動作成フロー CreateMeetingArchiveLists の
+  構築に伴う）。varSiteAddress（mROOM_240600018）はファイル保存
+  （添付・総括doc）にも使われるため、リスト操作のみを分離した:
+  - 新変数 varListSiteAddress（pjteam URL）を追加（変数27→28・
+    総アクション136→137）
+  - Get_Ledger_Existing の dataset を varListSiteAddress 参照へ変更
+  - REST4アクションの静的 dataset を pjteam URL へ変更
+  - ファイル保存系5アクションは varSiteAddress（mROOM）のまま
+  検証スクリプトに「未参照の初期化変数」検査を恒久追加
+  （初回ビルドの付け替え漏れ1件をこの観点で検出・修正済み）。
+
+------------------------------------------------------------------------
+保存可能性監査（§10 集計・v8定義の機械走査結果）
+------------------------------------------------------------------------
+  SetVariableアクション数: 13
+  自己参照SetVariable件数: 0
+  AppendToArrayVariableアクション数: 8
+  AppendToStringVariableアクション数: 7
+  IncrementVariableアクション数: 5（Decrementは0）
+  Apply to each（Foreach）数: 8（すべて並列オフ）
+  変数重複初期化件数: 0
+  未定義変数参照件数: 0
+  runAfter不正参照件数: 0
+  存在しないアクション出力参照件数: 0
+  コネクタ出力の body/ 欠落件数: 0（v6で新設した機械検査）
+  PostItem残存件数: 0（v7で新設した機械検査。RESTへの置換漏れなし）
+  SharePoint HttpRequest必須キー欠落件数: 0（dataset/method/uri/POST時body）
+  接続参照不整合件数: 0（定義3・使用3で一致）
+  Power Automate保存可能性監査結果: 自己参照・重複初期化・不正参照の
+    検出0件（静的検査）。実環境での保存検証は未実施（下記参照）。
+
+実環境インポート検証の有無:
+  v3 ZIP はユーザー環境でインポートに成功（その後の保存で
+  WorkflowRunActionInputsInvalidProperty が発生し v4 で修正）。
+  v4 ZIP のインポート・保存・実行は未検証。
+
+------------------------------------------------------------------------
+検証状況の明確化（正直な記載）
+------------------------------------------------------------------------
+  構造検証済み
+  JSON検証済み
+  XML検証済み（該当なし＝XMLを含まない）
+  ZIP再展開検証済み
+  保存可能性の静的監査済み（自己参照0件・上記集計）
+  v4 ZIP の実環境へのインポート・保存・実行は未検証
+
+  ※本レポートは v4 について「インポート成功済み」「保存成功済み」を
+    主張しない。上記は静的検証（構造・JSON構文・参照整合・ZIP再展開・
+    自己参照監査）の結果であり、v4 の実環境でのインポート/保存/実行は
+    行っていない。少なくとも v3 で実際に発生した保存エラーの原因
+    （SetVariable 自己参照）は定義から完全に除去済み。
+
+------------------------------------------------------------------------
+未検証事項（要実環境確認）
+------------------------------------------------------------------------
+  - レガシーパッケージの「新規作成としてインポート」時に、匿名の
+    connectionName / 新規フローGUID がそのまま受理されるか
+    （Microsoft実サンプルは非匿名で配布＝再マッピング前提の状況証拠のみ）。
+  - Teams「Send a Microsoft Graph HTTP request」が @odata.nextLink の
+    絶対URLをそのまま受理するか（実働サンプルにページングが無いため未確認）。
+    ※channelId 内の ":" の扱いは v5 で解決済み: 実働サンプル準拠で
+      uriComponent() エンコードを適用（%3A/%40 形式での動作実績あり）。
+  - SharePoint系アクションの table にリスト名を仮置きしているため、
+    インポート後に「サイトのアドレス」「リスト/ライブラリ」を実物へ
+    再選択する必要がある。
+  - ファイルWeb URL取得の動的コンテンツ「{Link}」の可否
+    （コミュニティ確認のみ。代替は {FullPath}+サイトURL構築、
+     スラッシュ非エンコード）。
+  - 添付 contentUrl から本体を GetFileContentByPath で取得する際の
+    パス解析の妥当性（カード/共有リンク種別により形式が異なる）。
+  - Content Conversion コネクタの接続要否・DLP可否。
+  - Word互換 .doc をWordで開く際の形式警告（→ .html 代替）。
+  - 手動トリガー入力の内部プロパティ名（UIで組み立てた場合は自動採番）。
+
+------------------------------------------------------------------------
+既知の制約
+------------------------------------------------------------------------
+  - 単一フロー・標準コネクタのみ。Azure/外部サーバー/独自コード/
+    汎用HTTP/HTTP with Entra ID/アプリ登録/プレミアム文書生成/
+    Open XML独自処理は不使用。
+  - 過去2年（LookbackDays=730）の一括処理はフロー実行時間制限
+    （既定 約30分）に抵触する可能性。まず7日→30日→365日→730日と
+    段階的に拡大し、730日でタイムアウトする場合は LookbackDays を
+    分割して複数回実行する（フローは1つのまま）。
+  - 会議日付は投稿日時JSTを主方式（本文からの開催日抽出は誤判定回避のため
+    未実装）。主催者は既定「不明」（投稿者を無条件に主催者にしない）。
+  - Apply to each / Do until はすべて並列オフ（結果欠落・順序不定・
+    変数競合の回避を優先）。
+========================================================================

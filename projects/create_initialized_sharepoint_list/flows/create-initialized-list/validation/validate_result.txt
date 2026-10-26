@@ -1,0 +1,24 @@
+=== CreateInitializedSharePointList 静的検証 ===
+package folder GUID : d07c8e5a-3f92-4b61-a8d4-15e69c2f0b73
+flow displayName    : SharePointリスト新規作成＋初期化（既存リスト保護）
+operationIds        : ['HttpRequest']
+connectionReferences: ['shared_sharepointonline']
+アクション総数      : 176
+HTTP要求アクション  : 16
+初期化変数          : 33
+SetVariable         : 58 （うち自己参照 0 ）
+AppendToArray       : 8
+Foreach             : 2
+使用関数            : ['and', 'body', 'coalesce', 'concat', 'contains', 'createArray', 'decodeBase64', 'decodeUriComponent', 'empty', 'endsWith', 'equals', 'first', 'greater', 'if', 'int', 'item', 'items', 'join', 'json', 'last', 'length', 'not', 'outputs', 'replace', 'split', 'startsWith', 'string', 'sub', 'take', 'toLower', 'triggerBody', 'triggerOutputs', 'trim', 'union', 'variables']
+トップレベル実行順  : Scope_Parse_And_Validate_Input -> Scope_Verify_SharePoint_Site -> Scope_Check_Existing_List -> Scope_Create_List -> Scope_Initialize_List -> Scope_Delete_Deletable_Fields -> Scope_Create_SampleRaw_Field -> Scope_Configure_Default_View -> Scope_Validate_Result -> Scope_Handle_AlreadyExists -> Scope_Handle_Error -> Scope_Rollback_New_List -> Scope_Finalize
+
+--- 安全検査サマリ ---
+GetByTitle( の出現            : 0 （0であること）
+書き込みRESTのID指定          : 新規作成を除き全件 varCreatedListId 使用
+初期化ガード配下のアクション  : 12 件すべて varCreatedInThisRun 配下
+同名確認→作成の順序           : Scope_Check_Existing_List(35) < Scope_Create_List(36)
+
+=== ERRORS ===
+(0 errors)
+=== WARNINGS ===
+(0 warnings)

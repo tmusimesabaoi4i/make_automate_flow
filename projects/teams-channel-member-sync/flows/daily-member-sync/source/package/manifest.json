@@ -1,0 +1,79 @@
+{
+  "schema": "1.0",
+  "details": {
+    "displayName": "TeamsChannelMemberSync_Daily",
+    "description": "保存済みの設定を読み、Teamsチャネルのメンバーを毎日SharePointリストへ同期する定期実行フロー",
+    "createdTime": "2026-08-04T00:00:00.0000000Z",
+    "packageTelemetryId": "f92a4b18-63d0-4e57-8c14-7ab5309ed26f",
+    "creator": "N/A",
+    "sourceEnvironment": ""
+  },
+  "resources": {
+    "b8365e01-9d47-42fa-a06c-3e57192db4c8": {
+      "type": "Microsoft.Flow/flows",
+      "suggestedCreationType": "New",
+      "creationType": "Existing, New, Update",
+      "details": {
+        "displayName": "Teamsチャネルメンバー同期 日次実行"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Root",
+      "dependsOn": [
+        "5f4c0a93-e276-41d8-b31e-8a09c7645d20",
+        "e07b3d52-846a-4c19-9f57-2b60d18ea34f",
+        "31ca6f80-7e45-4b2d-a693-05f8c4e17b6d",
+        "7a9d5c28-40be-4136-8fc2-e5316b90da47"
+      ]
+    },
+    "5f4c0a93-e276-41d8-b31e-8a09c7645d20": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+      "name": "shared_teams",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "Microsoft Teams"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "e07b3d52-846a-4c19-9f57-2b60d18ea34f": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "Microsoft Teams への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "5f4c0a93-e276-41d8-b31e-8a09c7645d20"
+      ]
+    },
+    "31ca6f80-7e45-4b2d-a693-05f8c4e17b6d": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "name": "shared_sharepointonline",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "SharePoint"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "7a9d5c28-40be-4136-8fc2-e5316b90da47": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "SharePoint への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "31ca6f80-7e45-4b2d-a693-05f8c4e17b6d"
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+=== Flow2_GetAllTeamsChannelPostRepliesFromUrl 静的検証 ===
+package folder GUID : 2c96a4e7-8b53-4d10-9f27-e6a41b085c39
+flow displayName    : Flow2 Teams投稿URLから全返信を取得
+operationIds        : ['HttpRequest']
+connectionReferences: ['shared_teams']
+アクション総数      : 81
+初期化変数          : 18 ['varChannelId', 'varErrorCode', 'varErrorMessage', 'varErrorMessages', 'varInputUrl', 'varIsValid', 'varLastStatusCode', 'varParentMessageId', 'varReplies', 'varRepliesRaw', 'varReplyNextLink', 'varResultJson', 'varResultObject', 'varStage', 'varTargetMessageId', 'varTeamId', 'varTenantId', 'varUrlMessageId']
+SetVariable         : 24 （うち自己参照 0 ）
+AppendToArray       : 4
+Foreach / Until     : 2 / 1
+使用関数            : ['body', 'coalesce', 'concat', 'contains', 'createArray', 'decodeBase64', 'decodeUriComponent', 'empty', 'endsWith', 'equals', 'first', 'if', 'item', 'items', 'join', 'json', 'last', 'length', 'not', 'or', 'outputs', 'split', 'string', 'sub', 'take', 'triggerBody', 'triggerOutputs', 'trim', 'union', 'uriComponent', 'utcNow', 'variables']
+トリガー入力        : ['TeamsPostUrl']
+
+=== ERRORS ===
+(0 errors)
+=== WARNINGS ===
+(0 warnings)

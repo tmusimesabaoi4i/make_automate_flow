@@ -1,0 +1,288 @@
+{
+  "schemaVersion": 1,
+  "nextId": 15,
+  "updatedOn": "2026-08-04",
+  "note": "実行者本人にしか確定できない事項の正本。IDは再利用しない。確認済みでも削除せず status と resolvedOn を更新する。書式と更新規則は audit/README.md を参照。",
+  "items": [
+    {
+      "id": "CONF-001",
+      "category": "動作確認",
+      "target": "projects/migrate-chat-spo/flows/archive-meetings（現行 v10）",
+      "question": "v10 のパッケージを実環境で再実行し、v9 で発生した「添付ファイルが全件 Status=Failed」が解消しているかを確認してほしい。",
+      "reason": "v9 は実環境で完走したものの添付が全件失敗した（error_catalog のエラー7）。v10 はその対処（保存先フォルダの事前確保・GetFileItem 廃止・保存後URLの決定的構築）を入れた版だが、静的検証が緑なだけで実行結果は誰も見ていない。実行してみないと対処が効いたか確定できない。",
+      "steps": [
+        "release/PA_Migrate_Teams_Meeting_Archive_To_SPO_20260718012104.zip（最新版）を Power Automate へインポートする",
+        "3接続（Teams / SharePoint / Content Conversion）を実環境の接続に再選択する",
+        "フローを開いてそのまま一度保存し、保存エラーが出ないことを確認する",
+        "実行前に、保存先フォルダーに前回実行の残骸ファイルが無いか確認する（同名ファイルがあると409相当になる）",
+        "LookbackDays=7・DryRun=はい で実行する",
+        "DryRun=いいえ で実行し、台帳リスト MeetingArchiveLedger の Status 列を全件確認する"
+      ],
+      "expected": "台帳の Status が Succeeded になり、添付ファイルが指定フォルダーに保存され、保存後URLのリンクが実際に開ける。Verify_Destination_Folder アクションが成功（緑）になる。",
+      "returnToClaude": "台賬リストの Status 列の集計（成功/失敗件数）、失敗があれば ErrorMessage 列の全文、失敗アクションの入出力JSON、フロー実行画面のスクリーンショット",
+      "priority": "高",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": "F-13",
+      "notes": "本監査で projects/migrate-chat-spo/README.md の記載を「v9は静的検証のみ」から実態（v9は実行済み・現行はv10で未再実行）へ修正した。"
+    },
+    {
+      "id": "CONF-002",
+      "category": "動作確認",
+      "target": "projects/sync-shared-mailbox-to-sharepoint-list/flows/sync-mail-to-list-with-examiner-detection（7列版）",
+      "question": "7列版（審査官名・出願番号の推定付き）を実環境でインポート・保存・実行してほしい。",
+      "reason": "静的検証0件・検出テスト76件合格だが、実環境では一度も動かしていない。推定ロジックが実データでどう振る舞うかはオフラインテストでは確定できない。",
+      "steps": [
+        "release/SyncMailToListWithExaminerDetection_20260804021502.zip（最新版）をインポートする",
+        "3接続（SharePoint / Office 365 Outlook / Content Conversion）を再選択する",
+        "開いてそのまま保存し、保存エラーが出ないことを確認する",
+        "テスト用の共有メールボックスとSharePointサイトを指定し、少件数（5〜10件）で実行する",
+        "作成されたリストの ExaminerName / ApplicationNumber 列の値を実際のメール本文と突き合わせる"
+      ],
+      "expected": "リストが作成され、7列（既定5列＋審査官名＋出願番号）が揃う。特許庁からのメールで審査官名・出願番号が正しく抽出される。抽出できないメールでは空欄になり、エラーにはならない。",
+      "returnToClaude": "実行結果の件数（作成/更新/失敗）、ExaminerName と ApplicationNumber が入った行と元メール件名の対応例を数件、抽出が外れたケースがあればその元メール本文（機密部分は伏せて可）",
+      "priority": "高",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "5列版は 2026-08-03 に実環境で100件同期に成功済み（作成80／更新20／失敗0）。7列版は5列版の逐語コピーに検出処理を足した構成。"
+    },
+    {
+      "id": "CONF-003",
+      "category": "動作確認",
+      "target": "projects/sync-shared-mailbox-to-sharepoint-list/flows/sync-mail-to-list（5列版）",
+      "question": "5列版の「新規リスト作成経路」（status: Created）を実環境で確認してほしい。",
+      "reason": "2026-08-03 の実行は既存リスト経路のみで、新規作成経路は通っていない。列の作成・一意制約・既定ビューの並び順は、実際にリストを新規作成しないと検証できない。",
+      "steps": [
+        "まだ存在しないリスト名を指定してフローを実行する",
+        "SharePoint 上で作成されたリストを開く",
+        "列（MessageId / ReceivedDateTime / SenderAddress / Subject / BodyPlainText）の型と順序を確認する",
+        "既定ビューが受信日時の降順になっているかを確認する"
+      ],
+      "expected": "status: Created が返り、5列が定義どおりの型で作成され、既定ビューが受信日時の降順になっている。",
+      "returnToClaude": "フローの出力JSON（status を含む）、作成されたリストの列設定画面と既定ビューのスクリーンショット",
+      "priority": "中",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "案件READMEに「新規作成経路は未確認」と明記済み。tests/validation_report.md §9 の表で個別管理されている。"
+    },
+    {
+      "id": "CONF-004",
+      "category": "動作確認",
+      "target": "projects/create_initialized_sharepoint_list/flows/create-initialized-list",
+      "question": "同名リストが既に存在する場合の経路（AlreadyExists）を実環境で発火させて確認してほしい。",
+      "reason": "既存リスト保護は定義の構造から静的に保証されている（GetByTitle を1件も使わない・書き込みURIはID固定）が、実機でこの分岐を通した実績がない。破壊的操作を含むフローなので、保護が実際に効くことの確認価値が高い。",
+      "steps": [
+        "一度フローを実行してリストを作成する（または既存のリスト名を指定する）",
+        "同じリスト名で再度フローを実行する",
+        "既存リストの内容（アイテム・列・ビュー）が変化していないことを確認する"
+      ],
+      "expected": "status: AlreadyExists が返り、既存リストは一切変更されない（アイテム削除・列変更・ビュー再構築が起きない）。",
+      "returnToClaude": "2回目実行の出力JSON、実行後の既存リストのアイテム件数と列構成（実行前と同じであること）",
+      "priority": "中",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "2026-07-24 に status: Created の経路は実環境で成功済み。"
+    },
+    {
+      "id": "CONF-005",
+      "category": "動作確認",
+      "target": "projects/teams_post_url_flows/flows/flow2-get-post-replies",
+      "question": "返信が51件を超える投稿でFlow2を実行し、@odata.nextLink による複数ページ取得が正しく動くか確認してほしい。",
+      "reason": "1ページ（50件）に収まるデータではページングが壊れていても正常に見えてしまう。実際に複数ページになるデータでしか検証できない。",
+      "steps": [
+        "返信が51件以上ある Teams チャネル投稿を用意する（または既存のものを探す）",
+        "その投稿のURLを入力して Flow2 を実行する",
+        "出力JSONの replies 配列の件数を、Teams画面上の実際の返信数と突き合わせる"
+      ],
+      "expected": "replies 配列に全返信が入る（51件以上）。取得漏れも重複もない。",
+      "returnToClaude": "実際の返信件数、フロー出力の replies 件数、両者が食い違う場合はフローの実行履歴（ページング部分のアクションの入出力）",
+      "priority": "中",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "handbook/knowledge/sample_flow_reference_index.md にも「返信51件超のページングは未確認」として記載済み。"
+    },
+    {
+      "id": "CONF-006",
+      "category": "仕様判断",
+      "target": "全7フローの release/ 配下のZIP",
+      "question": "今回 validate_*.py 5本に共通リンター（tools/wdl_lint.py）を組み込んだが、これに伴って release ZIP を再生成・再配布する必要があるか判断してほしい。",
+      "reason": "変更したのは検証スクリプトのみで、build_*.py と生成される definition.json は一切変わっていない（既存ZIPの中身は現行のまま正しい）。技術的には再生成は不要と判断しているが、「検証手順を変えた版として配布し直す」という運用上の判断は利用者の領域。",
+      "steps": [
+        "既存の release ZIP をそのまま使い続けてよいか、運用ルール上の要否を判断する",
+        "再生成が必要と判断した場合はその旨をClaudeへ伝える（flow-release Skill で日時付きZIPを新規生成する）"
+      ],
+      "expected": "「再生成不要（既存ZIPを継続利用）」または「再生成する」のいずれかの判断。",
+      "returnToClaude": "再生成の要否の判断。再生成する場合は対象フロー名",
+      "priority": "中",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": "F-11",
+      "notes": "retrofit 後に全7フローの validate_*.py を実行し、エラー0・警告0・wdl_lint の新規指摘0件を確認済み。定義は不変。"
+    },
+    {
+      "id": "CONF-007",
+      "category": "仕様判断",
+      "target": "projects/migrate-chat-spo/flows/archive-meetings/source/validate_definition.py",
+      "question": "このスクリプトだけ末尾に sys.exit(1 if errors else 0) が無く、エラーがあっても終了コード0を返す。他6本と揃えて非0で終了するように変えてよいか判断してほしい。",
+      "reason": "7本中このファイルだけ挙動が違う。CI や自動化で「全緑」を機械判定する場合、この1本だけ失敗を検知できない。ただし終了コードの変更は既存の実行手順・スクリプトの前提を変える可能性があるため、勝手に変えていない。現時点ではエラー0件なので、変えても直ちに影響は出ない。",
+      "steps": [
+        "このスクリプトを呼び出している自動化・手順書が他に無いか確認する",
+        "終了コードを他6本と揃えてよいか判断する"
+      ],
+      "expected": "「揃えてよい」または「現状維持」の判断。",
+      "returnToClaude": "変更の可否。揃える場合はその旨（Claude側で sys.exit を追加する）",
+      "priority": "中",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": "F-16",
+      "notes": "本監査中に発見。現在の実行結果はエラー0・警告0のため、変更しても当面の判定結果は変わらない。"
+    },
+    {
+      "id": "CONF-008",
+      "category": "仕様判断",
+      "target": "audit/dist/",
+      "question": "報告DOCXの保管世代数と、古いDOCXの扱い（残す／整理する）を決めてほしい。",
+      "reason": "監査のたびに日時付きDOCXが増える。既存ファイルを上書きしない方針にしているため、放置すると蓄積する。何世代残すかは運用上の好みで、技術的に一意には決まらない。",
+      "steps": [
+        "監査を何回分さかのぼって参照したいかを決める",
+        "古いDOCXを削除してよいか、_legacy 等へ退避するかを決める"
+      ],
+      "expected": "保管方針の決定（例: 直近5世代を残し、それ以前は削除／全世代を保持）。",
+      "returnToClaude": "保管世代数と古いファイルの扱い",
+      "priority": "低",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": "F-14",
+      "notes": "audit/ の配置自体は 2026-08-04 に利用者承認済み。DOCXは正本から常に再生成できるため、削除しても情報は失われない。"
+    },
+    {
+      "id": "CONF-009",
+      "category": "仕様判断",
+      "target": "_legacy/ 配下、各フローの validation/ 配下の過去レポート",
+      "question": "これらに残る旧構成のパス（dist/・build/・01_reference_analysis/ 等）を、今後も「当時の記録」として凍結し修正しない方針でよいか確認してほしい。",
+      "reason": "CLAUDE.md は _legacy を「退避のみ」としており、過去の検証レポートは当時の事実の記録である。書き換えると証跡としての価値が失われる。一方で「古いパスが残っている」ことを毎回の監査で指摘し続けるのも無駄なので、方針を明示的に固定したい。",
+      "steps": [
+        "_legacy/ と過去の validation レポートを現行仕様の説明として読む運用が無いことを確認する",
+        "凍結方針でよいか判断する"
+      ],
+      "expected": "「凍結でよい（監査の対象外とする）」または「一部は現行化したい」の判断。",
+      "returnToClaude": "凍結方針の可否。現行化したい文書があればそのパス",
+      "priority": "低",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": "F-17",
+      "notes": "今回は凍結扱いとし、tools/doc_audit.py の既定除外（_legacy / references / validation レポート）に反映した。旧パスの読み替え表は _legacy/2026-07-reorg-survey.md にある。"
+    },
+    {
+      "id": "CONF-010",
+      "category": "実環境確認",
+      "target": "handbook/knowledge/sample_flow_reference_index.md（Recurrence トリガーの節）",
+      "question": "スケジュールトリガーのパッケージで evaluatedRecurrence を省略した場合でもインポートできるか、実環境で確認してほしい。",
+      "reason": "実エクスポートには recurrence と evaluatedRecurrence が両方書かれているが、省略しても通るかは公式資料で確認できず、本リポジトリでも未検証。「両方書くのが安全」という現在の記述は推定にとどまる。",
+      "steps": [
+        "Recurrence トリガーを持つ最小のフローを1つ作る",
+        "definition.json から evaluatedRecurrence を削除したパッケージをZIP化する",
+        "Power Automate へインポートし、成功するか確認する"
+      ],
+      "expected": "インポートが成功するか、あるいは特定のエラーで失敗するかが判明する。",
+      "returnToClaude": "インポートの成否。失敗した場合はエラーメッセージ全文",
+      "priority": "低",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "現在は【要実環境確認】として明記済み。優先度は低く、スケジュールフローを新規作成する機会に合わせて確認すれば足りる。"
+    },
+    {
+      "id": "CONF-011",
+      "category": "実環境確認",
+      "target": "references/raw/sample_function_20260803105312.zip（shared-mailbox-to-teams-notify）",
+      "question": "この受領サンプルを実環境でインポートして動作を確認する予定があるか、それとも構造参照のみで使うかを決めてほしい。",
+      "reason": "本リポジトリではインポート・保存・実行のいずれも未実施で、動作の正しさを確認していない。一方で「コネクタのポーリングトリガーの唯一の実例」として構造面では参照価値がある。確認するかどうかは利用者の必要性次第。",
+      "steps": [
+        "このサンプルのトリガー形式を実装で使う予定があるか判断する",
+        "使う場合は、匿名化したうえでインポートし、ポーリングトリガーが実際に発火するか確認する"
+      ],
+      "expected": "「構造参照のみで十分」または「実際に確認する」の判断。",
+      "returnToClaude": "方針の判断。確認した場合はトリガーの発火状況",
+      "priority": "低",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "索引には「実環境での動作確認状況: 未実施」「パッケージ構造とトリガー形式のみを参考にし、フロー設計は参考にしない」と明記済み。"
+    },
+    {
+      "id": "CONF-012",
+      "category": "サンプル提供",
+      "target": "projects/migrate-chat-spo/flows/provision-archive-lists",
+      "question": "リスト作成フローの2回目実行（冪等性の確認）の実行結果を提供してほしい。",
+      "reason": "案件READMEのインポート手順に「2回目実行で冪等確認」が書かれているが、実行結果の証跡が validation/ に残っていない。冪等性が実際に効いたかを文書で確定できない。",
+      "steps": [
+        "provision-archive-lists のフローを1回実行し、2リストが作成されることを確認する",
+        "同じフローをもう一度実行する",
+        "リストが重複作成されていないこと、既存リストの列・ビューが変化していないことを確認する"
+      ],
+      "expected": "2回目実行では新規作成が行われず（「リスト作成」アクションが失敗表示になるのは既存のためで正常）、リストは2つのまま増えない。",
+      "returnToClaude": "2回目実行のフロー実行履歴のスクリーンショット、実行後のSharePointサイトのリスト一覧（2つのままであること）",
+      "priority": "中",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "READMEには冪等として設計されている旨の記載があるが、実行証跡は未取得。"
+    },
+    {
+      "id": "CONF-013",
+      "category": "権限確認",
+      "target": "全4案件のコネクタ・接続参照",
+      "question": "各案件が前提としている標準コネクタ（SharePoint / Teams / Office 365 Outlook / Content Conversion）が、現在の環境のDLPポリシーと権限で実際に使えるか確認してほしい。",
+      "reason": "接続の可否・DLPポリシー・管理者設定はテナント側の構成に依存し、リポジトリ内のファイルからは一切判定できない。前提が崩れていると、インポートは通っても実行時に失敗する。",
+      "steps": [
+        "Power Automate の「接続」画面で、4種のコネクタの接続が作成できることを確認する",
+        "対象のSharePointサイト・Teamsチーム・共有メールボックスへのアクセス権があることを確認する",
+        "DLPポリシーでこれらのコネクタが同一グループに置かれ、併用が禁止されていないことを確認する"
+      ],
+      "expected": "4種すべての接続が作成でき、対象リソースにアクセスでき、DLPで併用が禁止されていない。",
+      "returnToClaude": "使えないコネクタがあればその名称とエラー内容、DLPで制限がある場合はその内容",
+      "priority": "中",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "handbook/rules/04_connectors_permissions_and_dlp.md に一般則あり。全案件が標準コネクタのみを前提としている（プレミアム不使用）。"
+    },
+    {
+      "id": "CONF-014",
+      "category": "仕様判断",
+      "target": "projects/ 配下の案件フォルダ名",
+      "question": "案件フォルダ名にスネークケース（teams_post_url_flows / create_initialized_sharepoint_list）とケバブケース（migrate-chat-spo / sync-shared-mailbox-to-sharepoint-list）が混在している。現状維持でよいか確認してほしい。",
+      "reason": "README §6 は「案件フォルダ名はケバブケースを既定とし、依頼側で名称が指定されている場合はそれに従ってよい」としており、現状は規則違反ではない。ただし改名すると多数の文書内リンクとスクリプトの相対パスに影響するため、実施の可否は利用者判断。",
+      "steps": [
+        "既存の案件フォルダ名を変更する必要があるか判断する",
+        "変更する場合、外部（手順書・ブックマーク等）から参照されていないか確認する"
+      ],
+      "expected": "「現状維持」または「改名する」の判断。",
+      "returnToClaude": "現状維持でよいかの判断。改名する場合は対象と新名称",
+      "priority": "低",
+      "status": "未確認",
+      "foundOn": "2026-08-04",
+      "resolvedOn": null,
+      "relatedFinding": null,
+      "notes": "改名は relative link・スクリプトの sys.path・release ZIP の配置先すべてに波及するため、影響範囲は小さくない。フローフォルダ名は全案件でケバブケースに統一済み。"
+    }
+  ]
+}

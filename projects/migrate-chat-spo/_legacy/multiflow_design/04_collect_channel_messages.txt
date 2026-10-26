@@ -1,0 +1,651 @@
+========================================================================
+04_collect_channel_messages.txt
+Scope_Collect（親投稿の全件ページング）＋ 返信の全件ページング
+（PA_Meeting_Archive_Orchestrator [3] 内のセクション）
+========================================================================
+
+■ このファイルについて（最重要の前提）
+------------------------------------------------------------------------
+本ファイルは「独立した子フロー」の設計書ではありません。
+00_overview.txtに明記のとおり、最終的に作成するフローは5本のみで、
+本セクション専用のフローは作成しません。
+
+本ファイルが扱うのは、[3] PA_Meeting_Archive_Orchestrator（中核・
+子フロー）のScope_Try内にある次の2つのページング機構です。
+  (a) Scope_Collect … 親投稿（チャネルの全メッセージ）の全件ページング。
+      03_archive_orchestrator.txtの■8 [16]に相当（配置: Initialize_
+      ErrorMessageの直後、Filter_Messages_By_Periodの直前）。
+  (b) 返信の全件ページング … Apply_To_Each_Meetingループの中で、会議
+      （親投稿）ごとに返信を全件取得する処理。03_archive_orchestrator.txt
+      の■8 [18-6]〜[18-8-3]に相当（配置: Convert_Body_Html_To_Textの
+      直後、Reset_AttachmentCandidatesの直前）。
+
+(a)(b)とも、実際にPower Automate画面上でアクションを追加する場所は
+03_archive_orchestrator.txt（フロー[3]そのもの）のキャンバス上であり、
+本ファイル専用の画面操作先はありません。
+
+03_archive_orchestrator.txtは(a)の3アクション（Get_Channel_Messages/
+Set_MessagesArray/Set_NextLink）については名称と配置のみを示し
+「詳細は04参照」としています。本ファイルの■9でこの3アクションの
+逐次操作手順をフルに記載します。
+(b)の6アクション（Reset_ReplyNextLink/Reset_RepliesArray/Do_Until_
+Replies_Paging/Get_Message_Replies/Set_RepliesArray/Set_ReplyNextLink）
+は03_archive_orchestrator.txt側で既に逐次操作手順を記載済みのため、
+本ファイルでは重複を避けて要点のみ再掲し、代わりに「なぜこの構成に
+なっているか」という設計・仕組みの解説（■8〜■13）に重点を置きます。
+
+■ 1. 概要
+------------------------------------------------------------------------
+対象セクション名   : Scope_Collect（親投稿ページング）＋ 返信ページング
+推奨名（英語）     : Collect_Channel_Messages_Section（該当なし。
+                     独立フローではないため正式な英語フロー名はない）
+ファイル名         : 04_collect_channel_messages.txt
+フロー種別         : 該当なし（独立フローではない。PA_Meeting_Archive_
+                     Orchestrator[3]のScope_Try内のセクション）
+作成場所           : フロー[3]のキャンバス上、Scope_Try内。
+                     (a)はInitialize_ErrorMessageの直後、
+                     (b)はApply_To_Each_Meetingループ内、Convert_Body_
+                     Html_To_Textの直後
+役割               : Microsoft Graphの/messagesおよび/messages/{id}/
+                     repliesエンドポイントを@odata.nextLinkで全ページ
+                     追跡し、期間・ページ数に関わらず全件を配列変数へ
+                     集約する。過去2年分の一発取得という本プロジェクト
+                     の主目的（00_overview.txt）を実現する中核的な
+                     仕組み。
+呼出元             : 同一フロー内（フロー[3]）。(a)はInitialize_
+                     ErrorMessage、(b)はConvert_Body_Html_To_Text
+呼出先             : 同一フロー内（フロー[3]）。(a)はFilter_Messages_
+                     By_Period、(b)はReset_AttachmentCandidates
+                     （いずれも外部フローは呼び出さない。Microsoft
+                     Graphエンドポイントを直接HTTPで呼び出すのみ）
+
+■ 2. 使用するコネクタ・接続・権限
+------------------------------------------------------------------------
+使用するコネクタ  : Microsoft Teams（Send a Microsoft Graph HTTP
+                    request）のみ。他は組み込み（変数を設定する、
+                    Do until）。
+使用する接続      : フロー[3]全体で共有するTeams接続1本（対象チーム
+                    envTeamId・対象チャネルenvChannelIdへのメッセージ
+                    閲覧権限が必要）。
+必要な権限        : 対象チームのメンバーであること。Teamsコネクタの
+                    「Send a Microsoft Graph HTTP request」は委任
+                    アクセス許可（実行ユーザーの権限）の範囲でGraphを
+                    呼び出すため、アプリ登録・管理者同意は不要
+                    （00_overview.txt「主要な技術方式」参照）。
+プレミアムコネクタの有無: なし（Teamsコネクタは標準）。
+管理者承認の必要性: 原則不要。ただしDLPポリシーでTeamsコネクタが
+                    制限されている場合は要確認（要DLP確認）。
+
+■ 3. 入力（本セクション開始時点で参照できる値）
+------------------------------------------------------------------------
+| 参照名 | 型 | 由来 | 用途 |
+|---|---|---|---|
+| variables('varMessagesArray') | 配列 | フロー[3]トップレベルInitialize_MessagesArray（既定値json('[]')） | (a)の集約先 |
+| variables('varNextLink') | 文字列 | フロー[3]トップレベルInitialize_NextLink（既定値=messages初回URI、正典§7.15） | (a)のページング終了条件・次ページURL |
+| variables('varRepliesArray') | 配列 | フロー[3]トップレベルInitialize_RepliesArray（既定値json('[]')） | (b)の集約先（会議ごとにリセットして再利用） |
+| variables('varReplyNextLink') | 文字列 | フロー[3]トップレベルInitialize_ReplyNextLink（既定値''） | (b)のページング終了条件・次ページURL（会議ごとにリセット） |
+| items('Apply_To_Each_Meeting')?['id'] | 文字列 | (b)のみ。外側ループの現在の親投稿ID | replies初回URIの組立に使用 |
+| envTeamId / envChannelId | 環境変数（テキスト） | 正典§2 | Graph URI組立（(a)(b)共通） |
+
+■ 4. 出力（本セクション終了時点の状態）
+------------------------------------------------------------------------
+| 出力に相当する値 | 型 | 内容 | 参照方法（後続セクションでの使い方） |
+|---|---|---|---|
+| variables('varMessagesArray') | 配列 | (a)完了時点で、対象チャネルの全期間・全ページの親投稿（Graph chatMessage）が格納された状態 | Filter_Messages_By_Periodの「From」欄で参照 |
+| variables('varRepliesArray') | 配列 | (b)完了時点（1会議分）で、その会議の全ページの返信が格納された状態 | Apply_To_Each_Meetingループ内、Apply_To_Each_Reply（[18-12]）の対象として参照 |
+
+■ 5. 環境変数
+------------------------------------------------------------------------
+envTeamId    … Graph URIの{teamId}部分（正典§1のTeam ID/groupId）
+envChannelId … Graph URIの{channelId}部分。値に':'（コロン）と
+               '@thread.tacv2'を含む文字列（正典§1参照）。URIへ
+               そのまま埋め込んでよいかは■8で解説（要実環境確認）。
+
+■ 6. 内部変数（本セクションで参照・更新するもの）
+------------------------------------------------------------------------
+| 変数名 | 型 | 初期値（フロー[3]トップレベルで設定済み） | 用途 | 本セクションで更新するアクション | 並列実行時の注意 |
+|---|---|---|---|---|---|
+| varMessagesArray | 配列 | json('[]') | 親投稿の全件集約 | Set_MessagesArray（(a)内） | Do_Until_Messages_Pagingは逐次実行のため競合なし |
+| varNextLink | 文字列 | messages初回URI | (a)のページング制御 | Set_NextLink（(a)内） | 同上 |
+| varRepliesArray | 配列 | json('[]') | 1会議分の返信の全件集約 | Reset_RepliesArray（会議ごと）／Set_RepliesArray（(b)内） | Apply_To_Each_Meetingが並列オフのため競合なし。オンにすると複数会議が同時にこの変数を奪い合い内容が混在する |
+| varReplyNextLink | 文字列 | '' | (b)のページング制御 | Reset_ReplyNextLink（会議ごと）／Set_ReplyNextLink（(b)内） | 同上 |
+
+■ 7. 本セクションとフロー[3]（03ファイル）内のアクション名の対応
+------------------------------------------------------------------------
+| 本ファイルでの呼称 | 03_archive_orchestrator.txt側の番号・アクション名 |
+|---|---|
+| (a) Scope_Collect | [16] Scope_Collect（Scope）|
+| (a)-1 メッセージ取得 | Get_Channel_Messages（Teams Send a Microsoft Graph HTTP request） |
+| (a)-2 配列へ集約 | Set_MessagesArray（変数を設定する） |
+| (a)-3 次ページURL更新 | Set_NextLink（変数を設定する） |
+| (a)全体を包むループ | Do_Until_Messages_Paging（Do until） |
+| (b) 返信初回URIへリセット | [18-6] Reset_ReplyNextLink |
+| (b) 返信配列を空にリセット | [18-7] Reset_RepliesArray |
+| (b)全体を包むループ | [18-8] Do_Until_Replies_Paging（Do until） |
+| (b)-1 返信取得 | [18-8-1] Get_Message_Replies |
+| (b)-2 配列へ集約 | [18-8-2] Set_RepliesArray |
+| (b)-3 次ページURL更新 | [18-8-3] Set_ReplyNextLink |
+
+■ 8. @odata.nextLink追跡の仕組み（ページング機構の核心）
+------------------------------------------------------------------------
+Microsoft Graphのメッセージ一覧・返信一覧APIは、1回の応答で最大
+$top件（本設計では50件）しか返しません。全件取得するには、応答の
+@odata.nextLinkプロパティが存在する限り、そのURLへ次のGETを送り
+続ける必要があります（正典§7.15、仕様書3.1・3.2）。
+
+処理の流れ（(a)(b)共通の考え方）:
+  1. 最初のURLを組み立てて変数（varNextLink／varReplyNextLink）に
+     入れておく（正典§7.15の初回URI式）。
+  2. Do untilで「この変数が空になるまで」繰り返す
+     （終了条件: empty(variables('varNextLink'))等）。
+  3. ループの中で、変数のURLへGETを送る（Get_Channel_Messages／
+     Get_Message_Replies）。
+  4. 応答のvalue配列を、これまでの集約配列にunion()で追加する
+     （Set_MessagesArray／Set_RepliesArray）。
+  5. 応答に@odata.nextLinkがあればそれを次のURLとして変数に入れ直し、
+     なければ空文字にする（coalesce(...,'')。Set_NextLink／
+     Set_ReplyNextLink）。
+  6. 変数が空文字になった時点でDo untilの終了条件が真になり、
+     ループを抜ける。
+
+要実環境確認(1) ― nextLinkの絶対URL受理可否:
+  @odata.nextLinkは通常、クエリパラメータ付きの完全な絶対URL
+  （例: https://graph.microsoft.com/v1.0/teams/{id}/channels/{id}/
+  messages?$top=50&$skiptoken=...）として返されます。「Send a
+  Microsoft Graph HTTP request」アクションのURI欄がこの絶対URLを
+  そのまま受理するか（相対パスへの変換が必要になるケースがないか）は、
+  正典自身が「要実環境確認」としている未確定事項です（正典§7.15末尾、
+  00_overview.txt「未確定事項」）。テスト実行（7日間テスト）の初回で、
+  必ずGet_Channel_Messages/Get_Message_Repliesの2ページ目以降が
+  正しく応答を返すこと（400/404にならないこと）を確認してください。
+  もし絶対URLがそのまま使えない場合は、$skiptoken等のクエリ部分だけを
+  抽出し、初回URIのテンプレートに付け直す式へ変更する対応が必要に
+  なります（その場合の具体式は環境で観測されたnextLinkの実際の形式
+  に応じて設計し直す必要があるため、本書では確定式を示せません）。
+
+要実環境確認(2) ― channelId内の':'の扱い:
+  envChannelIdの値（19:53e5d619e45b4fda8d0dc7f2858a9d64@thread.tacv2）
+  には':'と'@'を含みます。これをURLパスセグメントにそのまま
+  concat()で埋め込んでよいか（URLエンコードが必要になる場面がないか）
+  も正典が明記する未確定事項です（正典§7.15末尾）。Graph公式の
+  chatMessage一覧APIのドキュメント上、channelIdはエンコードなしの
+  そのままの文字列をパスに使う例が一般的ですが、Power Automateの
+  コネクタ実装がURLをどう組み立てるかにより挙動が変わる可能性がある
+  ため、初回テスト実行で必ず200 OKが返ることを確認してください。
+  もしエンコードが必要と判明した場合は、Initialize_NextLink／
+  Reset_ReplyNextLinkの式のconcat()内で<envChannelId>部分を
+  encodeUriComponent(<envChannelId>)に置き換える対応を検討します
+  （ただし、置き換えるとnextLink追跡時に二重エンコードが発生しない
+  かも別途確認が必要）。
+
+■ 9. union()による重複排除の仕組みと限界
+------------------------------------------------------------------------
+Set_MessagesArray／Set_RepliesArignArrayはunion(既存配列, 新規ページの
+value配列)という式で集約しています。union()はPower Automateの標準
+関数で、2つの配列の和集合（重複を除いた結合）を返します。
+
+なぜunion()を使うか:
+  429（スロットリング）時に既定の再試行ポリシーが同じページを
+  再取得した場合や、まれに同じページが2回応答された場合でも、
+  union()により同一内容の要素が重複して配列に入ることを防げます
+  （仕様書9章「1ファイルの失敗で会議全体を中止せず」とは別の観点
+  ですが、正典§9の全般的なデータ品質方針に沿った安全策です）。
+
+限界（要実環境確認）:
+  union()は要素同士の「完全一致（値として同一）」で重複を判定します。
+  Graphのchatメッセージオブジェクトは、同じメッセージでも取得
+  タイミングによってlastModifiedDateTime等の一部フィールドが変化して
+  いる場合があります。その場合、同一メッセージid（'id'プロパティ）
+  を持つが完全一致ではないオブジェクトが2つ配列に残る可能性があります
+  （union()はid単位でのユニーク化はしないため）。
+  対策（任意・要実環境確認）: 会議判定・並び替えはSortKey
+  （createdDateTime由来）とmessageId主体で行うため、実務上は大きな
+  問題になりにくいと考えられますが、もし2年間本番実行で同一idの
+  会議が複数回MeetingArchiveStagingに書き込まれることが確認された
+  場合は、Filter_Messages_By_Periodの後段にSelect＋Filter arrayで
+  idの重複を除去する追加ロジック（例えば同一idの最初の1件だけを
+  残すロジック）を追加検討してください。Power Automateには標準の
+  「配列の重複除去（distinct）」アクションがないため、この対応は
+  やや複雑になります（現時点では未実装。必要に応じて拡張）。
+
+■ 10. 429／5xx対応（再試行ポリシー）
+------------------------------------------------------------------------
+Get_Channel_Messages／Get_Message_Repliesはいずれも「Send a Microsoft
+Graph HTTP request」アクションです。このアクションの「設定
+（Settings）」→「再試行ポリシー（Retry Policy）」を開くと、既定で
+「既定（Default）」が選択されています。これは指数間隔（exponential
+interval）の自動再試行で、429（Too Many Requests）や5xx（サーバー
+エラー）等の一時的なエラーに対して、間隔を広げながら自動的に数回
+再試行します（正典§0・仕様書9章「429ではRetry-Afterを尊重する」）。
+
+本セクションでは、この既定の再試行ポリシーをそのまま使うことを推奨
+します（変更不要）。理由:
+  - 「既定」ポリシーは429/5xxを含む一時的なエラーに対して自動対応
+    するよう設計されている。
+  - Retry-Afterヘッダーの値に厳密に追随するかどうかは、コネクタの
+    実装詳細でありPower Automateの設定画面からは確認できないため
+    要実環境確認とする（正典§9注記のとおり「429ではRetry-Afterを
+    尊重する」という要件に対し、既定ポリシーがどこまで厳密に対応
+    しているかは公開情報だけでは断定できない）。
+  - 手動で「指数間隔」を選び回数・間隔を明示的に設定することも可能
+    だが、初期構築時点では既定のままとし、2年間本番実行でスロット
+    リングが頻発するようであれば調整する（■15想定エラー参照）。
+
+■ 11. Do untilのカウント／タイムアウト上限設定
+------------------------------------------------------------------------
+Do untilアクションには既定で「カウント（Count）＝60」「タイムアウト
+（Timeout）＝PT1H（1時間）」という上限が設定されています（Power
+Automateの一般的な既定値）。上限に達すると、たとえ終了条件
+（empty(variables('varNextLink'))等）が満たされていなくてもループを
+強制終了します。
+
+Do_Until_Messages_Paging（親投稿ページング）:
+  $top=50で1ページ50件のため、カウント60は最大3,000件までしか
+  取得できないことを意味します。「03_課内会議」チャネルの過去2年分
+  投稿数が3,000件を超える見込みがある場合は、カウント上限を引き上げる
+  必要があります。
+Do_Until_Replies_Paging（返信ページング）:
+  1会議あたりの返信が3,000件を超えることは通常想定しにくいですが、
+  受入条件（仕様書10章）に「返信50件超をテストする」とあるとおり、
+  複数ページにまたがる返信は十分起こり得るため、既定の60でも通常は
+  足りると考えられます（要実環境確認）。
+
+設定変更の操作手順（例。カウント5000・タイムアウトPT1Hへ変更する
+場合。具体的な数値は要実環境確認とし、以下は設定操作の手順を示す
+例です）:
+ 1. Do_Until_Messages_Paging（またはDo_Until_Replies_Paging）の
+    カードを開く。
+ 2. カード右上の「...」→「設定（Settings）」をクリックする。
+ 3. 「ループの制限を変更する（Change limits）」の項目を開く。
+ 4. 「カウント」欄に例えば 5000 と入力する。
+ 5. 「タイムアウト」欄にISO8601期間形式（例: PT1H＝1時間、P1D＝1日）
+    で入力する。2年一括処理でGraph呼出回数が多い場合はP1D程度への
+    延長も検討する。
+ 6. 保存する。
+要実環境確認: カウント上限の最大許容値、タイムアウトの最大許容値は
+  ライセンス・環境により異なる場合がある。また、Do until自体の
+  タイムアウトを延ばしても、それを包含するフロー全体・Run a Child
+  Flow呼出側（01_manual_archive_trigger.txtのRun_Child_Flow_
+  Orchestrator設定）のタイムアウトが先に切れる可能性があるため、
+  両方を合わせて確認・延長すること。
+
+■ 12. 簡易代替（7日間テスト向け。標準「Get messages」＋「List
+　　　 replies of a channel message」）
+------------------------------------------------------------------------
+Teamsコネクタには、Graphの生HTTP呼出を使わない標準アクション
+「Get messages」（チャネルのメッセージ一覧取得）と「List replies of
+a channel message」（返信一覧取得）が存在します。これらはGraph HTTP
+要求を組み立てる必要がなく、envTeamId/envChannelIdの文字列連結や
+nextLinkのURL形式を意識せずに済むため、初期の7日間テストや画面操作の
+簡易確認には有用です。
+
+代替方式を使う場合の設計（概略。本採用は主方式のままとし、これは
+補助的なテスト手段として記載）:
+  Get_Channel_Messages相当  → Teams「Get messages」アクション
+    （チーム・チャネルをドロップダウンで直接選択できるため、
+    envTeamId/envChannelIdの式組立が不要）
+  Get_Message_Replies相当   → Teams「List replies of a channel
+    message」アクション（メッセージIDを指定して返信一覧を取得）
+  ページング                → 要Teamsコネクタ確認。「Get messages」
+    が@odata.nextLink相当のページングトークンを標準の動的コンテンツ
+    として提供するか、また直近何件・何日分を返す仕様なのかは
+    コネクタのバージョン・ドキュメントで確認が必要（正典§0・
+    00_overview.txt「未確定事項」に明記のとおり、過去2年分の全履歴
+    取得が確実にできるかは不確実）。
+
+不採用の理由（主方式にGraph HTTP要求を使う理由）:
+  「Get messages」は直近件数・直近期間中心の設計になっている可能性が
+  あり、過去2年分という長期間・全件取得の要件に対して確実性が
+  劣ります（要Teamsコネクタ確認）。一方「Send a Microsoft Graph HTTP
+  request」は@odata.nextLinkを自分で明示的に追跡するため、全件取得の
+  確実性を設計者自身がコントロールできます。したがって本設計では
+  「Send a Microsoft Graph HTTP request」を主方式とし、「Get messages」
+  ＋「List replies of a channel message」は7日間程度の小規模テストや
+  画面操作の学習用途に限定した代替候補とします。
+
+■ 13. Apply_To_Each_Meeting内で返信変数をリセット再利用する理由
+------------------------------------------------------------------------
+varRepliesArray／varReplyNextLinkは、フロー[3]のトップレベルで一度
+だけInitialize_RepliesArray／Initialize_ReplyNextLinkにより初期化
+されます（■6参照）。しかし返信の取得はApply_To_Each_Meetingループの
+中で「会議（親投稿）ごとに」1回ずつ発生します。つまり、同じ2つの
+変数を、ループが1回まわるたびに「今回の会議用」に作り直す必要が
+あります。
+
+なぜ「Initialize variable」を再度使わないのか:
+  Power Automateの「変数を初期化する（Initialize variable）」
+  アクションは、フロー内で1つの変数名につき1回しか実行できない
+  という制約があります（同じ変数を2回Initializeしようとすると
+  ランタイムエラーになる）。加えて「変数を初期化する」はApply to each
+  や Do until のようなループの内側に置くこと自体は可能ですが、
+  ループが2回目以降まわった時点で「既に初期化済みの変数を再初期化
+  しようとする」ため、やはり同様のエラーになります。
+
+そのため、ループ内で変数を「元に戻す」には「変数を設定する（Set
+variable）」を使います。これは既存の変数に新しい値を代入するだけの
+操作であり、何度呼び出しても問題ありません。本設計では、この
+「Set variableによるリセット」を [18-6] Reset_ReplyNextLink・
+[18-7] Reset_RepliesArrayという名前で、Apply_To_Each_Meetingの
+各反復の先頭（返信取得の直前）に配置しています。
+
+なぜ「並列オフ」がこの設計の安全性を支えているか:
+  Apply_To_Each_Meetingの「同時実行を有効にする」を既定のオフの
+  ままにしている（03_archive_orchestrator.txt■8[18]・■11参照）ため、
+  会議は必ず1件ずつ順番に処理されます。したがって「今回の会議用に
+  リセット→この会議の返信を全ページ集める→次の会議のためにまた
+  リセット」という一連の流れが、他の会議の処理と時間的に重なる
+  ことがありません。もし誤って「同時実行を有効にする」をオンに
+  すると、複数の会議が同時にvarRepliesArray／varReplyNextLinkを
+  リセット・更新し合い、ある会議の返信が別の会議の結果に混入したり
+  欠落したりします（想定エラー(7)参照）。
+
+まとめると、「トップレベルでしか初期化できない」というPower
+Automateの制約と、「共通変数を安全に使い回すには逐次実行が必須」
+という設計判断の組み合わせが、本セクションの構造（Reset_*で
+リセットしてから使い回す＋並列オフを厳守する）の理由です。
+
+■ 14. アクション一覧（画面操作の詳細・逐次操作粒度）
+------------------------------------------------------------------------
+(a) Scope_Collectの3アクションを、03_archive_orchestrator.txtの
+[16]（Initialize_ErrorMessageの直後）に続けてフルに記載します。
+(b) 返信ページングの6アクションは03_archive_orchestrator.txt■8
+[18-6]〜[18-8-3]で既に逐次操作手順を記載済みのため、ここでは表形式
+で要点のみ再掲します（重複記載を避けるため）。
+
+------------------------------------------------------------------------
+[a-0] Scope_Collect（外枠のScopeアクション）
+------------------------------------------------------------------------
+コネクタ            : 組み込み（Scope）
+PA上のアクション名   : スコープ（Scope）
+配置場所            : フロー[3]のScope_Try枠内、Initialize_ErrorMessage
+                      の直後
+操作手順:
+ 1. フロー[3]のScope_Try枠内、Initialize_ErrorMessageカードの下で
+    「アクションの追加」をクリックする。
+ 2. 検索ボックスに「スコープ」または「Scope」と入力する。
+ 3. 「範囲」または「Scope」を選択して追加する。
+ 4. アクション名を「Scope_Collect」に変更する。
+ 5. 以下[a-1]〜[a-3]は、Do_Until_Messages_Pagingという名前のDo until
+    アクションをこのScope_Collectの枠内にまず追加し、その中に
+    [a-1]〜[a-3]を追加します（手順は次項）。
+入力/使用する式: なし（コンテナ）
+出力          : なし（内部のvarMessagesArray/varNextLinkが結果を持つ）
+次のアクション: Filter_Messages_By_Period
+実行条件      : Initialize_ErrorMessageの成功後
+再試行/タイムアウト: 適用外（コンテナ自体）
+エラー時の処理: 内部で解決しないエラーはScope_Try全体の失敗として
+                Scope_Catchへ波及する
+
+------------------------------------------------------------------------
+[a-0'] Do_Until_Messages_Paging（Scope_Collectの枠内）
+------------------------------------------------------------------------
+コネクタ/種類: Do until（組み込み）
+操作手順:
+ 1. Scope_Collectの枠内で「アクションの追加」→検索「Do until」→追加。
+ 2. アクション名を「Do_Until_Messages_Paging」に変更する。
+ 3. 「値の選択」または「終了条件」の式欄に次を入力する:
+    empty(variables('varNextLink'))
+ 4. カード右上「...」→「設定（Settings）」→「ループの制限を変更
+    する」を開き、■11の指針に従いカウント／タイムアウトを見直す
+    （2年分の投稿数見込みに応じて調整。要実環境確認）。
+使用する式    : empty(variables('varNextLink'))
+出力          : ループが終了した時点でvariables('varMessagesArray')に
+                全ページ分が集約済み
+次のアクション: （Scope_Collectの枠を抜けてFilter_Messages_By_Periodへ）
+実行条件      : Scope_Collect開始直後
+再試行        : 適用外（Do until自体は逐次ループ。個別アクションに依存）
+タイムアウト  : ■11参照
+エラー時の処理: 内部アクションが失敗すればループごと失敗し、
+                Scope_Try全体の失敗としてScope_Catchへ波及する
+
+  以下[a-1]〜[a-3]は、Do_Until_Messages_Pagingの枠内にこの順で
+  追加します。
+
+  --------------------------------------------------------------------
+  [a-1] Get_Channel_Messages
+  --------------------------------------------------------------------
+  コネクタ            : Microsoft Teams
+  PA上のアクション名   : Send a Microsoft Graph HTTP request
+  操作手順:
+   1. Do_Until_Messages_Pagingの枠内で「アクションの追加」をクリック。
+   2. 検索ボックスに「Send a Microsoft Graph HTTP request」と入力する
+      （日本語UIでは「Microsoft Graph へ HTTP 要求を送信します」等の
+      表記になる場合がある。要実環境確認）。
+   3. Microsoft Teamsコネクタのアクションを選択して追加する。
+   4. アクション名を「Get_Channel_Messages」に変更する。
+   5. 「メソッド」欄で「GET」を選択する。
+   6. 「URI」欄に次の式を入力する（動的コンテンツからvarNextLinkを
+      選択する方法を推奨）。
+  使用する式    : variables('varNextLink')
+  入力          : 初回はInitialize_NextLinkで設定したmessages初回URI
+                  （正典§7.15）、2回目以降はSet_NextLinkが更新した
+                  @odata.nextLinkの値
+  出力          : body('Get_Channel_Messages')?['value']（配列。この
+                  ページの親投稿）、body('Get_Channel_Messages')
+                  ?['@odata.nextLink']（次ページURL。最終ページでは
+                  存在しない＝null）
+  次のアクション: Set_MessagesArray
+  実行条件      : Do_Until_Messages_Paging開始直後（2回目以降は
+                  ループの先頭に戻るたび）
+  再試行        : 「...」→設定→再試行ポリシー→既定（Default）のまま
+                  にする（■10参照。429/5xxへの自動対応）。
+  タイムアウト  : 既定のまま（個別呼出は軽量なため通常問題ない）
+  エラー時の処理: 401/403（権限不足）は想定エラー(1)、404（URI不正）
+                  は想定エラー(2)(3)、429連続失敗は想定エラー(4)参照
+
+  --------------------------------------------------------------------
+  [a-2] Set_MessagesArray
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する（Set variable）
+  操作手順:
+   1. Get_Channel_Messagesの直後で「アクションの追加」→「変数を
+      設定する」→追加。
+   2. アクション名を「Set_MessagesArray」に変更する。
+   3. 「名前」欄: varMessagesArray
+   4. 「値」欄に次の式を入力する。
+  使用する式（正典§6の名称のとおり。union重複除去の限界は■9参照）:
+    union(variables('varMessagesArray'), body('Get_Channel_Messages')?['value'])
+  出力          : variables('varMessagesArray')にこのページ分が
+                  追加される
+  次のアクション: Set_NextLink
+  実行条件      : Get_Channel_Messagesの成功後
+  エラー時の処理: body('Get_Channel_Messages')?['value']が万一nullに
+                  なった場合（応答形式の想定外変化等）、union()の
+                  第2引数がnullとなりエラーになる可能性がある。
+                  想定エラー(5)参照（coalesceでのガード追加を検討）
+
+  --------------------------------------------------------------------
+  [a-3] Set_NextLink
+  --------------------------------------------------------------------
+  コネクタ/種類: 変数を設定する
+  名前(変数名): varNextLink
+  値（正典§7.15のページング式）:
+    coalesce(body('Get_Channel_Messages')?['@odata.nextLink'], '')
+  出力          : 次ページがあればそのURL、無ければ''（Do untilの
+                  終了条件がemptyで真になる）
+  次のアクション: （Do until条件を再評価。空でなければ[a-1]へ戻り、
+                  空ならDo_Until_Messages_Pagingを抜けてScope_Collect
+                  終了、Filter_Messages_By_Periodへ）
+  実行条件      : Set_MessagesArrayの成功後
+
+------------------------------------------------------------------------
+(b) 返信ページング6アクションの要点再掲（フル手順は03参照）
+------------------------------------------------------------------------
+| アクション名 | 種類 | 配置（03側の番号） | 値/式（要点） |
+|---|---|---|---|
+| Reset_ReplyNextLink | 変数を設定する | [18-6]（Convert_Body_Html_To_Textの直後） | concat('https://graph.microsoft.com/v1.0/teams/',<envTeamId>,'/channels/',<envChannelId>,'/messages/',items('Apply_To_Each_Meeting')?['id'],'/replies?$top=50')（正典§7.15） |
+| Reset_RepliesArray | 変数を設定する | [18-7] | json('[]') |
+| Do_Until_Replies_Paging | Do until | [18-8]（終了条件empty(variables('varReplyNextLink'))。カウント/タイムアウトは■11参照） | ― |
+| Get_Message_Replies | Teams Send a Microsoft Graph HTTP request | [18-8-1] | GET variables('varReplyNextLink')。再試行は■10参照 |
+| Set_RepliesArray | 変数を設定する | [18-8-2] | union(variables('varRepliesArray'), body('Get_Message_Replies')?['value'])（重複除去の限界は■9参照） |
+| Set_ReplyNextLink | 変数を設定する | [18-8-3] | coalesce(body('Get_Message_Replies')?['@odata.nextLink'], '') |
+
+なぜリセット（Reset_ReplyNextLink/Reset_RepliesArray）が必要かは
+■13で詳述済みです。並列設定（Apply_To_Each_Meeting/Apply_To_Each_
+Replyともに「同時実行を有効にする」＝既定のオフのまま）は03
+_archive_orchestrator.txt■9・■11、および仕様書9章の方針と一致します。
+
+■ 15. 想定されるエラーと修正方法（正典§12書式）
+------------------------------------------------------------------------
+(1)
+想定エラー: Get_Channel_Messages／Get_Message_Repliesが401/403
+  （権限不足）を返す
+原因: 実行アカウントが対象チーム（envTeamId）のメンバーでない、
+  またはTeams接続の権限範囲が不足している
+確認するアクション: Get_Channel_Messages、Get_Message_Replies
+確認する入力: Teams接続の認証状態、実行アカウントのチーム所属
+修正方法: 実行アカウントを対象チームに追加する、またはTeams接続を
+  対象チームのメンバーである別アカウントで再作成する
+修正後の式: 変更不要（権限・接続設定の問題）
+
+(2)
+想定エラー: Get_Channel_Messagesが404/400を返す（URI不正）
+原因: envTeamId／envChannelIdの値の誤り、またはchannelId内の':'が
+  正しく解釈されていない（■8要実環境確認(2)）
+確認するアクション: Initialize_NextLink、Get_Channel_Messages
+確認する入力: 環境変数envTeamId／envChannelIdの実際の値
+修正方法: 正典§1の値と環境変数の設定値を突き合わせる。URLエンコード
+  が必要と判明した場合はInitialize_NextLink/Reset_ReplyNextLinkの
+  該当部分にencodeUriComponent()を追加する（■8参照）
+修正後の式: 環境依存のため個別に確定する
+
+(3)
+想定エラー: 2ページ目以降のGet_Channel_Messages/Get_Message_Repliesが
+  404/400を返す（nextLinkの絶対URL不受理）
+原因: 「Send a Microsoft Graph HTTP request」のURI欄が@odata.nextLink
+  の絶対URL形式を想定通りに処理できていない（■8要実環境確認(1)）
+確認するアクション: Get_Channel_Messages、Get_Message_Replies（2回目
+  以降の実行）
+確認する入力: Set_NextLink／Set_ReplyNextLinkが生成した実際のURL文字列
+  （実行履歴のピーク機能で確認）
+修正方法: 実際に観測されたnextLinkの形式を確認し、必要であれば
+  クエリ部分のみを抽出して初回URIテンプレートに付け直す式へ変更する
+  （具体式は観測結果に応じて個別設計）
+修正後の式: 環境依存のため個別に確定する
+
+(4)
+想定エラー: 429（スロットリング）が連続し、既定の再試行ポリシーでも
+  解消せずアクションが最終的に失敗する
+原因: 短時間に大量のページ取得が発生する2年間本番実行で、Graph側の
+  レート制限に達した
+確認するアクション: Get_Channel_Messages、Get_Message_Replies
+確認する入力: 実行履歴のエラー詳細（429の発生回数・間隔）
+修正方法: 設定（Settings）→再試行ポリシーを「指数間隔」に切り替え、
+  再試行回数・間隔を既定より緩やかに調整する。または本番実行を
+  期間分割して負荷を下げる
+修正後の式: 変更不要（設定・運用で対応）
+
+(5)
+想定エラー: union()の第2引数がnullでSet_MessagesArray／Set_
+  RepliesArrayがエラーになる
+原因: Get_Channel_Messages／Get_Message_Repliesの応答形式が想定と
+  異なり、valueプロパティが欠落している
+確認するアクション: Set_MessagesArray、Set_RepliesArray
+確認する入力: body('Get_Channel_Messages')?['value']（実行履歴で
+  実際の応答本文を確認）
+修正方法: coalesce()でガードを追加する
+修正後の式: union(variables('varMessagesArray'), coalesce(body('Get_Channel_Messages')?['value'], json('[]')))
+  （Set_RepliesArrayも同様にcoalesceを追加する）
+
+(6)
+想定エラー: Do_Until_Messages_Paging／Do_Until_Replies_Pagingが
+  カウント／タイムアウト上限に達し、全件取得前にループが強制終了する
+原因: ■11のとおり既定のカウント60（$top=50なら最大3,000件）では
+  2年分の投稿数・一部会議の返信数を取得しきれない場合がある
+確認するアクション: Do_Until_Messages_Paging、Do_Until_Replies_Paging
+確認する入力: 実行履歴でのループ反復回数、最終回でvariables('varNextLink')
+  ／variables('varReplyNextLink')が空になっていたか
+修正方法: ■11の手順でカウント／タイムアウトの上限を引き上げる
+修正後の式: 変更不要（設定変更で対応）
+
+(7)
+想定エラー: Apply_To_Each_Meetingの「同時実行を有効にする」を誤って
+  オンにし、複数会議の返信が混在・欠落する
+原因: 設定の誤操作
+確認するアクション: Apply_To_Each_Meetingの設定（...→設定）
+確認する入力: 「同時実行を有効にする」のオン/オフ
+修正方法: 既定のオフに戻す
+修正後の式: 変更不要（設定項目の修正のみ）
+
+(8)
+想定エラー: union()が完全一致でしか重複判定しないため、同一
+  messageIdのオブジェクトが2件配列に残る
+原因: ■9で解説した、lastModifiedDateTime等の変化による非完全一致
+確認するアクション: Set_MessagesArray、Filter_Messages_By_Period
+確認する入力: variables('varMessagesArray')内の同一idの件数
+修正方法: 実運用で確認された場合、Selectでid単位に正規化してから
+  Filter/重複除去する追加ロジックを検討する（■9参照。現状は未実装）
+修正後の式: 環境依存のため個別に設計する
+
+■ 16. テスト手順
+------------------------------------------------------------------------
+ 1. 03_archive_orchestrator.txtの■15手順1に従い、フロー[3]を
+    LookbackDays相当の短期間（直近7日）で直接実行する。
+ 2. 実行履歴でScope_Collect→Do_Until_Messages_Pagingを開き、反復
+    回数（ページ数）とGet_Channel_Messagesの各回の入力URI・出力
+    件数を確認する。対象チャネルの投稿が50件以下なら1回、50件超
+    なら複数回反復しているはずである。
+ 3. Filter_Messages_By_Periodの出力件数が、SharePoint/Teamsの画面上で
+    目視した投稿件数と一致するか確認する。
+ 4. 会議を1つ選び、Apply_To_Each_Meetingの当該反復でDo_Until_Replies_
+    Pagingを開き、その会議の返信件数と一致する件数がvariables
+    ('varRepliesArray')に集約されているか確認する。
+ 5. 意図的に返信50件超の会議がある場合（受入条件、仕様書10章）、
+    Do_Until_Replies_Pagingが複数回反復し、全件が漏れなく取得できて
+    いるか重点的に確認する。
+ 6. 2年間本番実行前に、■11の上限設定が対象チャネルの想定投稿数に
+    対して十分か再確認する。
+
+■ 17. 完成条件
+------------------------------------------------------------------------
+- Do_Until_Messages_Pagingが@odata.nextLinkを正しく追跡し、対象
+  チャネルの全期間の親投稿を漏れなくvariables('varMessagesArray')へ
+  集約できる（受入条件「過去2年間の対象親投稿がページング漏れなく
+  取得される」に対応）。
+- Do_Until_Replies_Pagingが各会議の返信を漏れなくvariables
+  ('varRepliesArray')へ集約できる（受入条件「各親投稿の返信が
+  ページング漏れなく取得される」に対応）。
+- Apply_To_Each_Meetingの並列オフが維持され、会議間でvarRepliesArray
+  ／varReplyNextLinkの混在が発生しない。
+- Do untilのカウント／タイムアウト上限が、対象チャネルの実際の
+  投稿数・返信数に対して十分な値に設定されている。
+- ■8の2つの要実環境確認事項（nextLink絶対URL受理・channelIdの
+  ':' 扱い）が実環境で検証済みである。
+
+■ 18. 式・型検査結果
+------------------------------------------------------------------------
+| 式 | 使用アクション | 型 | 検査結果 |
+|---|---|---|---|
+| empty(variables('varNextLink')) | Do_Until_Messages_Paging終了条件 | ブール型 | OK |
+| variables('varNextLink') | Get_Channel_MessagesのURI | 文字列 | OK |
+| union(variables('varMessagesArray'), body('Get_Channel_Messages')?['value']) | Set_MessagesArray | 配列 | OK（両候補配列。重複除去の限界は■9参照） |
+| coalesce(body('Get_Channel_Messages')?['@odata.nextLink'], '') | Set_NextLink | 文字列 | OK |
+| empty(variables('varReplyNextLink')) | Do_Until_Replies_Paging終了条件 | ブール型 | OK |
+| concat('https://graph.microsoft.com/...', items('Apply_To_Each_Meeting')?['id'], '/replies?$top=50') | Reset_ReplyNextLink | 文字列 | OK（envTeamId/envChannelIdは動的コンテンツ。要実環境確認■8） |
+
+■ 19. 監査表（正典§11・全17問）
+------------------------------------------------------------------------
+```
+式・型監査
+trim対象はすべて文字列か: 該当なし。本セクションはtrim()を使用しない。
+coalesceの候補値は同一型か: Yes。coalesce(body(...)?['@odata.nextLink'], '')は文字列同士。想定エラー(5)で追加提案するcoalesce(...,json('[]'))も配列同士で統一する。
+nullと空文字列を区別しているか: Yes。@odata.nextLinkが存在しない（null）場合とSet_NextLink実行後の''はいずれも「次ページなし」を表す同一の状態として扱い、Do untilのempty()判定で一貫して処理している。
+空白だけの文字列を考慮しているか: 該当なし。本セクションで扱う文字列（URL・ID）はTeams/Graphが生成するシステム値であり、空白のみの入力は想定されない。
+配列の既定値がjson('[]')になっているか: Yes。varMessagesArray/varRepliesArrayは共にjson('[]')で初期化済み（フロー[3]トップレベル）。
+オブジェクトの既定値がjson('{}')になっているか: 該当なし。本セクションはオブジェクト型変数を使用しない。
+falseを未設定扱いしていないか: 該当なし。本セクションにBoolean値の判定なし（empty()の戻り値はDo untilの終了条件としてのみ使用）。
+0を未設定扱いしていないか: 該当なし。本セクションに数値カウンタはない。
+Apply to eachへnullを渡していないか: 該当なし。本セクションはApply to eachを直接使用しない（Do untilのみ）。ただし(b)はApply_To_Each_Meetingの内側にあり、その対象（body('Filter_Messages_By_Period')）は03側で既にnullにならないよう保証済み。
+JSONプロパティを安全に参照しているか: Yes。body(...)?['value']、body(...)?['@odata.nextLink']など全て安全参照を使用している。
+HTMLへ入れる値をエスケープしているか: 該当なし。本セクションはHTMLを生成しない。
+未定義の変数がないか: Yes。varMessagesArray/varNextLink/varRepliesArray/varReplyNextLinkは全てフロー[3]トップレベルで初期化済み（03_archive_orchestrator.txt■6参照）。
+未定義のアクション参照がないか: Yes。body('Get_Channel_Messages')・body('Get_Message_Replies')はいずれも本セクション内で定義したアクション名と一致する。
+式内のアクション名が実在するか: Yes。Get_Channel_Messages、Set_MessagesArray、Set_NextLink、Get_Message_Replies、Set_RepliesArray、Set_ReplyNextLinkは全て本ファイルまたは03_archive_orchestrator.txtで作成した実在アクション。
+添付リンクが保存後SharePointファイルを指しているか: 該当なし。本セクションは添付ファイルを扱わない（添付処理は03のApply_To_Each_Meeting後半セクション）。
+会議が日付順に並ぶか: 該当なし。本セクションは並び替えを行わない（並び替えはGet_Sorted_Meetings、03参照）。
+各会議が新しいページから開始するか: 該当なし。本セクションはWord/HTML生成を行わない（06参照）。
+```
+
+========================================================================
+以上（04_collect_channel_messages.txt）
+========================================================================

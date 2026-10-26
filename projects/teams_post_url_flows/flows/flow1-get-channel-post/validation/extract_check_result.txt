@@ -1,0 +1,17 @@
+=== ZIP再展開検査 ===
+対象ZIP : release/Flow1_GetTeamsChannelPostFromUrl_20260724190952.zip
+エントリ数: 5
+    Microsoft.Flow/flows/5d2b8f31-7a46-49c0-b8e2-1f93c65a0d87/apisMap.json
+    Microsoft.Flow/flows/5d2b8f31-7a46-49c0-b8e2-1f93c65a0d87/connectionsMap.json
+    Microsoft.Flow/flows/5d2b8f31-7a46-49c0-b8e2-1f93c65a0d87/definition.json
+    Microsoft.Flow/flows/manifest.json
+    manifest.json
+
+  OK: パッケージGUID 3点一致: 5d2b8f31-7a46-49c0-b8e2-1f93c65a0d87
+  OK: 接続参照キー一致: ['shared_teams']
+  OK: displayName: Flow1 Teams投稿URLから投稿を取得
+  OK: 展開結果は source/package とバイト単位で一致
+
+=== ERRORS ===
+(0 errors)
+展開先: validation/extracted （検証用コピー。正典は source/package）
