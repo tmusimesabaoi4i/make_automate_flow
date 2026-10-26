@@ -1,5 +1,5 @@
 === v4 アクションアウトライン（実行順・ネスト・通し番号=定義上の全アクション） ===
-trigger: manual (Request/Button) inputs: TeamsPostUrl*  ※*=必須
+trigger: manual (Request/Button) inputs: TeamsPostUrl*/OutputFolderUrl/OutputFileName  ※*=必須
   1 Initialize_InputUrl  <InitializeVariable> [varInputUrl:string]  runAfter: -
   2 Initialize_TenantId  <InitializeVariable> [varTenantId:string]  runAfter: Initialize_InputUrl(Succeeded)
   3 Initialize_TeamId  <InitializeVariable> [varTeamId:string]  runAfter: Initialize_TenantId(Succeeded)
@@ -25,89 +25,131 @@ trigger: manual (Request/Button) inputs: TeamsPostUrl*  ※*=必須
  23 Initialize_ReactorUserIds  <InitializeVariable> [varReactorUserIds:array]  runAfter: Initialize_Reactions(Succeeded)
  24 Initialize_Reactors  <InitializeVariable> [varReactors:array]  runAfter: Initialize_ReactorUserIds(Succeeded)
  25 Initialize_Warnings  <InitializeVariable> [varWarnings:array]  runAfter: Initialize_Reactors(Succeeded)
- 26 Scope_ParseUrl  <Scope>  runAfter: Initialize_Warnings(Succeeded)
- 27   Set_Stage_ParseUrl  <SetVariable> [varStage]  runAfter: -
- 28   Compose_Url_Without_Fragment  <Compose>  runAfter: Set_Stage_ParseUrl(Succeeded)
- 29   Compose_Url_Path_Raw  <Compose>  runAfter: Compose_Url_Without_Fragment(Succeeded)
- 30   Compose_Url_Path_Part  <Compose>  runAfter: Compose_Url_Path_Raw(Succeeded)
- 31   Compose_Url_Query_Part  <Compose>  runAfter: Compose_Url_Path_Part(Succeeded)
- 32   Compose_Query_Normalized  <Compose>  runAfter: Compose_Url_Query_Part(Succeeded)
- 33   Compose_Message_Path_Tail  <Compose>  runAfter: Compose_Query_Normalized(Succeeded)
- 34   Parse_ChannelId_From_Path  <Compose>  runAfter: Compose_Message_Path_Tail(Succeeded)
- 35   Parse_MessageId_From_Path  <Compose>  runAfter: Parse_ChannelId_From_Path(Succeeded)
- 36   Parse_TenantId_From_Query  <Compose>  runAfter: Parse_MessageId_From_Path(Succeeded)
- 37   Parse_TeamId_From_Query  <Compose>  runAfter: Parse_TenantId_From_Query(Succeeded)
- 38   Parse_ParentMessageId_From_Query  <Compose>  runAfter: Parse_TeamId_From_Query(Succeeded)
- 39   Set_ChannelId  <SetVariable> [varChannelId]  runAfter: Parse_ParentMessageId_From_Query(Succeeded)
- 40   Set_UrlMessageId  <SetVariable> [varUrlMessageId]  runAfter: Set_ChannelId(Succeeded)
- 41   Set_TenantId  <SetVariable> [varTenantId]  runAfter: Set_UrlMessageId(Succeeded)
- 42   Set_TeamId  <SetVariable> [varTeamId]  runAfter: Set_TenantId(Succeeded)
- 43   Set_ParentMessageId  <SetVariable> [varParentMessageId]  runAfter: Set_TeamId(Succeeded)
- 44   Determine_TargetMessageId  <SetVariable> [varTargetMessageId]  runAfter: Set_ParentMessageId(Succeeded)
- 45   Validate_ParsedIdentifiers  <Compose>  runAfter: Determine_TargetMessageId(Succeeded)
- 46   Set_ErrorCode_From_Validation  <SetVariable> [varErrorCode]  runAfter: Validate_ParsedIdentifiers(Succeeded)
- 47   Set_IsValid  <SetVariable> [varIsValid]  runAfter: Set_ErrorCode_From_Validation(Succeeded)
- 48   Set_ErrorMessage_From_Validation  <SetVariable> [varErrorMessage]  runAfter: Set_IsValid(Succeeded)
- 49   Condition_Has_Parse_Error  <If>  runAfter: Set_ErrorMessage_From_Validation(Succeeded)
- 50     Append_Parse_Error_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: -
- 51 Scope_GetTeamsData  <Scope>  runAfter: Scope_ParseUrl(Succeeded)
- 52   Set_Stage_GetTeamsData  <SetVariable> [varStage]  runAfter: -
- 53   Condition_Is_Valid  <If>  runAfter: Set_Stage_GetTeamsData(Succeeded)
- 54     Get_Parent_Message  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
- 55     Set_LastStatusCode  <SetVariable> [varLastStatusCode]  runAfter: Get_Parent_Message(Succeeded/Failed)
- 56     Condition_Message_Deleted  <If>  runAfter: Get_Parent_Message(Succeeded)
- 57       Set_ErrorCode_Message_Deleted  <SetVariable> [varErrorCode]  runAfter: -
- 58       Set_ErrorMessage_Message_Deleted  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_Message_Deleted(Succeeded)
- 59       Set_IsValid_Message_Deleted  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_Message_Deleted(Succeeded)
- 60       Append_Message_Deleted_Error  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_Message_Deleted(Succeeded)
- 61     Set_RawReactions  <SetVariable> [varRawReactions]  runAfter: Get_Parent_Message(Succeeded)
- 62 Scope_GetChannelMembers  <Scope>  runAfter: Scope_GetTeamsData(Succeeded)
- 63   Set_Stage_GetChannelMembers  <SetVariable> [varStage]  runAfter: -
- 64   Condition_Has_Reactions  <If>  runAfter: Set_Stage_GetChannelMembers(Succeeded)
- 65     Set_MemberNextLink_First  <SetVariable> [varMemberNextLink]  runAfter: -
- 66     Do_Until_Members_Paging  <Until> [until: @or(empty(variables('varMemberNextLink')), variables('varMem]  runAfter: Set_MemberNextLink_First(Succeeded)
- 67       Get_Channel_Members  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
- 68       Set_Members_Status_Code  <SetVariable> [varMembersStatusCode]  runAfter: Get_Channel_Members(Succeeded/Failed/TimedOut)
- 69       Process_Retrieved_Members  <Foreach> [in: @coalesce(body('Get_Channel_Members')?['value'], json('[]'))]  runAfter: Get_Channel_Members(Succeeded)
- 70         Append_Member  <AppendToArrayVariable> [varMembers]  runAfter: -
- 71       Set_MemberNextLink  <SetVariable> [varMemberNextLink]  runAfter: Process_Retrieved_Members(Succeeded)
- 72       Set_Members_Lookup_Failed_In_Loop  <SetVariable> [varMembersLookupFailed]  runAfter: Get_Channel_Members(Failed/TimedOut)
- 73     Set_MembersLoaded  <SetVariable> [varMembersLoaded]  runAfter: Do_Until_Members_Paging(Succeeded)
- 74     Mark_Member_Lookup_Failed  <SetVariable> [varMembersLookupFailed]  runAfter: Do_Until_Members_Paging(Failed/TimedOut)
- 75 Scope_BuildReactors  <Scope>  runAfter: Scope_GetChannelMembers(Succeeded/Failed/TimedOut)
- 76   Set_Stage_BuildReactors  <SetVariable> [varStage]  runAfter: -
- 77   Condition_Can_Build_Reactors  <If>  runAfter: Set_Stage_BuildReactors(Succeeded)
- 78     Condition_Member_Lookup_Unavailable  <If>  runAfter: -
- 79       Append_Member_Lookup_Warning  <AppendToArrayVariable> [varWarnings]  runAfter: -
- 80     Apply_To_Each_Reaction  <Foreach> [in: @variables('varRawReactions')]  runAfter: Condition_Member_Lookup_Unavailable(Succeeded)
- 81       Compose_Reaction_UserId  <Compose>  runAfter: -
- 82       Filter_Member_For_Reaction  <Query>  runAfter: Compose_Reaction_UserId(Succeeded)
- 83       Compose_Matched_Member  <Compose>  runAfter: Filter_Member_For_Reaction(Succeeded)
- 84       Compose_Normalized_Reaction  <Compose>  runAfter: Compose_Matched_Member(Succeeded)
- 85       Append_Normalized_Reaction  <AppendToArrayVariable> [varReactions]  runAfter: Compose_Normalized_Reaction(Succeeded)
- 86       Condition_Is_New_Reactor  <If>  runAfter: Append_Normalized_Reaction(Succeeded)
- 87         Append_Reactor_UserId  <AppendToArrayVariable> [varReactorUserIds]  runAfter: -
- 88     Apply_To_Each_Reactor  <Foreach> [in: @variables('varReactorUserIds')]  runAfter: Apply_To_Each_Reaction(Succeeded)
- 89       Filter_Reactions_Of_User  <Query>  runAfter: -
- 90       Select_Reaction_Summary  <Select>  runAfter: Filter_Reactions_Of_User(Succeeded)
- 91       Compose_Reactor  <Compose>  runAfter: Select_Reaction_Summary(Succeeded)
- 92       Append_Reactor  <AppendToArrayVariable> [varReactors]  runAfter: Compose_Reactor(Succeeded)
- 93 Scope_CreateResult  <Scope>  runAfter: Scope_BuildReactors(Succeeded)
- 94   Set_Stage_CreateResult  <SetVariable> [varStage]  runAfter: -
- 95   Condition_Build_Result  <If>  runAfter: Set_Stage_CreateResult(Succeeded)
- 96     Create_Result_Object  <Compose>  runAfter: -
- 97     Set_ResultObject  <SetVariable> [varResultObject]  runAfter: Create_Result_Object(Succeeded)
+ 26 Initialize_Csv  <InitializeVariable> [varCsv:string]  runAfter: Initialize_Warnings(Succeeded)
+ 27 Initialize_OutFolderUrl  <InitializeVariable> [varOutFolderUrl:string]  runAfter: Initialize_Csv(Succeeded)
+ 28 Initialize_OutFileNameInput  <InitializeVariable> [varOutFileNameInput:string]  runAfter: Initialize_OutFolderUrl(Succeeded)
+ 29 Initialize_OutSite  <InitializeVariable> [varOutSite:string]  runAfter: Initialize_OutFileNameInput(Succeeded)
+ 30 Initialize_OutFolderPath  <InitializeVariable> [varOutFolderPath:string]  runAfter: Initialize_OutSite(Succeeded)
+ 31 Initialize_OutFileName  <InitializeVariable> [varOutFileName:string]  runAfter: Initialize_OutFolderPath(Succeeded)
+ 32 Initialize_ExportStatus  <InitializeVariable> [varExportStatus:string]  runAfter: Initialize_OutFileName(Succeeded)
+ 33 Initialize_ExportStatusCode  <InitializeVariable> [varExportStatusCode:string]  runAfter: Initialize_ExportStatus(Succeeded)
+ 34 Initialize_ExportErrorCode  <InitializeVariable> [varExportErrorCode:string]  runAfter: Initialize_ExportStatusCode(Succeeded)
+ 35 Scope_ParseUrl  <Scope>  runAfter: Initialize_ExportErrorCode(Succeeded)
+ 36   Set_Stage_ParseUrl  <SetVariable> [varStage]  runAfter: -
+ 37   Compose_Url_Without_Fragment  <Compose>  runAfter: Set_Stage_ParseUrl(Succeeded)
+ 38   Compose_Url_Path_Raw  <Compose>  runAfter: Compose_Url_Without_Fragment(Succeeded)
+ 39   Compose_Url_Path_Part  <Compose>  runAfter: Compose_Url_Path_Raw(Succeeded)
+ 40   Compose_Url_Query_Part  <Compose>  runAfter: Compose_Url_Path_Part(Succeeded)
+ 41   Compose_Query_Normalized  <Compose>  runAfter: Compose_Url_Query_Part(Succeeded)
+ 42   Compose_Message_Path_Tail  <Compose>  runAfter: Compose_Query_Normalized(Succeeded)
+ 43   Parse_ChannelId_From_Path  <Compose>  runAfter: Compose_Message_Path_Tail(Succeeded)
+ 44   Parse_MessageId_From_Path  <Compose>  runAfter: Parse_ChannelId_From_Path(Succeeded)
+ 45   Parse_TenantId_From_Query  <Compose>  runAfter: Parse_MessageId_From_Path(Succeeded)
+ 46   Parse_TeamId_From_Query  <Compose>  runAfter: Parse_TenantId_From_Query(Succeeded)
+ 47   Parse_ParentMessageId_From_Query  <Compose>  runAfter: Parse_TeamId_From_Query(Succeeded)
+ 48   Set_ChannelId  <SetVariable> [varChannelId]  runAfter: Parse_ParentMessageId_From_Query(Succeeded)
+ 49   Set_UrlMessageId  <SetVariable> [varUrlMessageId]  runAfter: Set_ChannelId(Succeeded)
+ 50   Set_TenantId  <SetVariable> [varTenantId]  runAfter: Set_UrlMessageId(Succeeded)
+ 51   Set_TeamId  <SetVariable> [varTeamId]  runAfter: Set_TenantId(Succeeded)
+ 52   Set_ParentMessageId  <SetVariable> [varParentMessageId]  runAfter: Set_TeamId(Succeeded)
+ 53   Determine_TargetMessageId  <SetVariable> [varTargetMessageId]  runAfter: Set_ParentMessageId(Succeeded)
+ 54   Validate_ParsedIdentifiers  <Compose>  runAfter: Determine_TargetMessageId(Succeeded)
+ 55   Set_ErrorCode_From_Validation  <SetVariable> [varErrorCode]  runAfter: Validate_ParsedIdentifiers(Succeeded)
+ 56   Set_IsValid  <SetVariable> [varIsValid]  runAfter: Set_ErrorCode_From_Validation(Succeeded)
+ 57   Set_ErrorMessage_From_Validation  <SetVariable> [varErrorMessage]  runAfter: Set_IsValid(Succeeded)
+ 58   Condition_Has_Parse_Error  <If>  runAfter: Set_ErrorMessage_From_Validation(Succeeded)
+ 59     Append_Parse_Error_Message  <AppendToArrayVariable> [varErrorMessages]  runAfter: -
+ 60 Scope_GetTeamsData  <Scope>  runAfter: Scope_ParseUrl(Succeeded)
+ 61   Set_Stage_GetTeamsData  <SetVariable> [varStage]  runAfter: -
+ 62   Condition_Is_Valid  <If>  runAfter: Set_Stage_GetTeamsData(Succeeded)
+ 63     Get_Parent_Message  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+ 64     Set_LastStatusCode  <SetVariable> [varLastStatusCode]  runAfter: Get_Parent_Message(Succeeded/Failed)
+ 65     Condition_Message_Deleted  <If>  runAfter: Get_Parent_Message(Succeeded)
+ 66       Set_ErrorCode_Message_Deleted  <SetVariable> [varErrorCode]  runAfter: -
+ 67       Set_ErrorMessage_Message_Deleted  <SetVariable> [varErrorMessage]  runAfter: Set_ErrorCode_Message_Deleted(Succeeded)
+ 68       Set_IsValid_Message_Deleted  <SetVariable> [varIsValid]  runAfter: Set_ErrorMessage_Message_Deleted(Succeeded)
+ 69       Append_Message_Deleted_Error  <AppendToArrayVariable> [varErrorMessages]  runAfter: Set_IsValid_Message_Deleted(Succeeded)
+ 70     Set_RawReactions  <SetVariable> [varRawReactions]  runAfter: Get_Parent_Message(Succeeded)
+ 71 Scope_GetChannelMembers  <Scope>  runAfter: Scope_GetTeamsData(Succeeded)
+ 72   Set_Stage_GetChannelMembers  <SetVariable> [varStage]  runAfter: -
+ 73   Condition_Has_Reactions  <If>  runAfter: Set_Stage_GetChannelMembers(Succeeded)
+ 74     Set_MemberNextLink_First  <SetVariable> [varMemberNextLink]  runAfter: -
+ 75     Do_Until_Members_Paging  <Until> [until: @or(empty(variables('varMemberNextLink')), variables('varMem]  runAfter: Set_MemberNextLink_First(Succeeded)
+ 76       Get_Channel_Members  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
+ 77       Set_Members_Status_Code  <SetVariable> [varMembersStatusCode]  runAfter: Get_Channel_Members(Succeeded/Failed/TimedOut)
+ 78       Process_Retrieved_Members  <Foreach> [in: @coalesce(body('Get_Channel_Members')?['value'], json('[]'))]  runAfter: Get_Channel_Members(Succeeded)
+ 79         Append_Member  <AppendToArrayVariable> [varMembers]  runAfter: -
+ 80       Set_MemberNextLink  <SetVariable> [varMemberNextLink]  runAfter: Process_Retrieved_Members(Succeeded)
+ 81       Set_Members_Lookup_Failed_In_Loop  <SetVariable> [varMembersLookupFailed]  runAfter: Get_Channel_Members(Failed/TimedOut)
+ 82     Set_MembersLoaded  <SetVariable> [varMembersLoaded]  runAfter: Do_Until_Members_Paging(Succeeded)
+ 83     Mark_Member_Lookup_Failed  <SetVariable> [varMembersLookupFailed]  runAfter: Do_Until_Members_Paging(Failed/TimedOut)
+ 84 Scope_BuildReactors  <Scope>  runAfter: Scope_GetChannelMembers(Succeeded/Failed/TimedOut)
+ 85   Set_Stage_BuildReactors  <SetVariable> [varStage]  runAfter: -
+ 86   Condition_Can_Build_Reactors  <If>  runAfter: Set_Stage_BuildReactors(Succeeded)
+ 87     Condition_Member_Lookup_Unavailable  <If>  runAfter: -
+ 88       Append_Member_Lookup_Warning  <AppendToArrayVariable> [varWarnings]  runAfter: -
+ 89     Apply_To_Each_Reaction  <Foreach> [in: @variables('varRawReactions')]  runAfter: Condition_Member_Lookup_Unavailable(Succeeded)
+ 90       Compose_Reaction_UserId  <Compose>  runAfter: -
+ 91       Filter_Member_For_Reaction  <Query>  runAfter: Compose_Reaction_UserId(Succeeded)
+ 92       Compose_Matched_Member  <Compose>  runAfter: Filter_Member_For_Reaction(Succeeded)
+ 93       Compose_Normalized_Reaction  <Compose>  runAfter: Compose_Matched_Member(Succeeded)
+ 94       Append_Normalized_Reaction  <AppendToArrayVariable> [varReactions]  runAfter: Compose_Normalized_Reaction(Succeeded)
+ 95       Condition_Is_New_Reactor  <If>  runAfter: Append_Normalized_Reaction(Succeeded)
+ 96         Append_Reactor_UserId  <AppendToArrayVariable> [varReactorUserIds]  runAfter: -
+ 97     Apply_To_Each_Reactor  <Foreach> [in: @variables('varReactorUserIds')]  runAfter: Apply_To_Each_Reaction(Succeeded)
+ 98       Filter_Reactions_Of_User  <Query>  runAfter: -
+ 99       Select_Reaction_Summary  <Select>  runAfter: Filter_Reactions_Of_User(Succeeded)
+100       Compose_Reactor  <Compose>  runAfter: Select_Reaction_Summary(Succeeded)
+101       Append_Reactor  <AppendToArrayVariable> [varReactors]  runAfter: Compose_Reactor(Succeeded)
+102       Append_Csv_Row  <AppendToStringVariable> [varCsv]  runAfter: Append_Reactor(Succeeded)
+103 Scope_ExportCsv  <Scope>  runAfter: Scope_BuildReactors(Succeeded)
+104   Set_Stage_ExportCsv  <SetVariable> [varStage]  runAfter: -
+105   Condition_Export_Requested  <If>  runAfter: Set_Stage_ExportCsv(Succeeded)
+106     Compose_Out_Url_No_Fragment  <Compose>  runAfter: -
+107     Compose_Out_Url_Path_Raw  <Compose>  runAfter: Compose_Out_Url_No_Fragment(Succeeded)
+108     Compose_Out_Query_Normalized  <Compose>  runAfter: Compose_Out_Url_Path_Raw(Succeeded)
+109     Compose_Out_Host  <Compose>  runAfter: Compose_Out_Query_Normalized(Succeeded)
+110     Compose_Out_Id_Param  <Compose>  runAfter: Compose_Out_Host(Succeeded)
+111     Compose_Out_Path_From_Url  <Compose>  runAfter: Compose_Out_Id_Param(Succeeded)
+112     Compose_Out_Server_Path_Base  <Compose>  runAfter: Compose_Out_Path_From_Url(Succeeded)
+113     Compose_Out_Server_Path_No_Forms  <Compose>  runAfter: Compose_Out_Server_Path_Base(Succeeded)
+114     Compose_Out_Server_Path  <Compose>  runAfter: Compose_Out_Server_Path_No_Forms(Succeeded)
+115     Compose_Out_Seg1  <Compose>  runAfter: Compose_Out_Server_Path(Succeeded)
+116     Compose_Out_Seg2  <Compose>  runAfter: Compose_Out_Seg1(Succeeded)
+117     Compose_Out_Is_Scoped  <Compose>  runAfter: Compose_Out_Seg2(Succeeded)
+118     Compose_Out_Site_Prefix  <Compose>  runAfter: Compose_Out_Is_Scoped(Succeeded)
+119     Set_OutSite  <SetVariable> [varOutSite]  runAfter: Compose_Out_Site_Prefix(Succeeded)
+120     Set_OutFolderPath  <SetVariable> [varOutFolderPath]  runAfter: Set_OutSite(Succeeded)
+121     Compose_Out_File_Base  <Compose>  runAfter: Set_OutFolderPath(Succeeded)
+122     Set_OutFileName  <SetVariable> [varOutFileName]  runAfter: Compose_Out_File_Base(Succeeded)
+123     Set_ExportErrorCode  <SetVariable> [varExportErrorCode]  runAfter: Set_OutFileName(Succeeded)
+124     Condition_Export_Input_Valid  <If>  runAfter: Set_ExportErrorCode(Succeeded)
+125       Create_Csv_File  <OpenApiConnection> [shared_sharepointonline/CreateFile]  runAfter: -
+126       Set_Export_Status_Code  <SetVariable> [varExportStatusCode]  runAfter: Create_Csv_File(Succeeded/Failed/TimedOut)
+127       Set_Export_Status_Created  <SetVariable> [varExportStatus]  runAfter: Create_Csv_File(Succeeded)
+128       Set_Export_Status_Failed  <SetVariable> [varExportStatus]  runAfter: Create_Csv_File(Failed/TimedOut)
+129       Append_Export_Failed_Warning  <AppendToArrayVariable> [varWarnings]  runAfter: Set_Export_Status_Failed(Succeeded)
+        [else]
+130       Set_Export_Status_Invalid  <SetVariable> [varExportStatus]  runAfter: -
+131       Compose_Export_Error_Message  <Compose>  runAfter: Set_Export_Status_Invalid(Succeeded)
+132       Append_Export_Invalid_Warning  <AppendToArrayVariable> [varWarnings]  runAfter: Compose_Export_Error_Message(Succeeded)
+133 Scope_CreateResult  <Scope>  runAfter: Scope_ExportCsv(Succeeded/Failed/TimedOut)
+134   Set_Stage_CreateResult  <SetVariable> [varStage]  runAfter: -
+135   Condition_Build_Result  <If>  runAfter: Set_Stage_CreateResult(Succeeded)
+136     Select_Result_Table  <Select>  runAfter: -
+137     Create_Result_Object  <Compose>  runAfter: Select_Result_Table(Succeeded)
+138     Set_ResultObject  <SetVariable> [varResultObject]  runAfter: Create_Result_Object(Succeeded)
       [else]
- 98     Create_Error_Result_Object  <Compose>  runAfter: -
- 99     Set_ResultObject_Error  <SetVariable> [varResultObject]  runAfter: Create_Error_Result_Object(Succeeded)
-100   Serialize_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Condition_Build_Result(Succeeded)
-101 Scope_ErrorHandler  <Scope>  runAfter: Scope_CreateResult(Failed/Skipped/TimedOut)
-102   Compose_Handler_Error_Code  <Compose>  runAfter: -
-103   Compose_Handler_Error_Message  <Compose>  runAfter: Compose_Handler_Error_Code(Succeeded)
-104   Compose_Handler_Error_Details  <Compose>  runAfter: Compose_Handler_Error_Message(Succeeded)
-105   Handle_Error  <Compose>  runAfter: Compose_Handler_Error_Details(Succeeded)
-106   Set_ResultObject_Handler  <SetVariable> [varResultObject]  runAfter: Handle_Error(Succeeded)
-107   Serialize_Handler_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Set_ResultObject_Handler(Succeeded)
-108 Scope_Finalize  <Scope>  runAfter: Scope_ErrorHandler(Succeeded/Failed/Skipped/TimedOut)
-109   Compose_Flow_Output  <Compose>  runAfter: -
---- total actions: 109 ---
+139     Create_Error_Result_Object  <Compose>  runAfter: -
+140     Set_ResultObject_Error  <SetVariable> [varResultObject]  runAfter: Create_Error_Result_Object(Succeeded)
+141   Serialize_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Condition_Build_Result(Succeeded)
+142 Scope_ErrorHandler  <Scope>  runAfter: Scope_CreateResult(Failed/Skipped/TimedOut)
+143   Compose_Handler_Error_Code  <Compose>  runAfter: -
+144   Compose_Handler_Error_Message  <Compose>  runAfter: Compose_Handler_Error_Code(Succeeded)
+145   Compose_Handler_Error_Details  <Compose>  runAfter: Compose_Handler_Error_Message(Succeeded)
+146   Handle_Error  <Compose>  runAfter: Compose_Handler_Error_Details(Succeeded)
+147   Set_ResultObject_Handler  <SetVariable> [varResultObject]  runAfter: Handle_Error(Succeeded)
+148   Serialize_Handler_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Set_ResultObject_Handler(Succeeded)
+149 Scope_Finalize  <Scope>  runAfter: Scope_ErrorHandler(Succeeded/Failed/Skipped/TimedOut)
+150   Compose_Flow_Output  <Compose>  runAfter: -
+--- total actions: 150 ---

@@ -6,16 +6,16 @@ Microsoft Teams のチャネル投稿で「リンクをコピー」して得たU
 |---|---|---|---|
 | フロー名 | `Flow1_GetTeamsChannelPostFromUrl` | `Flow2_GetAllTeamsChannelPostRepliesFromUrl` | `Flow3_ListTeamsChannelPostReactorsFromUrl` |
 | 取得するもの | 対象の親投稿1件 | 対象の親投稿＋その**全返信** | 親投稿に**リアクションした人**（1人1件・表示名とメール付き） |
-| アクション数 | 67 | 81 | 109 |
-| 使用コネクタ | Microsoft Teams 1本（**プレミアム不要**） | 同左 | 同左 |
-| 出力 | `varResultObject` / `varResultJson` | `varResultObject` / `varResultJson` / `varReplies` | `varResultObject` / `varResultJson` / `varReactors` |
+| アクション数 | 67 | 81 | 150 |
+| 使用コネクタ | Microsoft Teams 1本（**プレミアム不要**） | 同左 | Teams ＋ SharePoint（CSV出力用。いずれも標準） |
+| 出力 | `varResultObject` / `varResultJson` | `varResultObject` / `varResultJson` / `varReplies` | `varResultObject` / `varResultJson` / `varReactors`、任意で OneDrive へ CSV（`displayName` / `email`） |
 
 どれも単独でインポート・実行できます。
 
 > **状態: 静的検証を通過し、実環境でのインポートと実行に成功しました（2026-07-24・利用者報告）。**
 > ただし報告は「安全にインポートでき、安全に実行できた」という範囲です。**返信51件超でのページング**、添付・メンションを含む投稿、異常系（存在しない／削除済み／権限なし／共有チャネル）の実挙動は未確認のまま残っています。詳細は [tests/validation_report.md](tests/validation_report.md) §5・§7 を参照してください。
 >
-> **Flow3（2026-10-26 追加）は実環境で未実施です。** 静的検証・オフラインの通し回帰テストは全緑ですが、インポート・保存・実行と、メンバー一覧（表示名・メールの補完）の権限は要実環境確認です（[spec](flows/flow3-list-post-reactors/spec/Flow3_ListTeamsChannelPostReactorsFromUrl.md) §8）。
+> **Flow3（2026-10-26 追加）**: CSV出力**前**の版（`_20261026124224.zip`）は**インポート・実行に成功し、出力もOK**でした（2026-10-26・利用者報告）。**CSV出力付きの現行版は実環境で未実施**です（SharePoint 接続の追加・CSV保存・同名ファイルの挙動は要実環境確認。[spec](flows/flow3-list-post-reactors/spec/Flow3_ListTeamsChannelPostReactorsFromUrl.md) §8）。
 
 ---
 
@@ -32,7 +32,7 @@ Microsoft Teams のチャネル投稿で「リンクをコピー」して得たU
 
 - `flows/flow1-get-channel-post/release/Flow1_GetTeamsChannelPostFromUrl_20260724190952.zip`
 - `flows/flow2-get-post-replies/release/Flow2_GetAllTeamsChannelPostRepliesFromUrl_20260724190952.zip`
-- `flows/flow3-list-post-reactors/release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026124224.zip`
+- `flows/flow3-list-post-reactors/release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026130049.zip`（インポート時に Teams と SharePoint の2接続を選択）
 
 ---
 
@@ -54,7 +54,7 @@ projects/teams_post_url_flows/
 │   ├── run_url_parse_tests.py     URL解析の回帰テスト（definition.json の式を直接評価）
 │   ├── url_parse_test_result.txt  テスト実行結果（60件合格）
 │   ├── run_reactor_flow_tests.py  Flow3の通し回帰テスト（ダミー応答で definition.json の式を評価）
-│   └── reactor_flow_test_result.txt テスト実行結果（12件合格）
+│   └── reactor_flow_test_result.txt テスト実行結果（24件合格）
 └── flows/
     ├── flow1-get-channel-post/
     │   ├── spec/Flow1_GetTeamsChannelPostFromUrl.md   フロー定義の説明
@@ -96,7 +96,9 @@ projects/teams_post_url_flows/
 
 ### リアクションした人の一覧化（Flow3）
 
-親投稿の `reactions` からユーザーIDを取り出し、**チャネルメンバー一覧**（`GET /teams/{teamId}/channels/{channelId}/members`）とユーザーIDで突き合わせて表示名・メールアドレスを補います。Graph のリアクション情報には表示名・メールがほとんど入らないためです。同じ人の複数リアクションは1人にまとめ、`reactors`（1人1件）と `reactions`（1件ごと）の両方をJSONで返します。メンバー一覧を取得できない場合（権限不足など）もフローは失敗させず、ユーザーIDだけの一覧に `warnings` を付けて返します。詳細は [spec](flows/flow3-list-post-reactors/spec/Flow3_ListTeamsChannelPostReactorsFromUrl.md)。
+親投稿の `reactions` からユーザーIDを取り出し、**チャネルメンバー一覧**（`GET /teams/{teamId}/channels/{channelId}/members`）とユーザーIDで突き合わせて表示名・メールアドレスを補います。Graph のリアクション情報には表示名・メールがほとんど入らないためです。同じ人の複数リアクションは1人にまとめ、`reactors`（1人1件）と `reactions`（1件ごと）の両方をJSONで返します。メンバー一覧を取得できない場合（権限不足など）もフローは失敗させず、ユーザーIDだけの一覧に `warnings` を付けて返します。
+
+`displayName` と `email` だけの表を `table`（JSON）と `csv`（文字列）でも返します。任意入力「OneDriveフォルダURL」を指定すると、その表を BOM付きUTF-8 の CSV として SharePoint コネクタの CreateFile で保存します（OneDrive for Business は SharePoint の個人用サイトのため）。フォルダURLは OneDrive をブラウザで開いて保存先フォルダを表示した状態のアドレスバーのURLを貼り付けます。保存に失敗しても一覧の結果は失わず、`export.status` と `warnings` で知らせます。詳細は [spec](flows/flow3-list-post-reactors/spec/Flow3_ListTeamsChannelPostReactorsFromUrl.md)。
 
 ### エラー処理
 
@@ -112,7 +114,7 @@ Scope を直列に連鎖させ、`Scope_ErrorHandler` の `runAfter` を**最終
 |---|---|
 | 静的検証（`validate_flow*.py`） | **エラー0 / 警告0**（3フロー） |
 | URL解析のオフライン検証 | **60件中60件合格**（3フロー × 20件） |
-| Flow3 の通し回帰テスト（`run_reactor_flow_tests.py`） | **12件中12件合格** |
+| Flow3 の通し回帰テスト（`run_reactor_flow_tests.py`） | **24件中24件合格** |
 | ZIP再展開検査（`extract_check.py`） | **エラー0**（3フロー） |
 | 実環境のインポート | **成功**（2026-07-24） |
 | 実環境の実行 | **成功**（2026-07-24） |
@@ -146,7 +148,7 @@ python flows/flow3-list-post-reactors/validation/extract_check.py
 |---|---|
 | 対応するURL | Teamsチャネル投稿（`teams.microsoft.com` / `teams.cloud.microsoft` の `/l/message/…`）。返信のURLも可（親投稿へ解決） |
 | 対応しないURL | 1対1チャット・グループチャット・会議チャット・Viva Engage・Teams以外のM365 URL（明示的にエラーを返す） |
-| 必要なコネクタ | Microsoft Teams 1本（標準・プレミアム不要） |
+| 必要なコネクタ | Flow1・Flow2 は Microsoft Teams 1本。Flow3 は Teams ＋ SharePoint（CSV出力用）。いずれも標準・プレミアム不要 |
 | 必要な権限 | 対象チームのメンバーであること（**要実環境確認**） |
 | 返信取得の上限 | `$top=50`／ページ、`Do until` 5,000反復・1時間、フロー実行時間 目安30分（実務上はこれが先に効く） |
 | チャネル種別 | 標準・プライベート・共有はいずれも**要実環境確認**。特に共有チャネルは `groupId` 不一致で404の可能性 |

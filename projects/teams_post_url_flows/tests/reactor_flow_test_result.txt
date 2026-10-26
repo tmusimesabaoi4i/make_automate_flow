@@ -4,11 +4,23 @@ PASS [lenient] T03 リアクション0件 → メンバー一覧を取得せず�
 PASS [lenient] T04 メンバー一覧に居ない人（退出者・ゲスト等）は notFound・メール空で残す
 PASS [lenient] T05 URL解析エラー → Graph を呼ばずにエラー結果
 PASS [lenient] T06 投稿取得 404 → エラーハンドラが ERR_MESSAGE_NOT_FOUND を返す（メンバー取得は呼ばない）
+PASS [lenient] T07 OneDrive のアドレスバーURL（my?id=…）とファイル名指定 → 2列CSVを作成（BOM付き・" の二重化）
+PASS [lenient] T08 パスそのままのURL（末尾スラッシュ付き）・ファイル名省略 → 既定名 reactors_日時.csv
+PASS [lenient] T09 SharePoint ライブラリのビューURL（…/Forms/AllItems.aspx?id=…）も受け付ける
+PASS [lenient] T10 共有リンク・パス無し・不正なURL/ファイル名 → CSVは作らず警告。結果は success のまま
+PASS [lenient] T11 CSV作成が 403 → status=failed と警告。一覧の結果は失わない
+PASS [lenient] T12 フォルダURL未入力 → CreateFile を呼ばず status=notRequested（table / csv は返す）
 PASS [strict] T01 同一人物の複数リアクションを1人にまとめ、2ページのメンバー一覧から表示名・メールを補う
 PASS [strict] T02 メンバー一覧が 403 → 失敗にせず userId だけで返し、警告を付ける
 PASS [strict] T03 リアクション0件 → メンバー一覧を取得せず、空の一覧で成功
 PASS [strict] T04 メンバー一覧に居ない人（退出者・ゲスト等）は notFound・メール空で残す
 PASS [strict] T05 URL解析エラー → Graph を呼ばずにエラー結果
 PASS [strict] T06 投稿取得 404 → エラーハンドラが ERR_MESSAGE_NOT_FOUND を返す（メンバー取得は呼ばない）
+PASS [strict] T07 OneDrive のアドレスバーURL（my?id=…）とファイル名指定 → 2列CSVを作成（BOM付き・" の二重化）
+PASS [strict] T08 パスそのままのURL（末尾スラッシュ付き）・ファイル名省略 → 既定名 reactors_日時.csv
+PASS [strict] T09 SharePoint ライブラリのビューURL（…/Forms/AllItems.aspx?id=…）も受け付ける
+PASS [strict] T10 共有リンク・パス無し・不正なURL/ファイル名 → CSVは作らず警告。結果は success のまま
+PASS [strict] T11 CSV作成が 403 → status=failed と警告。一覧の結果は失わない
+PASS [strict] T12 フォルダURL未入力 → CreateFile を呼ばず status=notRequested（table / csv は返す）
 ------------------------------------------------------------------------------
-合計: 合格 12 / 不合格 0
+合計: 合格 24 / 不合格 0

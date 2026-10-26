@@ -8,7 +8,7 @@ Flow3_ListTeamsChannelPostReactorsFromUrl の展開形パッケージを静的�
 Flow1 から引き継いだ検査:
   - 不正な '@' 位置（式先頭・@{} 補間・文字列リテラル内 以外の '@'）
   - 関数許可リスト（本リポジトリの実働 definition.json に出現実績のある関数のみ）
-  - Teams HttpRequest の必須パラメータ（Uri / Method / connectionName）
+  - Teams HttpRequest の必須パラメータ（Uri / Method）と GET 限定、SharePoint CreateFile は CSV出力 Scope 内の1件だけ
   - Apply to each（Foreach）の並列オフ（concurrency.repetitions == 1）
   - トリガー（manual / Button / TeamsPostUrl が required）
   - 実値混入（テナントGUID・チャネルID・メールアドレス・SharePointサイトURL）
@@ -364,17 +364,24 @@ def check_actions(container, path):
         if t == "OpenApiConnection":
             h = a["inputs"]["host"]
             p = a["inputs"].get("parameters", {})
-            if h.get("connectionName") != "shared_teams":
-                fail("%s/%s: 想定外のコネクタ '%s'（本フローは shared_teams のみ）"
-                     % (path, aname, h.get("connectionName")))
-            if h.get("operationId") != "HttpRequest":
-                fail("%s/%s: 想定外の operationId '%s'（本フローは HttpRequest のみ）"
-                     % (path, aname, h.get("operationId")))
-            for req in ("Uri", "Method"):
-                if req not in p:
-                    fail("%s/%s: Teams HttpRequest の必須パラメータ '%s' が無い" % (path, aname, req))
-            if p.get("Method") != "GET":
-                fail("%s/%s: 読み取り専用フローだが Method が '%s'" % (path, aname, p.get("Method")))
+            conn, opid = h.get("connectionName"), h.get("operationId")
+            if (conn, opid) == ("shared_teams", "HttpRequest"):
+                # Teams 側は読み取り専用（GET のみ）
+                for req in ("Uri", "Method"):
+                    if req not in p:
+                        fail("%s/%s: Teams HttpRequest の必須パラメータ '%s' が無い" % (path, aname, req))
+                if p.get("Method") != "GET":
+                    fail("%s/%s: Teams 側は読み取り専用だが Method が '%s'" % (path, aname, p.get("Method")))
+            elif (conn, opid) == ("shared_sharepointonline", "CreateFile"):
+                # 書き込みは CSV 出力 Scope 内の CreateFile 1件だけ
+                if "/Scope_ExportCsv/" not in path + "/":
+                    fail("%s/%s: CreateFile が Scope_ExportCsv の外にある" % (path, aname))
+                for req in ("dataset", "folderPath", "name", "body"):
+                    if req not in p:
+                        fail("%s/%s: CreateFile の必須パラメータ '%s' が無い" % (path, aname, req))
+            else:
+                fail("%s/%s: 想定外のコネクタ操作 %s/%s（Teams HttpRequest と SharePoint CreateFile のみ）"
+                     % (path, aname, conn, opid))
             if a["inputs"].get("authentication") is None:
                 fail("%s/%s: authentication が無い" % (path, aname))
         if t == "Foreach":
@@ -460,16 +467,16 @@ def need(name):
 
 
 top = definition["actions"]
-EXPECTED_SCOPES = ["Scope_ParseUrl", "Scope_GetTeamsData", "Scope_GetChannelMembers",
+EXPECTED_SCOPES = ["Scope_ParseUrl", "Scope_GetTeamsData", "Scope_GetChannelMembers", "Scope_ExportCsv",
                    "Scope_BuildReactors", "Scope_CreateResult", "Scope_ErrorHandler", "Scope_Finalize"]
 for s in EXPECTED_SCOPES:
     if s not in top or top[s].get("type") != "Scope":
         fail("Flow3: トップレベル Scope '%s' が無い" % s)
 
-# Graph 呼び出しは2種だけ（親投稿 / メンバー一覧）
+# コネクタ呼び出しは3つだけ（親投稿 / メンバー一覧 / CSV作成）
 graph_actions = sorted(conn_actions)
-if graph_actions != ["Get_Channel_Members", "Get_Parent_Message"]:
-    fail("Flow3: Graph 呼び出しが想定と異なる: %s" % graph_actions)
+if graph_actions != ["Create_Csv_File", "Get_Channel_Members", "Get_Parent_Message"]:
+    fail("Flow3: コネクタ呼び出しが想定と異なる: %s" % graph_actions)
 first_uri = json.dumps(need("Set_MemberNextLink_First").get("inputs", {}).get("value"), ensure_ascii=False)
 if "/members" not in first_uri or "uriComponent(variables('varChannelId'))" not in first_uri:
     fail("Flow3: メンバー一覧URIが /channels/{uriComponent(channelId)}/members でない: %s" % first_uri)
@@ -562,6 +569,36 @@ reactor = need("Compose_Reactor").get("inputs", {})
 for key in ("userId", "displayName", "email", "reactions", "reactionCount"):
     if key not in reactor:
         fail("Flow3: 人単位の要素に '%s' が無い" % key)
+
+# CSV出力
+for key in ('"table"', '"csv"', '"export"', '"fileUrl"'):
+    if key not in res:
+        fail("Flow3: 結果JSONに %s が無い" % key)
+tbl = need("Select_Result_Table").get("inputs", {}).get("select", {})
+if sorted(tbl.keys()) != ["displayName", "email"]:
+    fail("Flow3: table の列が displayName / email の2列でない: %s" % sorted(tbl.keys()))
+props = definition["triggers"]["manual"]["inputs"]["schema"]["properties"]
+req_inputs = definition["triggers"]["manual"]["inputs"]["schema"].get("required", [])
+for opt in ("OutputFolderUrl", "OutputFileName"):
+    if opt not in props:
+        fail("Flow3: トリガー入力 '%s' が無い" % opt)
+    elif opt in req_inputs:
+        fail("Flow3: '%s' は任意入力のはずが required に入っている" % opt)
+row = json.dumps(need("Append_Csv_Row").get("inputs", {}).get("value"), ensure_ascii=False)
+if need("Append_Csv_Row").get("type") != "AppendToStringVariable" or "replace(" not in row:
+    fail("Flow3: CSV行が AppendToStringVariable で \" の二重化（replace）をしていない")
+csv_body = need("Create_Csv_File").get("inputs", {}).get("parameters", {}).get("body", "")
+if "%EF%BB%BF" not in csv_body:
+    fail("Flow3: CSV本文に BOM が無い（Excel で日本語が文字化けする）")
+ex_ra = top.get("Scope_CreateResult", {}).get("runAfter", {})
+if set(ex_ra.get("Scope_ExportCsv", [])) != {"Succeeded", "Failed", "TimedOut"}:
+    fail("Flow3: Scope_CreateResult が CSV出力の失敗時に続行しない（runAfter=%s）" % ex_ra)
+if top.get("Scope_ExportCsv", {}).get("runAfter") != {"Scope_BuildReactors": ["Succeeded"]}:
+    fail("Flow3: Scope_ExportCsv は Scope_BuildReactors 成功時だけ実行する")
+for name in ("Set_Export_Status_Failed", "Append_Export_Failed_Warning", "Append_Export_Invalid_Warning"):
+    need(name)
+if "substring(" in json.dumps(top.get("Scope_ExportCsv", {}), ensure_ascii=False):
+    fail("Flow3: CSV出力のURL解析で substring を使っている（空文字・短い入力で失敗する。error_catalog #10）")
 
 # =========================================================================
 # 出力

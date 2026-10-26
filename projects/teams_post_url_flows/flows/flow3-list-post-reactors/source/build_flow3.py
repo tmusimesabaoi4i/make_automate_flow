@@ -5,6 +5,8 @@ Flow3_ListTeamsChannelPostReactorsFromUrl のレガシーパッケージ（展�
 Teams投稿URL（「リンクをコピー」で得られるURL）を解析し、対象の親投稿を
 Microsoft Teams標準コネクタの「Send a Microsoft Graph HTTP request」で取得して、
 その投稿にリアクションした人を一覧化し JSON（Object変数 / JSON文字列変数）に格納する。
+OneDriveフォルダURLが入力された場合は、displayName / email の2列CSVをそのフォルダへ保存する
+（SharePoint コネクタの CreateFile。OneDrive for Business は SharePoint の個人用サイト）。
 
 Graph の reactions[].user.user には表示名・メールが入らないことが多いため、
 チャネルメンバー一覧（GET /teams/{id}/channels/{id}/members）を取得して userId で突合し、
@@ -31,12 +33,22 @@ PKG_FOLDER  = "324d318b-a431-46c0-84d3-979eadb9cab8"   # Microsoft.Flow/flows/{P
 API_TEAMS   = "45ef819e-8e54-4fb7-8e5c-fcd52c415d0d"   # APIリソースGUID
 CONN_TEAMS  = "e6b957ad-a93d-4a05-b953-bf5eb97f635d"   # 接続リソースGUID
 CN_TEAMS    = "e4a55cc5349b4793a371d2d2f686e783"       # connectionReferences.connectionName（匿名）
+API_SPO     = "60d4eb17-290e-462f-922e-6cd02602cee4"   # SharePoint APIリソースGUID（CSV出力用）
+CONN_SPO    = "0bcd2e91-cb92-4f2b-8416-ce0c46148b95"   # SharePoint 接続リソースGUID
+CN_SPO      = "483bbfa61721483b90289fcc5e424ee4"       # SharePoint connectionName（匿名）
 PKG_TELE    = "c58d2419-b070-42a2-bb65-6f8000604e17"   # packageTelemetryId
 
 AUTH = {"value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
         "type": "Raw"}
 H_TEAMS = {"apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
            "connectionName": "shared_teams", "operationId": None}
+# OneDrive for Business は SharePoint の個人用サイトなので、SharePoint の CreateFile で書き込む
+# （雛形: migrate-chat-spo/archive-meetings の Create_Attachment_File。dataset を式で渡す実績あり）
+H_SPO = {"apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+         "connectionName": "shared_sharepointonline", "operationId": None}
+
+CRLF = "decodeUriComponent('%0D%0A')"
+CSV_BOM = "decodeUriComponent('%EF%BB%BF')"   # Excel で UTF-8 の日本語を文字化けさせない
 
 GRAPH_ROOT = "https://graph.microsoft.com/v1.0/teams/"
 
@@ -128,6 +140,19 @@ INIT_SEQ = [
     ("Initialize_ReactorUserIds",      "varReactorUserIds",      "array",   "@json('[]')"),
     ("Initialize_Reactors",            "varReactors",            "array",   "@json('[]')"),
     ("Initialize_Warnings",            "varWarnings",            "array",   "@json('[]')"),
+    # --- Flow3: CSV出力（表示名・メールの2列。OneDrive フォルダURLが入力されたときだけ作成） ---
+    ("Initialize_Csv",                 "varCsv",                 "string",
+     "@concat('\"displayName\",\"email\"', " + CRLF + ")"),
+    ("Initialize_OutFolderUrl",        "varOutFolderUrl",        "string",
+     "@trim(coalesce(triggerBody()?['OutputFolderUrl'], ''))"),
+    ("Initialize_OutFileNameInput",    "varOutFileNameInput",    "string",
+     "@trim(coalesce(triggerBody()?['OutputFileName'], ''))"),
+    ("Initialize_OutSite",             "varOutSite",             "string",  ""),
+    ("Initialize_OutFolderPath",       "varOutFolderPath",       "string",  ""),
+    ("Initialize_OutFileName",         "varOutFileName",         "string",  ""),
+    ("Initialize_ExportStatus",        "varExportStatus",        "string",  "notRequested"),
+    ("Initialize_ExportStatusCode",    "varExportStatusCode",    "string",  "0"),
+    ("Initialize_ExportErrorCode",     "varExportErrorCode",     "string",  ""),
 ]
 
 actions = {}
@@ -481,6 +506,13 @@ reactor_loop = {
         "type": "AppendToArrayVariable",
         "inputs": {"name": "varReactors", "value": "@outputs('Compose_Reactor')"},
         "runAfter": ra("Compose_Reactor")},
+    # CSV は全項目を "..." で囲み、値中の " は "" に二重化する（カンマ・改行を含む名前への耐性）
+    "Append_Csv_Row": {
+        "type": "AppendToStringVariable",
+        "inputs": {"name": "varCsv", "value": (
+            "@concat('\"', replace(outputs('Compose_Reactor')?['displayName'], '\"', '\"\"'),"
+            " '\",\"', replace(outputs('Compose_Reactor')?['email'], '\"', '\"\"'), '\"', " + CRLF + ")")},
+        "runAfter": ra("Append_Reactor")},
 }
 
 build_block = {}
@@ -528,6 +560,162 @@ actions["Scope_BuildReactors"] = {
 }
 
 # =========================================================================
+# Scope_ExportCsv : displayName / email の2列CSVを OneDrive（または SharePoint）のフォルダへ保存
+#
+# OneDriveフォルダURLが入力されたときだけ実行する。受け付けるURL:
+#   A) ブラウザのアドレスバー  https://{tenant}-my.sharepoint.com/my?id=%2Fpersonal%2F{user}%2FDocuments%2F{folder}
+#      （…/_layouts/15/onedrive.aspx?id=… や SharePoint の …/AllItems.aspx?id=… も同じ扱い）
+#   B) パスそのまま            https://{tenant}-my.sharepoint.com/personal/{user}/Documents/{folder}
+#   共有リンク（/:f:/…）は実パスを持たないため受け付けない。
+# サーバー相対パスの先頭2階層（/personal/{user} ・ /sites/{name} ・ /teams/{name}）をサイト、
+# 残りを CreateFile の folderPath（ライブラリから始まるサイト相対パス）にする。
+# 文字列の切り出しは substring を使わず split/take/reverse/join で行う
+# （substring は開始位置が長さ以上だと失敗し、if() は両分岐を先行評価するため。error_catalog #10）。
+# 保存失敗・URL不正はフロー全体を失敗させず、export.status と warnings で返す。
+# =========================================================================
+def after_first(src, sep):
+    """src を sep で分割した2番目以降を sep で再結合する（最初の sep より後ろ。無ければ空文字）"""
+    parts = "split(%s, %s)" % (src, sep)
+    return "join(reverse(take(reverse(%s), sub(length(%s), 1))), %s)" % (parts, parts, sep)
+
+
+OUT_NOFRAG = "outputs('Compose_Out_Url_No_Fragment')"
+OUT_RAW = "outputs('Compose_Out_Url_Path_Raw')"
+OUT_QN = "outputs('Compose_Out_Query_Normalized')"
+OUT_HOST = "outputs('Compose_Out_Host')"
+OUT_BASE = "outputs('Compose_Out_Server_Path_Base')"
+OUT_NOFORMS = "outputs('Compose_Out_Server_Path_No_Forms')"
+OUT_SP = "outputs('Compose_Out_Server_Path')"
+OUT_S1 = "outputs('Compose_Out_Seg1')"
+OUT_S2 = "outputs('Compose_Out_Seg2')"
+OUT_SCOPED = "outputs('Compose_Out_Is_Scoped')"
+OUT_PREFIX = "outputs('Compose_Out_Site_Prefix')"
+OUT_FBASE = "outputs('Compose_Out_File_Base')"
+OUT_NAME = "variables('varOutFileName')"
+OUT_FOLDER = "variables('varOutFolderPath')"
+
+FILE_NAME_BAD_CHARS = ['"', "*", ":", "<", ">", "?", "/", "\\", "|"]   # SharePoint で使えない文字
+
+EXPORT_VALIDATION_CODE = (
+    "@if(not(startsWith(variables('varOutFolderUrl'), 'https://')), 'ERR_OUTPUT_FOLDER_URL_INVALID',"
+    " if(not(contains(" + OUT_HOST + ", 'sharepoint.')), 'ERR_OUTPUT_FOLDER_NOT_ONEDRIVE',"
+    " if(startsWith(outputs('Compose_Out_Path_From_Url'), '/:'), 'ERR_OUTPUT_FOLDER_SHARING_LINK',"
+    " if(or(empty(" + OUT_FOLDER + "), equals(" + OUT_FOLDER + ", '/'), endsWith(" + OUT_FOLDER + ", '.aspx'),"
+    " and(not(" + OUT_SCOPED + "), contains(" + OUT_HOST + ", '-my.'))), 'ERR_OUTPUT_FOLDER_PATH_NOT_FOUND',"
+    " if(or(" + ", ".join("contains(" + OUT_NAME + ", '" + c.replace("'", "''") + "')"
+                         for c in FILE_NAME_BAD_CHARS) + "), 'ERR_OUTPUT_FILE_NAME_INVALID',"
+    " '')))))")
+
+EXPORT_VALIDATION_MESSAGE = (
+    "@if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FOLDER_URL_INVALID'),"
+    " 'OneDriveフォルダURLが https:// で始まっていません。',"
+    " if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FOLDER_NOT_ONEDRIVE'),"
+    " 'OneDrive（または SharePoint）のURLではありません。',"
+    " if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FOLDER_SHARING_LINK'),"
+    " '共有リンクは指定できません。OneDrive をブラウザで開いて対象フォルダを表示し、アドレスバーのURLを貼り付けてください。',"
+    " if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FOLDER_PATH_NOT_FOUND'),"
+    " 'URLからフォルダのパスを取得できません。OneDrive をブラウザで開いて対象フォルダを表示し、アドレスバーのURLを貼り付けてください。',"
+    " if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FILE_NAME_INVALID'),"
+    " 'ファイル名に使えない文字（\" * : < > ? / \\ |）が含まれています。',"
+    " '')))))")
+
+export_parse_seq = [
+    ("Compose_Out_Url_No_Fragment", compose("@first(split(variables('varOutFolderUrl'), '#'))")),
+    ("Compose_Out_Url_Path_Raw", compose("@first(split(" + OUT_NOFRAG + ", '?'))")),
+    ("Compose_Out_Query_Normalized", compose(
+        "@concat('&', if(contains(" + OUT_NOFRAG + ", '?'), last(split(" + OUT_NOFRAG + ", '?')), ''), '&')")),
+    ("Compose_Out_Host", compose("@first(split(last(split(" + OUT_RAW + ", '://')), '/'))")),
+    # 形式A: クエリの id=（サーバー相対パス。URLエンコード済み）
+    ("Compose_Out_Id_Param", compose(
+        "@if(contains(" + OUT_QN + ", '&id='),"
+        " trim(decodeUriComponent(first(split(last(split(" + OUT_QN + ", '&id=')), '&')))), '')")),
+    # 形式B: ホストより後ろのパス
+    ("Compose_Out_Path_From_Url", compose(
+        "@decodeUriComponent(" + after_first(OUT_RAW, "concat('://', " + OUT_HOST + ")") + ")")),
+    ("Compose_Out_Server_Path_Base", compose(
+        "@if(empty(outputs('Compose_Out_Id_Param')), outputs('Compose_Out_Path_From_Url'),"
+        " outputs('Compose_Out_Id_Param'))")),
+    # ライブラリのビュー（…/Forms/AllItems.aspx）を指すURLはライブラリ直下とみなす
+    ("Compose_Out_Server_Path_No_Forms", compose(
+        "@if(contains(" + OUT_BASE + ", '/Forms/'), first(split(" + OUT_BASE + ", '/Forms/')), " + OUT_BASE + ")")),
+    ("Compose_Out_Server_Path", compose(
+        "@if(endsWith(" + OUT_NOFORMS + ", '/'),"
+        " join(take(split(" + OUT_NOFORMS + ", '/'), sub(length(split(" + OUT_NOFORMS + ", '/')), 1)), '/'),"
+        " " + OUT_NOFORMS + ")")),
+    ("Compose_Out_Seg1", compose("@last(take(split(" + OUT_SP + ", '/'), 2))")),
+    ("Compose_Out_Seg2", compose("@last(take(split(" + OUT_SP + ", '/'), 3))")),
+    ("Compose_Out_Is_Scoped", compose(
+        "@and(startsWith(" + OUT_SP + ", '/'), greater(length(split(" + OUT_SP + ", '/')), 3),"
+        " or(equals(" + OUT_S1 + ", 'personal'), equals(" + OUT_S1 + ", 'sites'), equals(" + OUT_S1 + ", 'teams')))")),
+    ("Compose_Out_Site_Prefix", compose("@concat('/', " + OUT_S1 + ", '/', " + OUT_S2 + ")")),
+    ("Set_OutSite", setvar("varOutSite",
+        "@if(" + OUT_SCOPED + ", concat('https://', " + OUT_HOST + ", " + OUT_PREFIX + "),"
+        " concat('https://', " + OUT_HOST + "))")),
+    ("Set_OutFolderPath", setvar("varOutFolderPath",
+        "@if(" + OUT_SCOPED + ", " + after_first(OUT_SP, OUT_PREFIX) + ", " + OUT_SP + ")")),
+    ("Compose_Out_File_Base", compose(
+        "@if(empty(variables('varOutFileNameInput')),"
+        " concat('reactors_', formatDateTime(convertFromUtc(utcNow(), 'Tokyo Standard Time'), 'yyyyMMdd_HHmmss')),"
+        " variables('varOutFileNameInput'))")),
+    ("Set_OutFileName", setvar("varOutFileName",
+        "@if(or(endsWith(" + OUT_FBASE + ", '.csv'), endsWith(" + OUT_FBASE + ", '.CSV')),"
+        " " + OUT_FBASE + ", concat(" + OUT_FBASE + ", '.csv'))")),
+    ("Set_ExportErrorCode", setvar("varExportErrorCode", EXPORT_VALIDATION_CODE)),
+]
+export_parse_actions, export_parse_last = chain(export_parse_seq)
+
+export_create_actions = {}
+export_create_actions["Create_Csv_File"] = oac(H_SPO, "CreateFile", {
+    "dataset": "@variables('varOutSite')",
+    "folderPath": "@variables('varOutFolderPath')",
+    "name": "@variables('varOutFileName')",
+    "body": "@concat(" + CSV_BOM + ", variables('varCsv'))"})
+export_create_actions["Set_Export_Status_Code"] = setvar(
+    "varExportStatusCode", "@string(coalesce(outputs('Create_Csv_File')?['statusCode'], 0))",
+    {"Create_Csv_File": ["Succeeded", "Failed", "TimedOut"]})
+export_create_actions["Set_Export_Status_Created"] = setvar(
+    "varExportStatus", "created", {"Create_Csv_File": ["Succeeded"]})
+export_create_actions["Set_Export_Status_Failed"] = setvar(
+    "varExportStatus", "failed", {"Create_Csv_File": ["Failed", "TimedOut"]})
+export_create_actions["Append_Export_Failed_Warning"] = {
+    "type": "AppendToArrayVariable",
+    "inputs": {"name": "varWarnings", "value": (
+        "@concat('WARN_CSV_EXPORT_FAILED: CSVファイルを作成できませんでした（httpStatusCode=',"
+        " string(coalesce(outputs('Create_Csv_File')?['statusCode'], 0)),"
+        " '）。フォルダの存在・書き込み権限・同名ファイルの有無を確認してください。')")},
+    "runAfter": ra("Set_Export_Status_Failed")}
+
+export_invalid_actions, _ = chain([
+    ("Set_Export_Status_Invalid", setvar("varExportStatus", "invalidInput")),
+    ("Compose_Export_Error_Message", compose(EXPORT_VALIDATION_MESSAGE)),
+    ("Append_Export_Invalid_Warning", {
+        "type": "AppendToArrayVariable",
+        "inputs": {"name": "varWarnings", "value": (
+            "@concat('WARN_CSV_EXPORT_SKIPPED: ', variables('varExportErrorCode'), ' ',"
+            " outputs('Compose_Export_Error_Message'))")}}),
+])
+
+export_parse_actions["Condition_Export_Input_Valid"] = {
+    "type": "If",
+    "expression": {"and": [{"equals": ["@empty(variables('varExportErrorCode'))", True]}]},
+    "actions": export_create_actions,
+    "else": {"actions": export_invalid_actions},
+    "runAfter": ra(export_parse_last),
+}
+
+export_scope_actions = {}
+export_scope_actions["Set_Stage_ExportCsv"] = setvar("varStage", "ExportCsv")
+export_scope_actions["Condition_Export_Requested"] = {
+    "type": "If",
+    "expression": {"and": [{"equals": [
+        "@and(variables('varIsValid'), not(empty(variables('varOutFolderUrl'))))", True]}]},
+    "actions": export_parse_actions,
+    "runAfter": ra("Set_Stage_ExportCsv"),
+}
+actions["Scope_ExportCsv"] = {"type": "Scope", "actions": export_scope_actions,
+                              "runAfter": ra("Scope_BuildReactors")}
+
+# =========================================================================
 # Scope_CreateResult : 結果JSON → Object変数 → JSON文字列
 #
 # 成功側だけが body('Get_Parent_Message') を参照する。
@@ -567,6 +755,21 @@ RESULT_OBJECT = {
     # 実際に変数へ格納された件数から算出する
     "reactorCount": "@length(variables('varReactors'))",
     "reactionCount": "@length(variables('varReactions'))",
+    # displayName / email だけの表（CSV と同じ内容）
+    "table": "@body('Select_Result_Table')",
+    "csv": "@variables('varCsv')",
+    "export": {
+        # notRequested=フォルダURL未入力 / created=作成済み / failed=作成失敗 / invalidInput=URL・ファイル名が不正
+        "status": "@variables('varExportStatus')",
+        "errorCode": "@variables('varExportErrorCode')",
+        "httpStatusCode": "@variables('varExportStatusCode')",
+        "site": "@variables('varOutSite')",
+        "folderPath": "@variables('varOutFolderPath')",
+        "fileName": "@variables('varOutFileName')",
+        "fileUrl": ("@if(equals(variables('varExportStatus'), 'created'),"
+                    " replace(concat(variables('varOutSite'), variables('varOutFolderPath'), '/',"
+                    " variables('varOutFileName')), ' ', '%20'), '')"),
+    },
     "reactors": "@variables('varReactors')",
     "reactions": "@variables('varReactions')",
     "warnings": "@variables('varWarnings')",
@@ -601,7 +804,13 @@ create_actions["Condition_Build_Result"] = {
     "type": "If",
     "expression": {"and": [{"equals": ["@variables('varIsValid')", True]}]},
     "actions": {
-        "Create_Result_Object": compose(RESULT_OBJECT),
+        "Select_Result_Table": {
+            "type": "Select",
+            "inputs": {"from": "@variables('varReactors')",
+                       "select": {"displayName": "@item()?['displayName']",
+                                  "email": "@item()?['email']"}},
+            "runAfter": {}},
+        "Create_Result_Object": compose(RESULT_OBJECT, ra("Select_Result_Table")),
         "Set_ResultObject": setvar("varResultObject", "@outputs('Create_Result_Object')",
                                    {"Create_Result_Object": ["Succeeded"]}),
     },
@@ -614,8 +823,10 @@ create_actions["Condition_Build_Result"] = {
 }
 create_actions["Serialize_Result_To_Json"] = setvar(
     "varResultJson", "@string(variables('varResultObject'))", ra("Condition_Build_Result"))
+# CSV出力の失敗（URL不正・権限不足等）では止めない。前段が Skipped のときは
+# ここも Skipped になり、Scope_ErrorHandler が発火する（Skipped は含めない）。
 actions["Scope_CreateResult"] = {"type": "Scope", "actions": create_actions,
-                                 "runAfter": ra("Scope_BuildReactors")}
+                                 "runAfter": {"Scope_ExportCsv": ["Succeeded", "Failed", "TimedOut"]}}
 
 # =========================================================================
 # Scope_ErrorHandler（Catch相当）
@@ -718,6 +929,16 @@ definition = {
                         "type": "string",
                         "description": "Teamsチャネル投稿の「リンクをコピー」で取得したURLを貼り付けてください",
                     },
+                    "OutputFolderUrl": {
+                        "title": "OneDriveフォルダURL（任意）",
+                        "type": "string",
+                        "description": "CSVの保存先。OneDriveをブラウザで開いて保存先フォルダを表示し、アドレスバーのURLを貼り付けてください。空欄ならCSVは作成しません",
+                    },
+                    "OutputFileName": {
+                        "title": "ファイル名（任意）",
+                        "type": "string",
+                        "description": "CSVのファイル名。拡張子 .csv は省略可。空欄なら reactors_日時.csv",
+                    },
                 },
                 "required": ["TeamsPostUrl"],
             }},
@@ -742,6 +963,13 @@ flow = {
                 "tier": "NotSpecified",
                 "apiName": "teams",
             },
+            "shared_sharepointonline": {
+                "connectionName": CN_SPO,
+                "source": "Invoker",
+                "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                "tier": "NotSpecified",
+                "apiName": "sharepointonline",
+            },
         },
         "flowFailureAlertSubscribed": False,
         "isManaged": False,
@@ -752,7 +980,7 @@ root_manifest = {
     "schema": "1.0",
     "details": {
         "displayName": FLOW_LOGICAL_NAME,
-        "description": "Teams投稿URLを解析し、対象のチャネル投稿にリアクションした人を一覧化してJSONに格納する",
+        "description": "Teams投稿URLを解析し、対象のチャネル投稿にリアクションした人を一覧化してJSONに格納し、指定があればOneDriveへCSV出力する",
         "createdTime": "2026-10-26T00:00:00.0000000Z",
         "packageTelemetryId": PKG_TELE,
         "creator": "N/A",
@@ -766,7 +994,7 @@ root_manifest = {
             "details": {"displayName": FLOW_DISPLAY_NAME},
             "configurableBy": "User",
             "hierarchy": "Root",
-            "dependsOn": [API_TEAMS, CONN_TEAMS],
+            "dependsOn": [API_TEAMS, CONN_TEAMS, API_SPO, CONN_SPO],
         },
         API_TEAMS: {
             "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
@@ -787,12 +1015,31 @@ root_manifest = {
             "hierarchy": "Child",
             "dependsOn": [API_TEAMS],
         },
+        API_SPO: {
+            "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+            "name": "shared_sharepointonline",
+            "type": "Microsoft.PowerApps/apis",
+            "suggestedCreationType": "Existing",
+            "details": {"displayName": "SharePoint"},
+            "configurableBy": "System",
+            "hierarchy": "Child",
+            "dependsOn": [],
+        },
+        CONN_SPO: {
+            "type": "Microsoft.PowerApps/apis/connections",
+            "suggestedCreationType": "Existing",
+            "creationType": "Existing",
+            "details": {"displayName": "SharePoint への接続を選択してください（OneDrive へのCSV出力に使用）"},
+            "configurableBy": "User",
+            "hierarchy": "Child",
+            "dependsOn": [API_SPO],
+        },
     },
 }
 
 flows_manifest = {"packageSchemaVersion": "1.0", "flowAssets": {"assetPaths": [PKG_FOLDER]}}
-apis_map = {"shared_teams": API_TEAMS}
-connections_map = {"shared_teams": CONN_TEAMS}
+apis_map = {"shared_teams": API_TEAMS, "shared_sharepointonline": API_SPO}
+connections_map = {"shared_teams": CONN_TEAMS, "shared_sharepointonline": CONN_SPO}
 
 
 def write_json(path, obj):

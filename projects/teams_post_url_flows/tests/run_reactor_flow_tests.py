@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Flow3（リアクションした人の一覧化）の通し回帰テスト。
+Flow3（リアクションした人の一覧化とCSV出力）の通し回帰テスト。
 
 生成済み definition.json の**トップレベルから最後まで**を、Graph 応答をダミーに差し替えて
 tools/wdl_eval.py で評価し、最終的な varResultObject / varResultJson が期待どおりかを検証する。
 URL解析の網羅は run_url_parse_tests.py（flow3 も対象）が担当し、本テストは
-「投稿取得 → メンバー取得 → 重複排除・集約 → 結果JSON / エラーハンドラ」の配線を見る。
+「投稿取得 → メンバー取得 → 重複排除・集約 → CSV出力 → 結果JSON / エラーハンドラ」の配線を見る。
 
   python run_reactor_flow_tests.py
 
@@ -22,7 +22,13 @@ import json, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..", "..", "tools")))
+import wdl_eval   # noqa: E402
 from wdl_eval import Context, evaluate, eval_condition   # noqa: E402
+
+# 評価器に無い日時関数をテスト内だけで補う（tools/wdl_eval.py は変更しない）。
+# utcNow() は評価器が固定値を返すので、ファイル名の既定値も決定的になる。
+wdl_eval.FUNCS.setdefault("convertFromUtc", lambda ts, tz, fmt=None: ts)
+wdl_eval.FUNCS.setdefault("formatDateTime", lambda ts, fmt: "20260724_000000")
 
 PKG = os.path.join(HERE, "..", "flows", "flow3-list-post-reactors", "source", "package")
 
@@ -112,6 +118,8 @@ class Runtime(object):
             ctx.variables[a["inputs"]["name"]] = deep(a["inputs"]["value"], ctx)
         elif t == "AppendToArrayVariable":
             ctx.variables[a["inputs"]["name"]].append(deep(a["inputs"]["value"], ctx))
+        elif t == "AppendToStringVariable":
+            ctx.variables[a["inputs"]["name"]] += deep(a["inputs"]["value"], ctx)
         elif t == "Scope":
             return self.run_container(a["actions"], ctx)
         elif t == "If":
@@ -148,8 +156,8 @@ class Runtime(object):
             raise AssertionError("Do until が終了しない（無限ループの疑い）: %s" % name)
         elif t == "OpenApiConnection":
             params = deep(a["inputs"]["parameters"], ctx)
-            self.calls.append((name, params["Uri"]))
-            ok, code, body = self.mock(name, params["Uri"])
+            self.calls.append((name, params.get("Uri", params)))
+            ok, code, body = self.mock(name, params)
             ctx.outputs[name] = {"statusCode": code, "headers": {}, "body": body}
             ctx.bodies[name] = body
             return ("Succeeded" if ok else "Failed"), not ok
@@ -191,9 +199,11 @@ def load_definition():
         return json.load(f)["properties"]["definition"]
 
 
-def make_mock(msg_ok=True, msg_code=200, reactions=(), members_pages=None, members_code=200):
+def make_mock(msg_ok=True, msg_code=200, reactions=(), members_pages=None, members_code=200,
+              file_code=200):
     """members_pages: [[member, ...], [member, ...]]。None ならメンバー取得は members_code で失敗"""
-    def mock(name, uri):
+    def mock(name, params):
+        uri = params.get("Uri")
         if name == "Get_Parent_Message":
             if not msg_ok:
                 return False, msg_code, {"error": {"code": "NotFound"}}
@@ -211,13 +221,22 @@ def make_mock(msg_ok=True, msg_code=200, reactions=(), members_pages=None, membe
             if nxt:
                 body["@odata.nextLink"] = nxt
             return True, 200, body
+        if name == "Create_Csv_File":
+            if file_code != 200:
+                return False, file_code, {"message": "Access denied"}
+            return True, 200, {"Name": params["name"], "Path": params["folderPath"] + "/" + params["name"]}
         raise AssertionError("想定外のコネクタ呼び出し: %s" % name)
     return mock
 
 
-def run_case(definition, url, mock, strict_until=False):
+def run_case(definition, url, mock, strict_until=False, folder=None, file_name=None):
     rt = Runtime(mock, strict_until)
-    ctx = Context(trigger_body={"TeamsPostUrl": url})
+    trigger = {"TeamsPostUrl": url}
+    if folder is not None:
+        trigger["OutputFolderUrl"] = folder
+    if file_name is not None:
+        trigger["OutputFileName"] = file_name
+    ctx = Context(trigger_body=trigger)
     rt.run_container(definition["actions"], ctx)
     result = ctx.variables["varResultObject"]
     if json.loads(ctx.variables["varResultJson"]) != result:
@@ -300,8 +319,101 @@ def case_t06(d, strict):
     assert [c[0] for c in calls] == ["Get_Parent_Message"], calls
 
 
+OD_HOST = "https://contoso-my.sharepoint.com"
+OD_SITE = OD_HOST + "/personal/taro_contoso_com"
+BOM = "\ufeff"
+CRLF = "\r\n"
+M_Q = member(UB, '佐藤 "ハナ" 花子', "hanako.sato@example.com")   # " を含む名前
+
+
+def file_call(calls):
+    hits = [c[1] for c in calls if c[0] == "Create_Csv_File"]
+    return hits[0] if hits else None
+
+
+def case_t07(d, strict):
+    """OneDrive のアドレスバーURL（my?id=…）とファイル名指定 → 2列CSVを作成（BOM付き・" の二重化）"""
+    folder = (OD_HOST + "/my?login_hint=x&id=%2Fpersonal%2Ftaro_contoso_com%2FDocuments"
+              "%2F%E5%A0%B1%E5%91%8A%20%E7%94%A8")
+    res, calls = run_case(d, URL, make_mock(reactions=[R_AL, R_AH, R_BL], members_pages=[[M_A, M_Q]]),
+                          strict, folder=folder, file_name="週次_確認者")
+    f = file_call(calls)
+    assert f is not None, calls
+    assert (f["dataset"], f["folderPath"], f["name"]) == (OD_SITE, "/Documents/報告 用", "週次_確認者.csv"), f
+    want = (BOM + '"displayName","email"' + CRLF + '"山田 太郎","taro.yamada@example.com"' + CRLF
+            + '"佐藤 ""ハナ"" 花子","hanako.sato@example.com"' + CRLF)
+    assert f["body"] == want, repr(f["body"])
+    assert res["table"] == [{"displayName": "山田 太郎", "email": "taro.yamada@example.com"},
+                            {"displayName": '佐藤 "ハナ" 花子', "email": "hanako.sato@example.com"}], res["table"]
+    assert res["csv"] == want[1:]
+    ex = res["export"]
+    assert ex["status"] == "created" and ex["errorCode"] == "" and ex["httpStatusCode"] == "200", ex
+    assert ex["fileUrl"] == OD_SITE + "/Documents/報告%20用/週次_確認者.csv", ex
+    assert res["warnings"] == [] and res["success"] is True
+
+
+def case_t08(d, strict):
+    """パスそのままのURL（末尾スラッシュ付き）・ファイル名省略 → 既定名 reactors_日時.csv"""
+    folder = OD_SITE + "/Documents/Reports/2026/"
+    res, calls = run_case(d, URL, make_mock(reactions=[R_AL], members_pages=[[M_A]]), strict, folder=folder)
+    f = file_call(calls)
+    assert (f["dataset"], f["folderPath"], f["name"]) == (OD_SITE, "/Documents/Reports/2026",
+                                                          "reactors_20260724_000000.csv"), f
+    assert res["export"]["status"] == "created", res["export"]
+
+
+def case_t09(d, strict):
+    """SharePoint ライブラリのビューURL（…/Forms/AllItems.aspx?id=…）も受け付ける"""
+    folder = ("https://contoso.sharepoint.com/sites/Team/Shared%20Documents/Forms/AllItems.aspx"
+              "?id=%2Fsites%2FTeam%2FShared%20Documents%2FOut&viewid=x")
+    res, calls = run_case(d, URL, make_mock(reactions=[R_AL], members_pages=[[M_A]]), strict,
+                          folder=folder, file_name="a.CSV")
+    f = file_call(calls)
+    assert (f["dataset"], f["folderPath"], f["name"]) == ("https://contoso.sharepoint.com/sites/Team",
+                                                          "/Shared Documents/Out", "a.CSV"), f
+
+
+def case_t10(d, strict):
+    """共有リンク・パス無し・不正なURL/ファイル名 → CSVは作らず警告。結果は success のまま"""
+    for folder, name, code in (
+            (OD_HOST + "/:f:/g/personal/taro_contoso_com/EaBcDe?e=xyz", None, "ERR_OUTPUT_FOLDER_SHARING_LINK"),
+            (OD_HOST + "/my", None, "ERR_OUTPUT_FOLDER_PATH_NOT_FOUND"),
+            ("contoso-my.sharepoint.com/personal/x/Documents", None, "ERR_OUTPUT_FOLDER_URL_INVALID"),
+            ("https://example.com/a/b/c", None, "ERR_OUTPUT_FOLDER_NOT_ONEDRIVE"),
+            (OD_SITE + "/Documents/Reports", "a/b", "ERR_OUTPUT_FILE_NAME_INVALID"),
+            (OD_SITE, None, "ERR_OUTPUT_FOLDER_PATH_NOT_FOUND")):
+        res, calls = run_case(d, URL, make_mock(reactions=[R_AL], members_pages=[[M_A]]), strict,
+                              folder=folder, file_name=name)
+        assert file_call(calls) is None, (folder, calls)
+        ex = res["export"]
+        assert res["success"] is True and ex["status"] == "invalidInput" and ex["errorCode"] == code, (folder, ex)
+        assert len(res["warnings"]) == 1 and res["warnings"][0].startswith("WARN_CSV_EXPORT_SKIPPED: " + code), res
+        assert res["reactorCount"] == 1
+
+
+def case_t11(d, strict):
+    """CSV作成が 403 → status=failed と警告。一覧の結果は失わない"""
+    res, calls = run_case(d, URL, make_mock(reactions=[R_AL], members_pages=[[M_A]], file_code=403), strict,
+                          folder=OD_SITE + "/Documents/Reports")
+    ex = res["export"]
+    assert res["success"] is True and ex["status"] == "failed" and ex["httpStatusCode"] == "403", ex
+    assert ex["fileUrl"] == "", ex
+    assert res["warnings"][0].startswith("WARN_CSV_EXPORT_FAILED"), res
+    assert res["table"] == [{"displayName": "山田 太郎", "email": "taro.yamada@example.com"}]
+
+
+def case_t12(d, strict):
+    """フォルダURL未入力 → CreateFile を呼ばず status=notRequested（table / csv は返す）"""
+    res, calls = run_case(d, URL, make_mock(reactions=[R_AL], members_pages=[[M_A]]), strict)
+    assert file_call(calls) is None, calls
+    assert res["export"]["status"] == "notRequested" and res["export"]["fileName"] == "", res["export"]
+    assert res["csv"] == '"displayName","email"' + CRLF + '"山田 太郎","taro.yamada@example.com"' + CRLF
+
+
 CASES = [("T01", case_t01), ("T02", case_t02), ("T03", case_t03),
-         ("T04", case_t04), ("T05", case_t05), ("T06", case_t06)]
+         ("T04", case_t04), ("T05", case_t05), ("T06", case_t06),
+         ("T07", case_t07), ("T08", case_t08), ("T09", case_t09),
+         ("T10", case_t10), ("T11", case_t11), ("T12", case_t12)]
 
 if __name__ == "__main__":
     if not os.path.isdir(PKG):

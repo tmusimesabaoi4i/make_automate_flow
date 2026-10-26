@@ -36,6 +36,16 @@
                   "title": "Teams投稿URL",
                   "type": "string",
                   "description": "Teamsチャネル投稿の「リンクをコピー」で取得したURLを貼り付けてください"
+                },
+                "OutputFolderUrl": {
+                  "title": "OneDriveフォルダURL（任意）",
+                  "type": "string",
+                  "description": "CSVの保存先。OneDriveをブラウザで開いて保存先フォルダを表示し、アドレスバーのURLを貼り付けてください。空欄ならCSVは作成しません"
+                },
+                "OutputFileName": {
+                  "title": "ファイル名（任意）",
+                  "type": "string",
+                  "description": "CSVのファイル名。拡張子 .csv は省略可。空欄なら reactors_日時.csv"
                 }
               },
               "required": [
@@ -467,6 +477,159 @@
             ]
           }
         },
+        "Initialize_Csv": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varCsv",
+                "type": "string",
+                "value": "@concat('\"displayName\",\"email\"', decodeUriComponent('%0D%0A'))"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Warnings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_OutFolderUrl": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varOutFolderUrl",
+                "type": "string",
+                "value": "@trim(coalesce(triggerBody()?['OutputFolderUrl'], ''))"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Csv": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_OutFileNameInput": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varOutFileNameInput",
+                "type": "string",
+                "value": "@trim(coalesce(triggerBody()?['OutputFileName'], ''))"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_OutFolderUrl": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_OutSite": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varOutSite",
+                "type": "string",
+                "value": "@string('')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_OutFileNameInput": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_OutFolderPath": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varOutFolderPath",
+                "type": "string",
+                "value": "@string('')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_OutSite": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_OutFileName": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varOutFileName",
+                "type": "string",
+                "value": "@string('')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_OutFolderPath": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ExportStatus": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varExportStatus",
+                "type": "string",
+                "value": "notRequested"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_OutFileName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ExportStatusCode": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varExportStatusCode",
+                "type": "string",
+                "value": "0"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ExportStatus": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_ExportErrorCode": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varExportErrorCode",
+                "type": "string",
+                "value": "@string('')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_ExportStatusCode": [
+              "Succeeded"
+            ]
+          }
+        },
         "Scope_ParseUrl": {
           "type": "Scope",
           "actions": {
@@ -724,7 +887,7 @@
             }
           },
           "runAfter": {
-            "Initialize_Warnings": [
+            "Initialize_ExportErrorCode": [
               "Succeeded"
             ]
           }
@@ -1255,6 +1418,18 @@
                           "Succeeded"
                         ]
                       }
+                    },
+                    "Append_Csv_Row": {
+                      "type": "AppendToStringVariable",
+                      "inputs": {
+                        "name": "varCsv",
+                        "value": "@concat('\"', replace(outputs('Compose_Reactor')?['displayName'], '\"', '\"\"'), '\",\"', replace(outputs('Compose_Reactor')?['email'], '\"', '\"\"'), '\"', decodeUriComponent('%0D%0A'))"
+                      },
+                      "runAfter": {
+                        "Append_Reactor": [
+                          "Succeeded"
+                        ]
+                      }
                     }
                   },
                   "runtimeConfiguration": {
@@ -1284,6 +1459,339 @@
             ]
           }
         },
+        "Scope_ExportCsv": {
+          "type": "Scope",
+          "actions": {
+            "Set_Stage_ExportCsv": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "varStage",
+                "value": "ExportCsv"
+              },
+              "runAfter": {}
+            },
+            "Condition_Export_Requested": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@and(variables('varIsValid'), not(empty(variables('varOutFolderUrl'))))",
+                      true
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_Out_Url_No_Fragment": {
+                  "type": "Compose",
+                  "inputs": "@first(split(variables('varOutFolderUrl'), '#'))",
+                  "runAfter": {}
+                },
+                "Compose_Out_Url_Path_Raw": {
+                  "type": "Compose",
+                  "inputs": "@first(split(outputs('Compose_Out_Url_No_Fragment'), '?'))",
+                  "runAfter": {
+                    "Compose_Out_Url_No_Fragment": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Query_Normalized": {
+                  "type": "Compose",
+                  "inputs": "@concat('&', if(contains(outputs('Compose_Out_Url_No_Fragment'), '?'), last(split(outputs('Compose_Out_Url_No_Fragment'), '?')), ''), '&')",
+                  "runAfter": {
+                    "Compose_Out_Url_Path_Raw": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Host": {
+                  "type": "Compose",
+                  "inputs": "@first(split(last(split(outputs('Compose_Out_Url_Path_Raw'), '://')), '/'))",
+                  "runAfter": {
+                    "Compose_Out_Query_Normalized": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Id_Param": {
+                  "type": "Compose",
+                  "inputs": "@if(contains(outputs('Compose_Out_Query_Normalized'), '&id='), trim(decodeUriComponent(first(split(last(split(outputs('Compose_Out_Query_Normalized'), '&id=')), '&')))), '')",
+                  "runAfter": {
+                    "Compose_Out_Host": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Path_From_Url": {
+                  "type": "Compose",
+                  "inputs": "@decodeUriComponent(join(reverse(take(reverse(split(outputs('Compose_Out_Url_Path_Raw'), concat('://', outputs('Compose_Out_Host')))), sub(length(split(outputs('Compose_Out_Url_Path_Raw'), concat('://', outputs('Compose_Out_Host')))), 1))), concat('://', outputs('Compose_Out_Host'))))",
+                  "runAfter": {
+                    "Compose_Out_Id_Param": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Server_Path_Base": {
+                  "type": "Compose",
+                  "inputs": "@if(empty(outputs('Compose_Out_Id_Param')), outputs('Compose_Out_Path_From_Url'), outputs('Compose_Out_Id_Param'))",
+                  "runAfter": {
+                    "Compose_Out_Path_From_Url": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Server_Path_No_Forms": {
+                  "type": "Compose",
+                  "inputs": "@if(contains(outputs('Compose_Out_Server_Path_Base'), '/Forms/'), first(split(outputs('Compose_Out_Server_Path_Base'), '/Forms/')), outputs('Compose_Out_Server_Path_Base'))",
+                  "runAfter": {
+                    "Compose_Out_Server_Path_Base": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Server_Path": {
+                  "type": "Compose",
+                  "inputs": "@if(endsWith(outputs('Compose_Out_Server_Path_No_Forms'), '/'), join(take(split(outputs('Compose_Out_Server_Path_No_Forms'), '/'), sub(length(split(outputs('Compose_Out_Server_Path_No_Forms'), '/')), 1)), '/'), outputs('Compose_Out_Server_Path_No_Forms'))",
+                  "runAfter": {
+                    "Compose_Out_Server_Path_No_Forms": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Seg1": {
+                  "type": "Compose",
+                  "inputs": "@last(take(split(outputs('Compose_Out_Server_Path'), '/'), 2))",
+                  "runAfter": {
+                    "Compose_Out_Server_Path": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Seg2": {
+                  "type": "Compose",
+                  "inputs": "@last(take(split(outputs('Compose_Out_Server_Path'), '/'), 3))",
+                  "runAfter": {
+                    "Compose_Out_Seg1": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Is_Scoped": {
+                  "type": "Compose",
+                  "inputs": "@and(startsWith(outputs('Compose_Out_Server_Path'), '/'), greater(length(split(outputs('Compose_Out_Server_Path'), '/')), 3), or(equals(outputs('Compose_Out_Seg1'), 'personal'), equals(outputs('Compose_Out_Seg1'), 'sites'), equals(outputs('Compose_Out_Seg1'), 'teams')))",
+                  "runAfter": {
+                    "Compose_Out_Seg2": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_Site_Prefix": {
+                  "type": "Compose",
+                  "inputs": "@concat('/', outputs('Compose_Out_Seg1'), '/', outputs('Compose_Out_Seg2'))",
+                  "runAfter": {
+                    "Compose_Out_Is_Scoped": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_OutSite": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varOutSite",
+                    "value": "@if(outputs('Compose_Out_Is_Scoped'), concat('https://', outputs('Compose_Out_Host'), outputs('Compose_Out_Site_Prefix')), concat('https://', outputs('Compose_Out_Host')))"
+                  },
+                  "runAfter": {
+                    "Compose_Out_Site_Prefix": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_OutFolderPath": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varOutFolderPath",
+                    "value": "@if(outputs('Compose_Out_Is_Scoped'), join(reverse(take(reverse(split(outputs('Compose_Out_Server_Path'), outputs('Compose_Out_Site_Prefix'))), sub(length(split(outputs('Compose_Out_Server_Path'), outputs('Compose_Out_Site_Prefix'))), 1))), outputs('Compose_Out_Site_Prefix')), outputs('Compose_Out_Server_Path'))"
+                  },
+                  "runAfter": {
+                    "Set_OutSite": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Compose_Out_File_Base": {
+                  "type": "Compose",
+                  "inputs": "@if(empty(variables('varOutFileNameInput')), concat('reactors_', formatDateTime(convertFromUtc(utcNow(), 'Tokyo Standard Time'), 'yyyyMMdd_HHmmss')), variables('varOutFileNameInput'))",
+                  "runAfter": {
+                    "Set_OutFolderPath": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_OutFileName": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varOutFileName",
+                    "value": "@if(or(endsWith(outputs('Compose_Out_File_Base'), '.csv'), endsWith(outputs('Compose_Out_File_Base'), '.CSV')), outputs('Compose_Out_File_Base'), concat(outputs('Compose_Out_File_Base'), '.csv'))"
+                  },
+                  "runAfter": {
+                    "Compose_Out_File_Base": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_ExportErrorCode": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varExportErrorCode",
+                    "value": "@if(not(startsWith(variables('varOutFolderUrl'), 'https://')), 'ERR_OUTPUT_FOLDER_URL_INVALID', if(not(contains(outputs('Compose_Out_Host'), 'sharepoint.')), 'ERR_OUTPUT_FOLDER_NOT_ONEDRIVE', if(startsWith(outputs('Compose_Out_Path_From_Url'), '/:'), 'ERR_OUTPUT_FOLDER_SHARING_LINK', if(or(empty(variables('varOutFolderPath')), equals(variables('varOutFolderPath'), '/'), endsWith(variables('varOutFolderPath'), '.aspx'), and(not(outputs('Compose_Out_Is_Scoped')), contains(outputs('Compose_Out_Host'), '-my.'))), 'ERR_OUTPUT_FOLDER_PATH_NOT_FOUND', if(or(contains(variables('varOutFileName'), '\"'), contains(variables('varOutFileName'), '*'), contains(variables('varOutFileName'), ':'), contains(variables('varOutFileName'), '<'), contains(variables('varOutFileName'), '>'), contains(variables('varOutFileName'), '?'), contains(variables('varOutFileName'), '/'), contains(variables('varOutFileName'), '\\'), contains(variables('varOutFileName'), '|')), 'ERR_OUTPUT_FILE_NAME_INVALID', '')))))"
+                  },
+                  "runAfter": {
+                    "Set_OutFileName": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Condition_Export_Input_Valid": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [
+                          "@empty(variables('varExportErrorCode'))",
+                          true
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Create_Csv_File": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@variables('varOutSite')",
+                          "folderPath": "@variables('varOutFolderPath')",
+                          "name": "@variables('varOutFileName')",
+                          "body": "@concat(decodeUriComponent('%EF%BB%BF'), variables('varCsv'))"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "CreateFile"
+                        },
+                        "authentication": {
+                          "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                          "type": "Raw"
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "Set_Export_Status_Code": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varExportStatusCode",
+                        "value": "@string(coalesce(outputs('Create_Csv_File')?['statusCode'], 0))"
+                      },
+                      "runAfter": {
+                        "Create_Csv_File": [
+                          "Succeeded",
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    },
+                    "Set_Export_Status_Created": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varExportStatus",
+                        "value": "created"
+                      },
+                      "runAfter": {
+                        "Create_Csv_File": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Set_Export_Status_Failed": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varExportStatus",
+                        "value": "failed"
+                      },
+                      "runAfter": {
+                        "Create_Csv_File": [
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    },
+                    "Append_Export_Failed_Warning": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varWarnings",
+                        "value": "@concat('WARN_CSV_EXPORT_FAILED: CSVファイルを作成できませんでした（httpStatusCode=', string(coalesce(outputs('Create_Csv_File')?['statusCode'], 0)), '）。フォルダの存在・書き込み権限・同名ファイルの有無を確認してください。')"
+                      },
+                      "runAfter": {
+                        "Set_Export_Status_Failed": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Set_Export_Status_Invalid": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "varExportStatus",
+                          "value": "invalidInput"
+                        },
+                        "runAfter": {}
+                      },
+                      "Compose_Export_Error_Message": {
+                        "type": "Compose",
+                        "inputs": "@if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FOLDER_URL_INVALID'), 'OneDriveフォルダURLが https:// で始まっていません。', if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FOLDER_NOT_ONEDRIVE'), 'OneDrive（または SharePoint）のURLではありません。', if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FOLDER_SHARING_LINK'), '共有リンクは指定できません。OneDrive をブラウザで開いて対象フォルダを表示し、アドレスバーのURLを貼り付けてください。', if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FOLDER_PATH_NOT_FOUND'), 'URLからフォルダのパスを取得できません。OneDrive をブラウザで開いて対象フォルダを表示し、アドレスバーのURLを貼り付けてください。', if(equals(variables('varExportErrorCode'), 'ERR_OUTPUT_FILE_NAME_INVALID'), 'ファイル名に使えない文字（\" * : < > ? / \\ |）が含まれています。', '')))))",
+                        "runAfter": {
+                          "Set_Export_Status_Invalid": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Append_Export_Invalid_Warning": {
+                        "type": "AppendToArrayVariable",
+                        "inputs": {
+                          "name": "varWarnings",
+                          "value": "@concat('WARN_CSV_EXPORT_SKIPPED: ', variables('varExportErrorCode'), ' ', outputs('Compose_Export_Error_Message'))"
+                        },
+                        "runAfter": {
+                          "Compose_Export_Error_Message": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Set_ExportErrorCode": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Set_Stage_ExportCsv": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_BuildReactors": [
+              "Succeeded"
+            ]
+          }
+        },
         "Scope_CreateResult": {
           "type": "Scope",
           "actions": {
@@ -1308,6 +1816,17 @@
                 ]
               },
               "actions": {
+                "Select_Result_Table": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@variables('varReactors')",
+                    "select": {
+                      "displayName": "@item()?['displayName']",
+                      "email": "@item()?['email']"
+                    }
+                  },
+                  "runAfter": {}
+                },
                 "Create_Result_Object": {
                   "type": "Compose",
                   "inputs": {
@@ -1340,11 +1859,26 @@
                     },
                     "reactorCount": "@length(variables('varReactors'))",
                     "reactionCount": "@length(variables('varReactions'))",
+                    "table": "@body('Select_Result_Table')",
+                    "csv": "@variables('varCsv')",
+                    "export": {
+                      "status": "@variables('varExportStatus')",
+                      "errorCode": "@variables('varExportErrorCode')",
+                      "httpStatusCode": "@variables('varExportStatusCode')",
+                      "site": "@variables('varOutSite')",
+                      "folderPath": "@variables('varOutFolderPath')",
+                      "fileName": "@variables('varOutFileName')",
+                      "fileUrl": "@if(equals(variables('varExportStatus'), 'created'), replace(concat(variables('varOutSite'), variables('varOutFolderPath'), '/', variables('varOutFileName')), ' ', '%20'), '')"
+                    },
                     "reactors": "@variables('varReactors')",
                     "reactions": "@variables('varReactions')",
                     "warnings": "@variables('varWarnings')"
                   },
-                  "runAfter": {}
+                  "runAfter": {
+                    "Select_Result_Table": [
+                      "Succeeded"
+                    ]
+                  }
                 },
                 "Set_ResultObject": {
                   "type": "SetVariable",
@@ -1419,8 +1953,10 @@
             }
           },
           "runAfter": {
-            "Scope_BuildReactors": [
-              "Succeeded"
+            "Scope_ExportCsv": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
             ]
           }
         },
@@ -1542,6 +2078,13 @@
         "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
         "tier": "NotSpecified",
         "apiName": "teams"
+      },
+      "shared_sharepointonline": {
+        "connectionName": "483bbfa61721483b90289fcc5e424ee4",
+        "source": "Invoker",
+        "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+        "tier": "NotSpecified",
+        "apiName": "sharepointonline"
       }
     },
     "flowFailureAlertSubscribed": false,

@@ -1,15 +1,15 @@
 === Flow3_ListTeamsChannelPostReactorsFromUrl 静的検証 ===
 package folder GUID : 324d318b-a431-46c0-84d3-979eadb9cab8
 flow displayName    : Flow3 Teams投稿URLからリアクションした人を一覧化
-operationIds        : ['HttpRequest']
-connectionReferences: ['shared_teams']
-アクション総数      : 109
-初期化変数          : 25 ['varChannelId', 'varErrorCode', 'varErrorMessage', 'varErrorMessages', 'varInputUrl', 'varIsValid', 'varLastStatusCode', 'varMemberNextLink', 'varMembers', 'varMembersLoaded', 'varMembersLookupFailed', 'varMembersStatusCode', 'varParentMessageId', 'varRawReactions', 'varReactions', 'varReactorUserIds', 'varReactors', 'varResultJson', 'varResultObject', 'varStage', 'varTargetMessageId', 'varTeamId', 'varTenantId', 'varUrlMessageId', 'varWarnings']
-SetVariable         : 30 （うち自己参照 0 ）
-AppendToArray       : 7
+operationIds        : ['CreateFile', 'HttpRequest']
+connectionReferences: ['shared_sharepointonline', 'shared_teams']
+アクション総数      : 150
+初期化変数          : 34 ['varChannelId', 'varCsv', 'varErrorCode', 'varErrorMessage', 'varErrorMessages', 'varExportErrorCode', 'varExportStatus', 'varExportStatusCode', 'varInputUrl', 'varIsValid', 'varLastStatusCode', 'varMemberNextLink', 'varMembers', 'varMembersLoaded', 'varMembersLookupFailed', 'varMembersStatusCode', 'varOutFileName', 'varOutFileNameInput', 'varOutFolderPath', 'varOutFolderUrl', 'varOutSite', 'varParentMessageId', 'varRawReactions', 'varReactions', 'varReactorUserIds', 'varReactors', 'varResultJson', 'varResultObject', 'varStage', 'varTargetMessageId', 'varTeamId', 'varTenantId', 'varUrlMessageId', 'varWarnings']
+SetVariable         : 39 （うち自己参照 0 ）
+AppendToArray       : 9
 Foreach / Until     : 3 / 1
-使用関数            : ['and', 'body', 'coalesce', 'concat', 'contains', 'createArray', 'decodeBase64', 'decodeUriComponent', 'empty', 'endsWith', 'equals', 'first', 'greater', 'if', 'item', 'items', 'join', 'json', 'last', 'length', 'not', 'or', 'outputs', 'split', 'string', 'sub', 'take', 'triggerBody', 'triggerOutputs', 'trim', 'union', 'uriComponent', 'utcNow', 'variables']
-トリガー入力        : ['TeamsPostUrl']
+使用関数            : ['and', 'body', 'coalesce', 'concat', 'contains', 'convertFromUtc', 'createArray', 'decodeBase64', 'decodeUriComponent', 'empty', 'endsWith', 'equals', 'first', 'formatDateTime', 'greater', 'if', 'item', 'items', 'join', 'json', 'last', 'length', 'not', 'or', 'outputs', 'replace', 'reverse', 'split', 'startsWith', 'string', 'sub', 'take', 'triggerBody', 'triggerOutputs', 'trim', 'union', 'uriComponent', 'utcNow', 'variables']
+トリガー入力        : ['TeamsPostUrl', 'OutputFolderUrl', 'OutputFileName']
 
 === ERRORS ===
 (0 errors)

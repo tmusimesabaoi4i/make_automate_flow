@@ -1,5 +1,5 @@
 === ZIP再展開検査 ===
-対象ZIP : release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026124224.zip
+対象ZIP : release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026130049.zip
 エントリ数: 5
     Microsoft.Flow/flows/324d318b-a431-46c0-84d3-979eadb9cab8/apisMap.json
     Microsoft.Flow/flows/324d318b-a431-46c0-84d3-979eadb9cab8/connectionsMap.json
@@ -8,7 +8,7 @@
     manifest.json
 
   OK: パッケージGUID 3点一致: 324d318b-a431-46c0-84d3-979eadb9cab8
-  OK: 接続参照キー一致: ['shared_teams']
+  OK: 接続参照キー一致: ['shared_sharepointonline', 'shared_teams']
   OK: displayName: Flow3 Teams投稿URLからリアクションした人を一覧化
   OK: 展開結果は source/package とバイト単位で一致
 

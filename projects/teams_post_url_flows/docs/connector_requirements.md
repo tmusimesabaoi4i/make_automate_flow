@@ -17,7 +17,9 @@ Flow1 / Flow2 / Flow3 が使用するコネクタ、必要な権限、取得件�
 | Azure Functions / 独自API / 外部サーバー / Python実行環境 | **不使用** |
 | 接続の数 | 各フロー1接続（インポート時に選択または新規作成） |
 
-両フローとも SharePoint も Content Conversion も使いません。ZIP内の `apisMap.json` / `connectionsMap.json` / `manifest.json` はいずれも `shared_teams` 1件だけを参照します。
+Flow1・Flow2 は SharePoint も Content Conversion も使いません。ZIP内の `apisMap.json` / `connectionsMap.json` / `manifest.json` はいずれも `shared_teams` 1件だけを参照します。
+
+**Flow3 だけは SharePoint（`shared_sharepointonline`・標準）も使います。** 用途は、任意入力「OneDriveフォルダURL」が指定されたときの CSV 保存（`CreateFile`）1件だけです。OneDrive for Business は SharePoint の個人用サイトのため、SharePoint コネクタで書き込みます。インポート時に Teams と SharePoint の2接続を選択します。Teams と SharePoint はいずれも一般に「業務データ」グループのため、DLP で同じグループに分類されていれば併用できます（**要実環境確認**）。
 
 ---
 

@@ -44,7 +44,7 @@ make_automate_flow/
 | 案件 | 内容 | コネクタ | 実環境 |
 |---|---|---|---|
 | [migrate-chat-spo](projects/migrate-chat-spo/) | Teams会議投稿をSharePointへアーカイブ／台帳リスト作成 | Teams・SharePoint・Content Conversion | インポート・保存・実行 成功（v10の再実行は未確認） |
-| [teams_post_url_flows](projects/teams_post_url_flows/) | Teams投稿URLから投稿（Flow1）／全返信（Flow2）を取得／リアクションした人を表示名・メール付きで一覧化（Flow3） | Teams | Flow1・Flow2 は**インポート・実行 成功**（2026-07-24。返信51件超のページングは未確認）。**Flow3 は未実施**（オフライン検証は全緑。メンバー一覧の権限は要実環境確認） |
+| [teams_post_url_flows](projects/teams_post_url_flows/) | Teams投稿URLから投稿（Flow1）／全返信（Flow2）を取得／リアクションした人を表示名・メール付きで一覧化し任意で OneDrive へ CSV 出力（Flow3） | Teams（Flow3 は ＋SharePoint） | Flow1・Flow2 は**インポート・実行 成功**（2026-07-24。返信51件超のページングは未確認）。Flow3 は CSV出力前の版が**インポート・実行 成功・出力OK**（2026-10-26）。**CSV出力付きの現行版は未実施** |
 | [create_initialized_sharepoint_list](projects/create_initialized_sharepoint_list/) | 同名リストが無い場合だけリストを作成し `sample_raw` のみに初期化 | SharePoint | **インポート・実行 成功**（2026-07-24・`status: Created`。同名リスト経路と失敗経路は未確認） |
 | [sync-shared-mailbox-to-sharepoint-list](projects/sync-shared-mailbox-to-sharepoint-list/) | 共有メールボックスの最新メールをSharePointリストへ登録／更新（メッセージIDで冪等）。**3フロー: 5列版／審査官名・出願番号の推定付き7列版／審査官名簿と突合してメールアドレス・TeamsユーザーIDまで取得する12列版** | SharePoint・Office 365 Outlook・Content Conversion | 5列版は**インポート・実行 成功**（2026-08-03。100件同期＝作成80/更新20/失敗0）。**7列版・12列版は未実施** |
 | [teams-channel-member-sync](projects/teams-channel-member-sync/) | Teamsチャネルのメンバーを毎日SharePointリストへ同期（同期キーで冪等・離脱は論理無効化）。**2フロー: 初期設定＋テスト同期（手動）と日次実行（Recurrence 07:00 JST）**。同期処理は `shared/sync_blocks.py` から両フローへ生成 | Teams・SharePoint | **未実施**（オフライン検証は全緑。`ListMembers` の body キー名は要実環境確認） |

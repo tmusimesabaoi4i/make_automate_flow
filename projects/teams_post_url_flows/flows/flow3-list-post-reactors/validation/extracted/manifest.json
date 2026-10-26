@@ -2,7 +2,7 @@
   "schema": "1.0",
   "details": {
     "displayName": "Flow3_ListTeamsChannelPostReactorsFromUrl",
-    "description": "Teams投稿URLを解析し、対象のチャネル投稿にリアクションした人を一覧化してJSONに格納する",
+    "description": "Teams投稿URLを解析し、対象のチャネル投稿にリアクションした人を一覧化してJSONに格納し、指定があればOneDriveへCSV出力する",
     "createdTime": "2026-10-26T00:00:00.0000000Z",
     "packageTelemetryId": "c58d2419-b070-42a2-bb65-6f8000604e17",
     "creator": "N/A",
@@ -20,7 +20,9 @@
       "hierarchy": "Root",
       "dependsOn": [
         "45ef819e-8e54-4fb7-8e5c-fcd52c415d0d",
-        "e6b957ad-a93d-4a05-b953-bf5eb97f635d"
+        "e6b957ad-a93d-4a05-b953-bf5eb97f635d",
+        "60d4eb17-290e-462f-922e-6cd02602cee4",
+        "0bcd2e91-cb92-4f2b-8416-ce0c46148b95"
       ]
     },
     "45ef819e-8e54-4fb7-8e5c-fcd52c415d0d": {
@@ -46,6 +48,31 @@
       "hierarchy": "Child",
       "dependsOn": [
         "45ef819e-8e54-4fb7-8e5c-fcd52c415d0d"
+      ]
+    },
+    "60d4eb17-290e-462f-922e-6cd02602cee4": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+      "name": "shared_sharepointonline",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "SharePoint"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "0bcd2e91-cb92-4f2b-8416-ce0c46148b95": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "SharePoint への接続を選択してください（OneDrive へのCSV出力に使用）"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "60d4eb17-290e-462f-922e-6cd02602cee4"
       ]
     }
   }
