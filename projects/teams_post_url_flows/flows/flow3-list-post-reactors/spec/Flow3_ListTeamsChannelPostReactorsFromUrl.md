@@ -9,10 +9,10 @@ Teams投稿URLを解析し、そのチャネル投稿に**リアクションし�
 | 表示名 | Flow3 Teams投稿URLからリアクションした人を一覧化 |
 | トリガー | 手動でフローをトリガーします（`manual` / `Request` / `kind: Button`） |
 | 使用コネクタ | Microsoft Teams（`shared_teams`）1本のみ・プレミアム不要 |
-| アクション総数 | 110 |
+| アクション総数 | 109 |
 | 生成元 | `../source/build_flow3.py`（雛形: `flow1-get-channel-post/source/build_flow1.py`） |
 | 検証 | `../source/validate_flow3.py`（エラー0 / 警告0） |
-| パッケージ | `../release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026121818.zip` |
+| パッケージ | `../release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026124224.zip`（それより前のZIPは使わない。§10） |
 | 実環境 | **未実施**（インポート・保存・実行いずれも要実環境確認） |
 
 **`definition.json` は生成物です。** 修正は必ず `../source/build_flow3.py` を編集し、再生成 → 検証 → 再パッケージしてください（`CLAUDE.md` 不変則1）。
@@ -107,7 +107,7 @@ Initialize_*（25変数・トップレベル）
 |---|---|
 | 表示名・メールは**チャネルメンバー一覧**で補う | Graph の `reactions[].user.user` は `id` と `userIdentityType` だけで、`displayName` が null のことが多く、メールは含まれない。`/members` は `aadUserConversationMember` の `userId` / `displayName` / `email` を返す。`/users/{id}` は Teams コネクタの Graph HTTP 要求で許可されるパスの範囲外になる可能性があるため使わない |
 | メンバー一覧の取得失敗で**フローを失敗させない** | 一覧取得には投稿の読み取りとは別の権限が要る可能性がある（§8）。失敗時もユーザーIDの一覧は有用なので、`memberLookup: "unavailable"` と警告を付けて返す |
-| Do until 内で取得失敗時に nextLink を空にする | 反復が失敗した後も Do until が続くかは実機の挙動に依存する。どちらでも1回で止まるようにする（テストで両方を評価） |
+| Do until 内で取得失敗時に失敗フラグを立て、終了条件 `or(empty(nextLink), varMembersLookupFailed)` で止める | 反復が失敗した後も Do until が続くかは実機の挙動に依存する。どちらでも1回で止まるようにする（テストで両方を評価）。nextLink を空文字に「設定」する方式は保存エラーになったため使わない（§10） |
 | リアクション0件なら一覧を取得しない | 不要な Graph 呼び出しと権限エラーを避ける |
 | `body('Get_Parent_Message')` を後続 Scope から参照しない | 解析エラーで取得が Skipped のとき、条件式から参照すると壊れる。リアクションは取得直後に変数へ退避する（`validate_flow3.py` §8 で機械検査） |
 | 重複排除は「初出の userId を配列変数に追加」で行う | `SetVariable` の自己参照を使わない（`handbook/rules/03`）。配列の `contains()` で判定し、`AppendToArrayVariable` で追加する |
@@ -117,7 +117,7 @@ Initialize_*（25変数・トップレベル）
 
 | ループ | 対象 | 並列 | 上限 |
 |---|---|---|---|
-| `Do_Until_Members_Paging` | メンバー一覧（`@odata.nextLink` が空になるまで） | — | 5,000反復・1時間 |
+| `Do_Until_Members_Paging` | メンバー一覧（`@odata.nextLink` が空になるか、取得に失敗するまで） | — | 5,000反復・1時間 |
 | `Process_Retrieved_Members` | 1ページ分のメンバー | オフ | — |
 | `Apply_To_Each_Reaction` | 親投稿のリアクション | オフ | — |
 | `Apply_To_Each_Reactor` | 重複排除した userId | オフ | — |
@@ -152,3 +152,10 @@ Initialize_*（25変数・トップレベル）
 | 実環境 | **未実施** |
 
 通し回帰テストのケース: 同一人物の複数リアクションの集約と2ページのメンバー一覧 / メンバー一覧が 403 / リアクション0件 / メンバー一覧に居ない人 / URL解析エラー / 投稿取得 404。
+
+## 10. 修正履歴
+
+| 日付 | 局面 | 内容 |
+|---|---|---|
+| 2026-10-26 | 保存時 | `'Stop Member Paging On Failure' のパラメーターが無効です。エラー: '値' は必須です。` — 「変数の設定」の値に空文字 `""` を渡していた。アクションを削除し、`Set_Members_Lookup_Failed_In_Loop`（`true` を設定）と Do until の終了条件で止める方式に変更（`_20261026123718.zip`）。`validate_flow3.py` に「SetVariable の値が空」の検査を追加。修正版の保存は**要実環境確認** |
+| 2026-10-26 | 保存時（予防） | 同型の予防: 変数の初期化・設定の値に残っていた空文字10件・`false` 3件を `@string('')` / `@false` の式に置換（`build_flow3.py` の `nonblank()` で一括）。`validate_flow3.py` の検査を「初期化・設定の値が空文字 / null / false」に拡張（`_20261026124224.zip`）。保存は**要実環境確認** |

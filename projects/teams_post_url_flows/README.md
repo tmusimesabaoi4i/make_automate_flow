@@ -6,7 +6,7 @@ Microsoft Teams のチャネル投稿で「リンクをコピー」して得たU
 |---|---|---|---|
 | フロー名 | `Flow1_GetTeamsChannelPostFromUrl` | `Flow2_GetAllTeamsChannelPostRepliesFromUrl` | `Flow3_ListTeamsChannelPostReactorsFromUrl` |
 | 取得するもの | 対象の親投稿1件 | 対象の親投稿＋その**全返信** | 親投稿に**リアクションした人**（1人1件・表示名とメール付き） |
-| アクション数 | 67 | 81 | 110 |
+| アクション数 | 67 | 81 | 109 |
 | 使用コネクタ | Microsoft Teams 1本（**プレミアム不要**） | 同左 | 同左 |
 | 出力 | `varResultObject` / `varResultJson` | `varResultObject` / `varResultJson` / `varReplies` | `varResultObject` / `varResultJson` / `varReactors` |
 
@@ -32,7 +32,7 @@ Microsoft Teams のチャネル投稿で「リンクをコピー」して得たU
 
 - `flows/flow1-get-channel-post/release/Flow1_GetTeamsChannelPostFromUrl_20260724190952.zip`
 - `flows/flow2-get-post-replies/release/Flow2_GetAllTeamsChannelPostRepliesFromUrl_20260724190952.zip`
-- `flows/flow3-list-post-reactors/release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026121818.zip`
+- `flows/flow3-list-post-reactors/release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026124224.zip`
 
 ---
 

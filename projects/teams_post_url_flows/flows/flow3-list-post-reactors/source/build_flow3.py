@@ -54,9 +54,23 @@ def ra(prev, states=("Succeeded",)):
     return {} if prev is None else {prev: list(states)}
 
 
+def nonblank(value):
+    """空文字・false を同値の式に置き換える。
+
+    「変数の設定」の値に空文字 "" を渡したところ、デザイナーの保存時に
+    「'値' は必須です」で拒否された（Flow3 の実環境で発生）。false も同じく
+    未入力と判定される恐れがあるため、初期化・設定の値には空欄に見えない式を渡す。
+    """
+    if value == "" and isinstance(value, str):
+        return "@string('')"
+    if value is False:
+        return "@false"
+    return value
+
+
 def initvar(name, vtype, value):
     return {"type": "InitializeVariable",
-            "inputs": {"variables": [{"name": name, "type": vtype, "value": value}]}}
+            "inputs": {"variables": [{"name": name, "type": vtype, "value": nonblank(value)}]}}
 
 
 def compose(expr, runafter=None):
@@ -64,7 +78,7 @@ def compose(expr, runafter=None):
 
 
 def setvar(name, value, runafter=None):
-    return {"type": "SetVariable", "inputs": {"name": name, "value": value},
+    return {"type": "SetVariable", "inputs": {"name": name, "value": nonblank(value)},
             "runAfter": runafter or {}}
 
 
@@ -312,8 +326,8 @@ actions["Scope_GetTeamsData"] = {"type": "Scope", "actions": teams_actions,
 #
 # リアクションが1件以上あるときだけ取得する。@odata.nextLink を Do until で追跡する。
 # 取得失敗（403等）はフロー全体の失敗にしない:
-#   - ループ内で Get_Channel_Members の Failed/TimedOut を受けて nextLink を空にし、
-#     無限ループを防ぐ（Do until が失敗後も反復を続ける場合の保険）
+#   - ループ内で Get_Channel_Members の Failed/TimedOut を受けて varMembersLookupFailed を立て、
+#     Do until の終了条件で止める（Do until が失敗後も反復を続ける場合の保険）
 #   - ループ外で Do until の Failed/TimedOut を受けて varMembersLookupFailed を立てる
 #     （失敗を「処理済み」にするため Scope 自体は成功で抜ける）
 # 後段は varMembersLoaded だけを見て、取得できなかった場合は警告付きで続行する。
@@ -347,16 +361,17 @@ member_loop_actions["Process_Retrieved_Members"] = {
 member_loop_actions["Set_MemberNextLink"] = setvar(
     "varMemberNextLink", "@coalesce(body('Get_Channel_Members')?['@odata.nextLink'], '')",
     {"Process_Retrieved_Members": ["Succeeded"]})
-member_loop_actions["Stop_Member_Paging_On_Failure"] = setvar(
-    "varMemberNextLink", "", {"Get_Channel_Members": ["Failed", "TimedOut"]})
+# 取得失敗時は失敗フラグを立て、Do until の終了条件で止める。
+# SetVariable の値に空文字 "" を渡すと、デザイナーの保存時に「'値' は必須です」で
+# 拒否されることがあるため、nextLink を空にする方式は採らない（実環境で発生）。
 member_loop_actions["Set_Members_Lookup_Failed_In_Loop"] = setvar(
-    "varMembersLookupFailed", True, {"Stop_Member_Paging_On_Failure": ["Succeeded"]})
+    "varMembersLookupFailed", True, {"Get_Channel_Members": ["Failed", "TimedOut"]})
 
 members_block = {}
 members_block["Set_MemberNextLink_First"] = setvar("varMemberNextLink", GRAPH_MEMBERS_URI)
 members_block["Do_Until_Members_Paging"] = {
     "type": "Until",
-    "expression": "@empty(variables('varMemberNextLink'))",
+    "expression": "@or(empty(variables('varMemberNextLink')), variables('varMembersLookupFailed'))",
     "limit": {"count": 5000, "timeout": "PT1H"},
     "actions": member_loop_actions,
     "runAfter": ra("Set_MemberNextLink_First"),

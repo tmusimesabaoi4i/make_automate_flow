@@ -65,50 +65,49 @@ trigger: manual (Request/Button) inputs: TeamsPostUrl*  ※*=必須
  63   Set_Stage_GetChannelMembers  <SetVariable> [varStage]  runAfter: -
  64   Condition_Has_Reactions  <If>  runAfter: Set_Stage_GetChannelMembers(Succeeded)
  65     Set_MemberNextLink_First  <SetVariable> [varMemberNextLink]  runAfter: -
- 66     Do_Until_Members_Paging  <Until> [until: @empty(variables('varMemberNextLink'))]  runAfter: Set_MemberNextLink_First(Succeeded)
+ 66     Do_Until_Members_Paging  <Until> [until: @or(empty(variables('varMemberNextLink')), variables('varMem]  runAfter: Set_MemberNextLink_First(Succeeded)
  67       Get_Channel_Members  <OpenApiConnection> [shared_teams/HttpRequest]  runAfter: -
  68       Set_Members_Status_Code  <SetVariable> [varMembersStatusCode]  runAfter: Get_Channel_Members(Succeeded/Failed/TimedOut)
  69       Process_Retrieved_Members  <Foreach> [in: @coalesce(body('Get_Channel_Members')?['value'], json('[]'))]  runAfter: Get_Channel_Members(Succeeded)
  70         Append_Member  <AppendToArrayVariable> [varMembers]  runAfter: -
  71       Set_MemberNextLink  <SetVariable> [varMemberNextLink]  runAfter: Process_Retrieved_Members(Succeeded)
- 72       Stop_Member_Paging_On_Failure  <SetVariable> [varMemberNextLink]  runAfter: Get_Channel_Members(Failed/TimedOut)
- 73       Set_Members_Lookup_Failed_In_Loop  <SetVariable> [varMembersLookupFailed]  runAfter: Stop_Member_Paging_On_Failure(Succeeded)
- 74     Set_MembersLoaded  <SetVariable> [varMembersLoaded]  runAfter: Do_Until_Members_Paging(Succeeded)
- 75     Mark_Member_Lookup_Failed  <SetVariable> [varMembersLookupFailed]  runAfter: Do_Until_Members_Paging(Failed/TimedOut)
- 76 Scope_BuildReactors  <Scope>  runAfter: Scope_GetChannelMembers(Succeeded/Failed/TimedOut)
- 77   Set_Stage_BuildReactors  <SetVariable> [varStage]  runAfter: -
- 78   Condition_Can_Build_Reactors  <If>  runAfter: Set_Stage_BuildReactors(Succeeded)
- 79     Condition_Member_Lookup_Unavailable  <If>  runAfter: -
- 80       Append_Member_Lookup_Warning  <AppendToArrayVariable> [varWarnings]  runAfter: -
- 81     Apply_To_Each_Reaction  <Foreach> [in: @variables('varRawReactions')]  runAfter: Condition_Member_Lookup_Unavailable(Succeeded)
- 82       Compose_Reaction_UserId  <Compose>  runAfter: -
- 83       Filter_Member_For_Reaction  <Query>  runAfter: Compose_Reaction_UserId(Succeeded)
- 84       Compose_Matched_Member  <Compose>  runAfter: Filter_Member_For_Reaction(Succeeded)
- 85       Compose_Normalized_Reaction  <Compose>  runAfter: Compose_Matched_Member(Succeeded)
- 86       Append_Normalized_Reaction  <AppendToArrayVariable> [varReactions]  runAfter: Compose_Normalized_Reaction(Succeeded)
- 87       Condition_Is_New_Reactor  <If>  runAfter: Append_Normalized_Reaction(Succeeded)
- 88         Append_Reactor_UserId  <AppendToArrayVariable> [varReactorUserIds]  runAfter: -
- 89     Apply_To_Each_Reactor  <Foreach> [in: @variables('varReactorUserIds')]  runAfter: Apply_To_Each_Reaction(Succeeded)
- 90       Filter_Reactions_Of_User  <Query>  runAfter: -
- 91       Select_Reaction_Summary  <Select>  runAfter: Filter_Reactions_Of_User(Succeeded)
- 92       Compose_Reactor  <Compose>  runAfter: Select_Reaction_Summary(Succeeded)
- 93       Append_Reactor  <AppendToArrayVariable> [varReactors]  runAfter: Compose_Reactor(Succeeded)
- 94 Scope_CreateResult  <Scope>  runAfter: Scope_BuildReactors(Succeeded)
- 95   Set_Stage_CreateResult  <SetVariable> [varStage]  runAfter: -
- 96   Condition_Build_Result  <If>  runAfter: Set_Stage_CreateResult(Succeeded)
- 97     Create_Result_Object  <Compose>  runAfter: -
- 98     Set_ResultObject  <SetVariable> [varResultObject]  runAfter: Create_Result_Object(Succeeded)
+ 72       Set_Members_Lookup_Failed_In_Loop  <SetVariable> [varMembersLookupFailed]  runAfter: Get_Channel_Members(Failed/TimedOut)
+ 73     Set_MembersLoaded  <SetVariable> [varMembersLoaded]  runAfter: Do_Until_Members_Paging(Succeeded)
+ 74     Mark_Member_Lookup_Failed  <SetVariable> [varMembersLookupFailed]  runAfter: Do_Until_Members_Paging(Failed/TimedOut)
+ 75 Scope_BuildReactors  <Scope>  runAfter: Scope_GetChannelMembers(Succeeded/Failed/TimedOut)
+ 76   Set_Stage_BuildReactors  <SetVariable> [varStage]  runAfter: -
+ 77   Condition_Can_Build_Reactors  <If>  runAfter: Set_Stage_BuildReactors(Succeeded)
+ 78     Condition_Member_Lookup_Unavailable  <If>  runAfter: -
+ 79       Append_Member_Lookup_Warning  <AppendToArrayVariable> [varWarnings]  runAfter: -
+ 80     Apply_To_Each_Reaction  <Foreach> [in: @variables('varRawReactions')]  runAfter: Condition_Member_Lookup_Unavailable(Succeeded)
+ 81       Compose_Reaction_UserId  <Compose>  runAfter: -
+ 82       Filter_Member_For_Reaction  <Query>  runAfter: Compose_Reaction_UserId(Succeeded)
+ 83       Compose_Matched_Member  <Compose>  runAfter: Filter_Member_For_Reaction(Succeeded)
+ 84       Compose_Normalized_Reaction  <Compose>  runAfter: Compose_Matched_Member(Succeeded)
+ 85       Append_Normalized_Reaction  <AppendToArrayVariable> [varReactions]  runAfter: Compose_Normalized_Reaction(Succeeded)
+ 86       Condition_Is_New_Reactor  <If>  runAfter: Append_Normalized_Reaction(Succeeded)
+ 87         Append_Reactor_UserId  <AppendToArrayVariable> [varReactorUserIds]  runAfter: -
+ 88     Apply_To_Each_Reactor  <Foreach> [in: @variables('varReactorUserIds')]  runAfter: Apply_To_Each_Reaction(Succeeded)
+ 89       Filter_Reactions_Of_User  <Query>  runAfter: -
+ 90       Select_Reaction_Summary  <Select>  runAfter: Filter_Reactions_Of_User(Succeeded)
+ 91       Compose_Reactor  <Compose>  runAfter: Select_Reaction_Summary(Succeeded)
+ 92       Append_Reactor  <AppendToArrayVariable> [varReactors]  runAfter: Compose_Reactor(Succeeded)
+ 93 Scope_CreateResult  <Scope>  runAfter: Scope_BuildReactors(Succeeded)
+ 94   Set_Stage_CreateResult  <SetVariable> [varStage]  runAfter: -
+ 95   Condition_Build_Result  <If>  runAfter: Set_Stage_CreateResult(Succeeded)
+ 96     Create_Result_Object  <Compose>  runAfter: -
+ 97     Set_ResultObject  <SetVariable> [varResultObject]  runAfter: Create_Result_Object(Succeeded)
       [else]
- 99     Create_Error_Result_Object  <Compose>  runAfter: -
-100     Set_ResultObject_Error  <SetVariable> [varResultObject]  runAfter: Create_Error_Result_Object(Succeeded)
-101   Serialize_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Condition_Build_Result(Succeeded)
-102 Scope_ErrorHandler  <Scope>  runAfter: Scope_CreateResult(Failed/Skipped/TimedOut)
-103   Compose_Handler_Error_Code  <Compose>  runAfter: -
-104   Compose_Handler_Error_Message  <Compose>  runAfter: Compose_Handler_Error_Code(Succeeded)
-105   Compose_Handler_Error_Details  <Compose>  runAfter: Compose_Handler_Error_Message(Succeeded)
-106   Handle_Error  <Compose>  runAfter: Compose_Handler_Error_Details(Succeeded)
-107   Set_ResultObject_Handler  <SetVariable> [varResultObject]  runAfter: Handle_Error(Succeeded)
-108   Serialize_Handler_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Set_ResultObject_Handler(Succeeded)
-109 Scope_Finalize  <Scope>  runAfter: Scope_ErrorHandler(Succeeded/Failed/Skipped/TimedOut)
-110   Compose_Flow_Output  <Compose>  runAfter: -
---- total actions: 110 ---
+ 98     Create_Error_Result_Object  <Compose>  runAfter: -
+ 99     Set_ResultObject_Error  <SetVariable> [varResultObject]  runAfter: Create_Error_Result_Object(Succeeded)
+100   Serialize_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Condition_Build_Result(Succeeded)
+101 Scope_ErrorHandler  <Scope>  runAfter: Scope_CreateResult(Failed/Skipped/TimedOut)
+102   Compose_Handler_Error_Code  <Compose>  runAfter: -
+103   Compose_Handler_Error_Message  <Compose>  runAfter: Compose_Handler_Error_Code(Succeeded)
+104   Compose_Handler_Error_Details  <Compose>  runAfter: Compose_Handler_Error_Message(Succeeded)
+105   Handle_Error  <Compose>  runAfter: Compose_Handler_Error_Details(Succeeded)
+106   Set_ResultObject_Handler  <SetVariable> [varResultObject]  runAfter: Handle_Error(Succeeded)
+107   Serialize_Handler_Result_To_Json  <SetVariable> [varResultJson]  runAfter: Set_ResultObject_Handler(Succeeded)
+108 Scope_Finalize  <Scope>  runAfter: Scope_ErrorHandler(Succeeded/Failed/Skipped/TimedOut)
+109   Compose_Flow_Output  <Compose>  runAfter: -
+--- total actions: 109 ---

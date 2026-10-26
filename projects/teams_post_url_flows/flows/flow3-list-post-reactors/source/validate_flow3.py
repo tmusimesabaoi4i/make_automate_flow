@@ -475,10 +475,40 @@ if "/members" not in first_uri or "uriComponent(variables('varChannelId'))" not 
     fail("Flow3: メンバー一覧URIが /channels/{uriComponent(channelId)}/members でない: %s" % first_uri)
 
 # メンバー取得の失敗吸収
-stop = need("Stop_Member_Paging_On_Failure")
+stop = need("Set_Members_Lookup_Failed_In_Loop")
 if stop.get("runAfter") != {"Get_Channel_Members": ["Failed", "TimedOut"]} \
-        or stop.get("inputs", {}).get("name") != "varMemberNextLink" or stop["inputs"].get("value") != "":
-    fail("Flow3: ループ内で取得失敗時に nextLink を空にしていない（無限ループの恐れ）")
+        or stop.get("inputs", {}).get("name") != "varMembersLookupFailed" or stop["inputs"].get("value") is not True:
+    fail("Flow3: ループ内で取得失敗時に varMembersLookupFailed を立てていない")
+until_expr = need("Do_Until_Members_Paging").get("expression", "")
+if "variables('varMembersLookupFailed')" not in until_expr:
+    fail("Flow3: Do until の終了条件に varMembersLookupFailed が無い（取得失敗時に無限ループの恐れ）")
+
+# 変数の初期化・設定の値に空文字 / null / false を渡さない
+# （保存時「'値' は必須です」。Flow3 の実環境で空文字の SetVariable が拒否された。
+#   false も未入力と判定される恐れがあるため、@string('') / @false の式にする）
+def is_blank(v):
+    return v is None or v is False or (isinstance(v, str) and v == "")
+
+
+def empty_setvars(container, out):
+    for aname, a in container.items():
+        if not isinstance(a, dict):
+            continue
+        if a.get("type") == "SetVariable" and is_blank(a.get("inputs", {}).get("value")):
+            out.append(aname)
+        if a.get("type") == "InitializeVariable" and any(
+                is_blank(v.get("value")) for v in a.get("inputs", {}).get("variables", [])):
+            out.append(aname)
+        if isinstance(a.get("actions"), dict):
+            empty_setvars(a["actions"], out)
+        if a.get("type") == "If" and isinstance(a.get("else"), dict):
+            empty_setvars(a["else"].get("actions", {}), out)
+    return out
+
+
+_empty = empty_setvars(definition["actions"], [])
+if _empty:
+    fail("Flow3: 変数の初期化・設定の値が空文字/null/false（保存時『'値' は必須です』）: %s" % _empty)
 mark = need("Mark_Member_Lookup_Failed")
 if set(mark.get("runAfter", {}).get("Do_Until_Members_Paging", [])) != {"Failed", "TimedOut"}:
     fail("Flow3: Do until の失敗を Mark_Member_Lookup_Failed で受けていない")

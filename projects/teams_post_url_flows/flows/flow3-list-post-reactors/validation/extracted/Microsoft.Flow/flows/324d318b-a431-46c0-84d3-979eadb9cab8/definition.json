@@ -66,7 +66,7 @@
               {
                 "name": "varTenantId",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -83,7 +83,7 @@
               {
                 "name": "varTeamId",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -100,7 +100,7 @@
               {
                 "name": "varChannelId",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -117,7 +117,7 @@
               {
                 "name": "varUrlMessageId",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -134,7 +134,7 @@
               {
                 "name": "varParentMessageId",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -151,7 +151,7 @@
               {
                 "name": "varTargetMessageId",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -185,7 +185,7 @@
               {
                 "name": "varResultJson",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -253,7 +253,7 @@
               {
                 "name": "varErrorCode",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -270,7 +270,7 @@
               {
                 "name": "varErrorMessage",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -338,7 +338,7 @@
               {
                 "name": "varMemberNextLink",
                 "type": "string",
-                "value": ""
+                "value": "@string('')"
               }
             ]
           },
@@ -372,7 +372,7 @@
               {
                 "name": "varMembersLookupFailed",
                 "type": "boolean",
-                "value": false
+                "value": "@false"
               }
             ]
           },
@@ -389,7 +389,7 @@
               {
                 "name": "varMembersLoaded",
                 "type": "boolean",
-                "value": false
+                "value": "@false"
               }
             ]
           },
@@ -825,7 +825,7 @@
                       "type": "SetVariable",
                       "inputs": {
                         "name": "varIsValid",
-                        "value": false
+                        "value": "@false"
                       },
                       "runAfter": {
                         "Set_ErrorMessage_Message_Deleted": [
@@ -912,7 +912,7 @@
                 },
                 "Do_Until_Members_Paging": {
                   "type": "Until",
-                  "expression": "@empty(variables('varMemberNextLink'))",
+                  "expression": "@or(empty(variables('varMemberNextLink')), variables('varMembersLookupFailed'))",
                   "limit": {
                     "count": 5000,
                     "timeout": "PT1H"
@@ -992,19 +992,6 @@
                         ]
                       }
                     },
-                    "Stop_Member_Paging_On_Failure": {
-                      "type": "SetVariable",
-                      "inputs": {
-                        "name": "varMemberNextLink",
-                        "value": ""
-                      },
-                      "runAfter": {
-                        "Get_Channel_Members": [
-                          "Failed",
-                          "TimedOut"
-                        ]
-                      }
-                    },
                     "Set_Members_Lookup_Failed_In_Loop": {
                       "type": "SetVariable",
                       "inputs": {
@@ -1012,8 +999,9 @@
                         "value": true
                       },
                       "runAfter": {
-                        "Stop_Member_Paging_On_Failure": [
-                          "Succeeded"
+                        "Get_Channel_Members": [
+                          "Failed",
+                          "TimedOut"
                         ]
                       }
                     }
