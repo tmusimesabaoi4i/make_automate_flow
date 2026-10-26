@@ -1,19 +1,21 @@
-# teams_post_url_flows — Teams投稿URLから投稿・全返信を取得する2フロー
+# teams_post_url_flows — Teams投稿URLから投稿・全返信・リアクションした人を取得する3フロー
 
-Microsoft Teams のチャネル投稿で「リンクをコピー」して得たURLを入力すると、その投稿（Flow1）または投稿への全返信（Flow2）を取得し、Object型変数とJSON文字列型変数に格納する、**独立した2本のクラウドフロー**です。
+Microsoft Teams のチャネル投稿で「リンクをコピー」して得たURLを入力すると、その投稿（Flow1）、投稿への全返信（Flow2）、または投稿にリアクションした人の一覧（Flow3）を取得し、Object型変数とJSON文字列型変数に格納する、**独立した3本のクラウドフロー**です。
 
-| | Flow1 | Flow2 |
-|---|---|---|
-| フロー名 | `Flow1_GetTeamsChannelPostFromUrl` | `Flow2_GetAllTeamsChannelPostRepliesFromUrl` |
-| 取得するもの | 対象の親投稿1件 | 対象の親投稿＋その**全返信** |
-| アクション数 | 67 | 81 |
-| 使用コネクタ | Microsoft Teams 1本（**プレミアム不要**） | 同左 |
-| 出力 | `varResultObject` / `varResultJson` | `varResultObject` / `varResultJson` / `varReplies` |
+| | Flow1 | Flow2 | Flow3 |
+|---|---|---|---|
+| フロー名 | `Flow1_GetTeamsChannelPostFromUrl` | `Flow2_GetAllTeamsChannelPostRepliesFromUrl` | `Flow3_ListTeamsChannelPostReactorsFromUrl` |
+| 取得するもの | 対象の親投稿1件 | 対象の親投稿＋その**全返信** | 親投稿に**リアクションした人**（1人1件・表示名とメール付き） |
+| アクション数 | 67 | 81 | 110 |
+| 使用コネクタ | Microsoft Teams 1本（**プレミアム不要**） | 同左 | 同左 |
+| 出力 | `varResultObject` / `varResultJson` | `varResultObject` / `varResultJson` / `varReplies` | `varResultObject` / `varResultJson` / `varReactors` |
 
-どちらも単独でインポート・実行できます。
+どれも単独でインポート・実行できます。
 
 > **状態: 静的検証を通過し、実環境でのインポートと実行に成功しました（2026-07-24・利用者報告）。**
 > ただし報告は「安全にインポートでき、安全に実行できた」という範囲です。**返信51件超でのページング**、添付・メンションを含む投稿、異常系（存在しない／削除済み／権限なし／共有チャネル）の実挙動は未確認のまま残っています。詳細は [tests/validation_report.md](tests/validation_report.md) §5・§7 を参照してください。
+>
+> **Flow3（2026-10-26 追加）は実環境で未実施です。** 静的検証・オフラインの通し回帰テストは全緑ですが、インポート・保存・実行と、メンバー一覧（表示名・メールの補完）の権限は要実環境確認です（[spec](flows/flow3-list-post-reactors/spec/Flow3_ListTeamsChannelPostReactorsFromUrl.md) §8）。
 
 ---
 
@@ -30,6 +32,7 @@ Microsoft Teams のチャネル投稿で「リンクをコピー」して得たU
 
 - `flows/flow1-get-channel-post/release/Flow1_GetTeamsChannelPostFromUrl_20260724190952.zip`
 - `flows/flow2-get-post-replies/release/Flow2_GetAllTeamsChannelPostRepliesFromUrl_20260724190952.zip`
+- `flows/flow3-list-post-reactors/release/Flow3_ListTeamsChannelPostReactorsFromUrl_20261026121818.zip`
 
 ---
 
@@ -49,7 +52,9 @@ projects/teams_post_url_flows/
 │   ├── test_cases.md              正常系11・異常系10 の全ケースと確認状況
 │   ├── validation_report.md       検証レポート（実施済み検証と未確認事項）
 │   ├── run_url_parse_tests.py     URL解析の回帰テスト（definition.json の式を直接評価）
-│   └── url_parse_test_result.txt  テスト実行結果（40件合格）
+│   ├── url_parse_test_result.txt  テスト実行結果（60件合格）
+│   ├── run_reactor_flow_tests.py  Flow3の通し回帰テスト（ダミー応答で definition.json の式を評価）
+│   └── reactor_flow_test_result.txt テスト実行結果（12件合格）
 └── flows/
     ├── flow1-get-channel-post/
     │   ├── spec/Flow1_GetTeamsChannelPostFromUrl.md   フロー定義の説明
@@ -64,7 +69,8 @@ projects/teams_post_url_flows/
     │   │   ├── extract_check_result.txt 検査結果
     │   │   └── extracted/              展開したZIPの中身（検証用コピー）
     │   └── release/               インポート用ZIP（日時付き）
-    └── flow2-get-post-replies/    （同構成）
+    ├── flow2-get-post-replies/    （同構成）
+    └── flow3-list-post-reactors/  （同構成）
 ```
 
 `source/package/` と `release/*.zip` は**生成物**です。`definition.json` を直接編集せず、`source/build_flow*.py` を編集して再生成してください（`CLAUDE.md` 不変則1）。
@@ -88,6 +94,10 @@ projects/teams_post_url_flows/
 
 `@odata.nextLink` を `Do until` で追跡し、空になるまで全ページを取得します。`$top=50` は1ページあたりの件数であり、**先頭N件で打ち切る処理は定義中にありません**。蓄積は Apply to each ＋「配列変数に追加」で1件ずつ行い、`SetVariable` の自己参照（`Self reference is not supported` の原因）を使いません。並列処理は全ループでオフです。
 
+### リアクションした人の一覧化（Flow3）
+
+親投稿の `reactions` からユーザーIDを取り出し、**チャネルメンバー一覧**（`GET /teams/{teamId}/channels/{channelId}/members`）とユーザーIDで突き合わせて表示名・メールアドレスを補います。Graph のリアクション情報には表示名・メールがほとんど入らないためです。同じ人の複数リアクションは1人にまとめ、`reactors`（1人1件）と `reactions`（1件ごと）の両方をJSONで返します。メンバー一覧を取得できない場合（権限不足など）もフローは失敗させず、ユーザーIDだけの一覧に `warnings` を付けて返します。詳細は [spec](flows/flow3-list-post-reactors/spec/Flow3_ListTeamsChannelPostReactorsFromUrl.md)。
+
 ### エラー処理
 
 Scope を直列に連鎖させ、`Scope_ErrorHandler` の `runAfter` を**最終Scope1本だけ**に張ります。複数Scopeを列挙するとAND判定になり「前段成功・中段失敗」でハンドラが発火しないためです。ハンドラは**変数だけ**を参照するため、未実行アクションの参照で自壊しません。
@@ -100,9 +110,10 @@ Scope を直列に連鎖させ、`Scope_ErrorHandler` の `runAfter` を**最終
 
 | 区分 | 結果 |
 |---|---|
-| 静的検証（`validate_flow*.py`） | **エラー0 / 警告0**（両フロー） |
-| URL解析のオフライン検証 | **40件中40件合格** |
-| ZIP再展開検査（`extract_check.py`） | **エラー0**（両フロー） |
+| 静的検証（`validate_flow*.py`） | **エラー0 / 警告0**（3フロー） |
+| URL解析のオフライン検証 | **60件中60件合格**（3フロー × 20件） |
+| Flow3 の通し回帰テスト（`run_reactor_flow_tests.py`） | **12件中12件合格** |
+| ZIP再展開検査（`extract_check.py`） | **エラー0**（3フロー） |
 | 実環境のインポート | **成功**（2026-07-24） |
 | 実環境の実行 | **成功**（2026-07-24） |
 | 実データでの網羅確認（返信51件超・添付・異常系） | **未確認** |
@@ -118,9 +129,13 @@ python flows/flow1-get-channel-post/source/build_flow1.py
 python flows/flow1-get-channel-post/source/validate_flow1.py
 python flows/flow2-get-post-replies/source/build_flow2.py
 python flows/flow2-get-post-replies/source/validate_flow2.py
+python flows/flow3-list-post-reactors/source/build_flow3.py
+python flows/flow3-list-post-reactors/source/validate_flow3.py
 python tests/run_url_parse_tests.py
+python tests/run_reactor_flow_tests.py
 python flows/flow1-get-channel-post/validation/extract_check.py
 python flows/flow2-get-post-replies/validation/extract_check.py
+python flows/flow3-list-post-reactors/validation/extract_check.py
 ```
 
 ---

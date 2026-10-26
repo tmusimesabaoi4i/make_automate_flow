@@ -32,7 +32,7 @@ make_automate_flow/
 │   └── *.md             ← 解析証跡（公式資料調査・サンプル解析・参照メモ）
 ├── projects/            ← 案件固有資料（1案件=1フォルダ、フローごとに分離）
 │   ├── migrate-chat-spo/                  ← Teams課内会議アーカイブ（SharePoint保存）
-│   ├── teams_post_url_flows/              ← Teams投稿URLから投稿／全返信を取得（独立2フロー）
+│   ├── teams_post_url_flows/              ← Teams投稿URLから投稿／全返信／リアクションした人を取得（独立3フロー）
 │   ├── create_initialized_sharepoint_list/ ← 初期化済みSharePointリストを安全に作成
 │   ├── sync-shared-mailbox-to-sharepoint-list/ ← 共有メールボックスのメールをSPOリストへ同期
 │   └── teams-channel-member-sync/         ← Teamsチャネルのメンバーを毎日SPOリストへ同期
@@ -44,7 +44,7 @@ make_automate_flow/
 | 案件 | 内容 | コネクタ | 実環境 |
 |---|---|---|---|
 | [migrate-chat-spo](projects/migrate-chat-spo/) | Teams会議投稿をSharePointへアーカイブ／台帳リスト作成 | Teams・SharePoint・Content Conversion | インポート・保存・実行 成功（v10の再実行は未確認） |
-| [teams_post_url_flows](projects/teams_post_url_flows/) | Teams投稿URLから投稿（Flow1）／全返信（Flow2）を取得 | Teams | **インポート・実行 成功**（2026-07-24。返信51件超のページングは未確認） |
+| [teams_post_url_flows](projects/teams_post_url_flows/) | Teams投稿URLから投稿（Flow1）／全返信（Flow2）を取得／リアクションした人を表示名・メール付きで一覧化（Flow3） | Teams | Flow1・Flow2 は**インポート・実行 成功**（2026-07-24。返信51件超のページングは未確認）。**Flow3 は未実施**（オフライン検証は全緑。メンバー一覧の権限は要実環境確認） |
 | [create_initialized_sharepoint_list](projects/create_initialized_sharepoint_list/) | 同名リストが無い場合だけリストを作成し `sample_raw` のみに初期化 | SharePoint | **インポート・実行 成功**（2026-07-24・`status: Created`。同名リスト経路と失敗経路は未確認） |
 | [sync-shared-mailbox-to-sharepoint-list](projects/sync-shared-mailbox-to-sharepoint-list/) | 共有メールボックスの最新メールをSharePointリストへ登録／更新（メッセージIDで冪等）。**3フロー: 5列版／審査官名・出願番号の推定付き7列版／審査官名簿と突合してメールアドレス・TeamsユーザーIDまで取得する12列版** | SharePoint・Office 365 Outlook・Content Conversion | 5列版は**インポート・実行 成功**（2026-08-03。100件同期＝作成80/更新20/失敗0）。**7列版・12列版は未実施** |
 | [teams-channel-member-sync](projects/teams-channel-member-sync/) | Teamsチャネルのメンバーを毎日SharePointリストへ同期（同期キーで冪等・離脱は論理無効化）。**2フロー: 初期設定＋テスト同期（手動）と日次実行（Recurrence 07:00 JST）**。同期処理は `shared/sync_blocks.py` から両フローへ生成 | Teams・SharePoint | **未実施**（オフライン検証は全緑。`ListMembers` の body キー名は要実環境確認） |
@@ -77,6 +77,7 @@ make_automate_flow/
 | migrate-chat-spo | provision-archive-lists | `build_list_package.py` | `validate_list_definition.py` |
 | teams_post_url_flows | flow1-get-channel-post | `build_flow1.py` | `validate_flow1.py` |
 | teams_post_url_flows | flow2-get-post-replies | `build_flow2.py` | `validate_flow2.py` |
+| teams_post_url_flows | flow3-list-post-reactors | `build_flow3.py` | `validate_flow3.py` |
 | create_initialized_sharepoint_list | create-initialized-list | `build_list_flow.py` | `validate_list_flow.py` |
 | sync-shared-mailbox-to-sharepoint-list | sync-mail-to-list | `build_sync_flow.py` | `validate_sync_flow.py` |
 | sync-shared-mailbox-to-sharepoint-list | sync-mail-to-list-with-examiner-detection | `build_examiner_flow.py` | `validate_examiner_flow.py` |

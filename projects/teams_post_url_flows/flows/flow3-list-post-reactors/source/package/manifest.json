@@ -1,0 +1,52 @@
+{
+  "schema": "1.0",
+  "details": {
+    "displayName": "Flow3_ListTeamsChannelPostReactorsFromUrl",
+    "description": "Teams投稿URLを解析し、対象のチャネル投稿にリアクションした人を一覧化してJSONに格納する",
+    "createdTime": "2026-10-26T00:00:00.0000000Z",
+    "packageTelemetryId": "c58d2419-b070-42a2-bb65-6f8000604e17",
+    "creator": "N/A",
+    "sourceEnvironment": ""
+  },
+  "resources": {
+    "324d318b-a431-46c0-84d3-979eadb9cab8": {
+      "type": "Microsoft.Flow/flows",
+      "suggestedCreationType": "New",
+      "creationType": "Existing, New, Update",
+      "details": {
+        "displayName": "Flow3 Teams投稿URLからリアクションした人を一覧化"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Root",
+      "dependsOn": [
+        "45ef819e-8e54-4fb7-8e5c-fcd52c415d0d",
+        "e6b957ad-a93d-4a05-b953-bf5eb97f635d"
+      ]
+    },
+    "45ef819e-8e54-4fb7-8e5c-fcd52c415d0d": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+      "name": "shared_teams",
+      "type": "Microsoft.PowerApps/apis",
+      "suggestedCreationType": "Existing",
+      "details": {
+        "displayName": "Microsoft Teams"
+      },
+      "configurableBy": "System",
+      "hierarchy": "Child",
+      "dependsOn": []
+    },
+    "e6b957ad-a93d-4a05-b953-bf5eb97f635d": {
+      "type": "Microsoft.PowerApps/apis/connections",
+      "suggestedCreationType": "Existing",
+      "creationType": "Existing",
+      "details": {
+        "displayName": "Microsoft Teams への接続を選択してください"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Child",
+      "dependsOn": [
+        "45ef819e-8e54-4fb7-8e5c-fcd52c415d0d"
+      ]
+    }
+  }
+}

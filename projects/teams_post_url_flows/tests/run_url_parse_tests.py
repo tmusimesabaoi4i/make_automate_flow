@@ -6,7 +6,7 @@ URL解析ロジックの回帰テスト。
 tools/wdl_eval.py（案件横断のWDL式ミニ評価器）で「定義に実際に書かれている式そのもの」を
 評価して、入力URLごとの解析結果が期待どおりかを検証する。
 
-  python run_url_parse_tests.py            # Flow1 / Flow2 の両方を検証
+  python run_url_parse_tests.py            # Flow1 / Flow2 / Flow3 のすべてを検証
   python run_url_parse_tests.py flow1      # 片方だけ
 
 【確認できること】 定義中の式チェーンが入力URLから produce する値。
@@ -22,6 +22,7 @@ from wdl_eval import Context, evaluate, eval_condition   # noqa: E402
 FLOWS = {
     "flow1": os.path.join(HERE, "..", "flows", "flow1-get-channel-post", "source", "package"),
     "flow2": os.path.join(HERE, "..", "flows", "flow2-get-post-replies", "source", "package"),
+    "flow3": os.path.join(HERE, "..", "flows", "flow3-list-post-reactors", "source", "package"),
 }
 
 CH_ENC = "19%3Aabc123def456%40thread.tacv2"

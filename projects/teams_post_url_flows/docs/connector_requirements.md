@@ -1,6 +1,6 @@
 # コネクタ・権限要件
 
-Flow1 / Flow2 が使用するコネクタ、必要な権限、取得件数の上限、および「なぜGraphを使うのか」の説明です。
+Flow1 / Flow2 / Flow3 が使用するコネクタ、必要な権限、取得件数の上限、および「なぜGraphを使うのか」の説明です。
 
 ---
 
@@ -44,9 +44,10 @@ Graph HTTP要求であれば `@odata.nextLink` を `Do until` で追跡でき、
 
 | 用途 | メソッドとURL |
 |---|---|
-| 親投稿の取得（Flow1 / Flow2） | `GET https://graph.microsoft.com/v1.0/teams/{teamId}/channels/{channelId}/messages/{messageId}` |
+| 親投稿の取得（Flow1 / Flow2 / Flow3） | `GET https://graph.microsoft.com/v1.0/teams/{teamId}/channels/{channelId}/messages/{messageId}` |
 | 返信の取得（Flow2・1ページ目） | `GET https://graph.microsoft.com/v1.0/teams/{teamId}/channels/{channelId}/messages/{messageId}/replies?$top=50` |
 | 返信の取得（Flow2・2ページ目以降） | `GET {@odata.nextLink}`（Graphが返す完全URLをそのまま使用） |
+| チャネルメンバー一覧（Flow3・表示名とメールの補完） | `GET https://graph.microsoft.com/v1.0/teams/{teamId}/channels/{channelId}/members`（2ページ目以降は `@odata.nextLink`）。リアクションが1件以上あるときだけ呼ぶ |
 
 フロー内では次の式でURLを組み立てています。
 
@@ -88,6 +89,7 @@ Graph HTTP要求であれば `@odata.nextLink` を `Do until` で追跡でき、
 | 対象 | 必要な権限 | 確認状況 |
 |---|---|---|
 | 対象のTeamsチーム | **メンバーであること**（またはチャネルメッセージの読み取り権限を持つこと） | **要実環境確認** |
+| チャネルメンバー一覧（Flow3） | Graph の委任スコープ `ChannelMember.Read.All` 相当が Teams コネクタの既存同意で満たされること。満たされない場合は 403 になり、Flow3 は表示名・メールを空にして警告付きで続行する（フロー自体は失敗しない） | **要実環境確認** |
 | Power Automate環境 | フローのインポート・作成権限 | **要実環境確認** |
 | Teamsコネクタ接続 | 上記チームにアクセスできるアカウントで作成された接続 | **要実環境確認** |
 
